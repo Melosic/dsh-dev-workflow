@@ -55,6 +55,7 @@
   "security.guard.checkout_discard": "checkout -- . 会丢弃所有未暂存的改动。",
   "security.guard.no_verify": "--no-verify 会跳过保护本仓库的钩子。",
   "security.guard.suggest_force_with_lease": "建议改用 --force-with-lease：它会拒绝覆盖你尚未看到的提交。",
+  "security.sensitive_file_blocked": "`{file}` 命中禁读规则 `{rule}`。确实需要时，请在 agent 之外读取。",
   "trigger.pre_commit.detected": "正在按项目工作流规范检查本次提交。",
   "trigger.pre_commit.reason": "这次提交违反了项目工作流规范。\n{details}",
   "trigger.pre_commit.ask": "开发工作流插件发现本次提交有问题。\n\n{details}\n\n批准则照常提交，拒绝则先修复。",

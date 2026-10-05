@@ -21,6 +21,13 @@
   命令行全文不进入模型上下文。新增 `commandGuard{enabled, dangerousShell}` 配置与
   `command.guard.dangerous_warning`/`command.guard.confirm_required`/`command.guard.denied`
   三个双语 key。
+- **file-guard（敏感文件守卫）**：DSH 没有「读文件前」事件，因此该守卫在
+  `tools/pre-execute` 上按工具名取出路径参数（`read`/`edit`/`write`/`read_image`/
+  `glob`/`grep`）与 shell 读取命令的文件参数，只做路径比对，从不打开文件。
+  默认禁读 `.env`、`.ssh/id_rsa`、`*.pem`、`*.key`、`credentials`、`*.p12`、
+  `.npmrc`、`secrets/`；命中即 `deny`（不可配置），因为审批提示本身要展示那条路径，
+  而展示路径正是这条规则要阻止的事。新增 `fileGuard{enabled, noRead}` 配置
+  （`noRead` 是替换而非追加）与 `security.sensitive_file_blocked` 双语 key。
 
 ### Changed
 

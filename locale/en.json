@@ -55,6 +55,7 @@
   "security.guard.checkout_discard": "checkout -- . discards all unstaged changes.",
   "security.guard.no_verify": "--no-verify skips the hooks that protect this repository.",
   "security.guard.suggest_force_with_lease": "Prefer --force-with-lease: it refuses to overwrite commits you have not seen.",
+  "security.sensitive_file_blocked": "`{file}` matches the no-read rule `{rule}`. Read it outside the agent if you really need it.",
   "trigger.pre_commit.detected": "Checking this commit against the project workflow rules.",
   "trigger.pre_commit.reason": "This commit breaks the project workflow rules.\n{details}",
   "trigger.pre_commit.ask": "The development-workflow plugin found problems with this commit.\n\n{details}\n\nApprove to commit anyway, or reject to fix them first.",

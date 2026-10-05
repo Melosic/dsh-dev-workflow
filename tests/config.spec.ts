@@ -55,6 +55,31 @@ describe('src/config.ts', () => {
     expect(config.gitGuard.forcePush).toBe('ask')
   })
 
+  it('defaults the file guard to the documented no-read list', () => {
+    const config = Config({})
+
+    expect(config.fileGuard).toEqual({
+      enabled: true,
+      noRead: [
+        '.env',
+        '.ssh/id_rsa',
+        '*.pem',
+        '*.key',
+        'credentials',
+        '*.p12',
+        '.npmrc',
+        'secrets/',
+      ],
+    })
+  })
+
+  it('treats a configured no-read list as the whole list, not an addition', () => {
+    // Otherwise a profile could never narrow the protection it inherited.
+    const config = Config({ fileGuard: { noRead: ['*.vault'] } })
+
+    expect(config.fileGuard.noRead).toEqual(['*.vault'])
+  })
+
   it('accepts all three policy values for a guard operation', () => {
     for (const action of ['deny', 'ask', 'allow'] as const) {
       expect(Config({ gitGuard: { rebase: action } }).gitGuard.rebase).toBe(action)

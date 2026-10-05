@@ -15,6 +15,7 @@ import { createDevWorkflowCommand } from './commands/dev-workflow.js'
 import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createGitGuard } from './guard/git-guard.js'
 import { createCommandGuard } from './guard/command-guard.js'
+import { createFileGuard } from './guard/file-guard.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -167,6 +168,23 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
         ctx.on(
           'tools/pre-execute',
           createCommandGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+          }),
+        ),
+      )
+    }
+
+    // The file guard reads paths out of the tool arguments. DSH has no
+    // before-read event, so matching a path is the only point at which a
+    // sensitive file can be stopped before its contents are in context.
+    if (config.fileGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createFileGuard({
             config: () => config,
             t: () => t,
             state,

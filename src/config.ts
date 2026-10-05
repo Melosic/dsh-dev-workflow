@@ -115,6 +115,33 @@ export const Config = z.object({
       dangerousShell: guardAction(),
     })
     .default({}),
+  /**
+   * Paths a tool must never read. Matched as literal path segments, never by
+   * opening the file: the guard does not depend on the optional `fs` service.
+   */
+  fileGuard: z
+    .object({
+      enabled: z.boolean().default(true),
+      /**
+       * A trailing `/` matches that directory and everything under it; a pattern
+       * containing `/` matches at any depth (`.ssh/id_rsa` catches
+       * `C:/Users/x/.ssh/id_rsa`); anything else matches a file name, and a
+       * leading dot also covers its variants (`.env` covers `.env.local`).
+       */
+      noRead: z
+        .array(z.string())
+        .default([
+          '.env',
+          '.ssh/id_rsa',
+          '*.pem',
+          '*.key',
+          'credentials',
+          '*.p12',
+          '.npmrc',
+          'secrets/',
+        ]),
+    })
+    .default({}),
 })
 
 /** Resolved plugin configuration: every default applied. */

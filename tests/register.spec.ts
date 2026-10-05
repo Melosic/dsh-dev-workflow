@@ -41,21 +41,22 @@ describe('src/index.ts', () => {
       'check_doc_sync',
     ])
     expect(harness.providers).toHaveLength(1)
-    // Own trigger, git guard, command guard.
+    // Own trigger, git guard, command guard, file guard.
     expect(harness.listeners.map((listener) => listener.name)).toEqual([
       'tools/pre-execute',
       'tools/pre-execute',
       'tools/pre-execute',
+      'tools/pre-execute',
     ])
-    // Two tools, one provider, three listeners — one effect each.
-    expect(harness.effects).toHaveLength(6)
+    // Two tools, one provider, four listeners — one effect each.
+    expect(harness.effects).toHaveLength(7)
   })
 
   it('skips the command when the profile has no command service', () => {
     const harness = createHarness({ commands: true })
     plugin.apply(harness.ctx, Config({}))
     expect(harness.commands.map((command) => command.name)).toEqual(['dev-workflow'])
-    expect(harness.effects).toHaveLength(7)
+    expect(harness.effects).toHaveLength(8)
   })
 
   it('declares both tools with a name the registry accepts', () => {
@@ -124,7 +125,7 @@ describe('createRuntime', () => {
 
     expect(runtime.active).toBe(true)
     expect(harness.tools).toHaveLength(2)
-    expect(harness.listeners).toHaveLength(3)
+    expect(harness.listeners).toHaveLength(4)
 
     runtime.setActive(false)
     expect(runtime.active).toBe(false)
@@ -151,7 +152,7 @@ describe('createRuntime', () => {
     const runtime = plugin.createRuntime(harness.ctx, Config({}))
 
     runtime.setActive(true)
-    expect(harness.effects).toHaveLength(6)
+    expect(harness.effects).toHaveLength(7)
     runtime.setActive(false)
     runtime.setActive(false)
     expect(runtime.active).toBe(false)

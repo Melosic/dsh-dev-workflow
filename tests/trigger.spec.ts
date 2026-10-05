@@ -205,8 +205,8 @@ describe('src/triggers/pre-commit.ts', () => {
 
     const withoutTrigger = createHarness()
     createRuntime(withoutTrigger.ctx, Config({ enableOwnTrigger: false }))
-    // The guards: git, command.
-    expect(withoutTrigger.listeners).toHaveLength(2)
+    // The guards: git, command, file.
+    expect(withoutTrigger.listeners).toHaveLength(3)
     expect(await chain(withoutTrigger.listeners, 'git commit -m "Add the thing"')).toEqual({
       kind: 'allow',
     })
