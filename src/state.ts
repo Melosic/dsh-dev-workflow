@@ -5,6 +5,10 @@
 // new session may ask again. That is a deduplication keyed by the thing being
 // checked, and nothing about it survives a restart — so it lives in a plain
 // in-memory structure owned by the plugin fiber, never on disk.
+//
+// The same store holds remembered guard approvals, for the same reason: one
+// answer is worth one session. Nothing about a grant survives a restart either,
+// and keeping it here is what makes that true by construction.
 
 /** Which check produced an outcome. */
 export type CheckKind = 'commit' | 'doc' | 'pr' | 'release'
@@ -41,6 +45,18 @@ export interface WorkflowState {
    * @param targetId - hash of what was checked.
    */
   remember(sessionId: string, kind: CheckKind, targetId: string): void
+  /**
+   * Whether the user already approved this exact operation in this session.
+   * @param sessionId - the session the tool call belongs to.
+   * @param targetId - hash of the operation.
+   */
+  approved(sessionId: string, targetId: string): boolean
+  /**
+   * Remember an operation the user approved, so a repeat is not asked about.
+   * @param sessionId - the session the tool call belongs to.
+   * @param targetId - hash of the operation.
+   */
+  rememberApproval(sessionId: string, targetId: string): void
   /**
    * Remember the outcome of a check for the status line.
    * @param outcome - what the check found.
@@ -80,17 +96,23 @@ export function createWorkflowState(): WorkflowState {
     return created
   }
 
+  const add = (sessionId: string, key: string): void => {
+    const set = bucket(sessionId)
+    set.add(key)
+    while (set.size > MAX_TARGETS_PER_SESSION) {
+      const oldest = set.values().next().value
+      if (oldest === undefined) break
+      set.delete(oldest)
+    }
+  }
+
   return {
     seen: (sessionId, kind, targetId) => bucket(sessionId).has(`${kind}:${targetId}`),
-    remember: (sessionId, kind, targetId) => {
-      const set = bucket(sessionId)
-      set.add(`${kind}:${targetId}`)
-      while (set.size > MAX_TARGETS_PER_SESSION) {
-        const oldest = set.values().next().value
-        if (oldest === undefined) break
-        set.delete(oldest)
-      }
-    },
+    remember: (sessionId, kind, targetId) => add(sessionId, `${kind}:${targetId}`),
+    // A remembered approval is keyed apart from the checks: the same operation
+    // being approved says nothing about a check having run over it.
+    approved: (sessionId, targetId) => bucket(sessionId).has(`approved:${targetId}`),
+    rememberApproval: (sessionId, targetId) => add(sessionId, `approved:${targetId}`),
     record: (outcome) => {
       last = outcome
     },

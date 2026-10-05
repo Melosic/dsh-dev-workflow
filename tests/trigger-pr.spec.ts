@@ -14,6 +14,7 @@ import {
 import { makeExec } from './harness.js'
 
 const t = createTranslator('en-US')
+const config = Config({})
 
 /** A description that satisfies the template the specification ships. */
 const GOOD_BODY = [
@@ -171,6 +172,7 @@ describe('src/triggers/pre-pr.ts', () => {
   it('notes a missing issue reference without blocking on it', () => {
     const outcome = evaluatePullRequest(
       { title: 'feat(cli): add a flag', body: GOOD_BODY.replace(' Closes #7.', '') },
+      config,
       t,
     )
     expect(outcome.ok).toBe(true)

@@ -95,9 +95,9 @@ export function auditRecord(hit: GuardHit, exec: ToolExecution, config: Config):
   const cwd = agent?.session.header.cwd
   const cleaned = basenameSensitive(
     redactSecrets(exec.arguments, {
-      genericHighEntropy: config.secretGuard.genericHighEntropy,
+      genericHighEntropy: config.secretGuard.genericHighEntropy.get(),
     }),
-    config.fileGuard.noRead,
+    config.fileGuard.noRead.get(),
   )
   return {
     time: new Date().toISOString(),
@@ -124,10 +124,12 @@ export function createAudit(options: AuditOptions): (hit: GuardHit, exec: ToolEx
   return (hit, exec) => {
     try {
       const config = options.config()
-      if (!config.audit.enabled) return
+      if (!config.audit.enabled.get()) return
       const record = auditRecord(hit, exec, config)
       const path =
-        record.cwd === undefined ? config.audit.path : resolveWithin(record.cwd, config.audit.path)
+        record.cwd === undefined
+          ? config.audit.path.get()
+          : resolveWithin(record.cwd, config.audit.path.get())
       mkdirSync(dirname(path), { recursive: true })
       appendFileSync(path, `${JSON.stringify(record)}\n`, 'utf8')
     } catch (error) {

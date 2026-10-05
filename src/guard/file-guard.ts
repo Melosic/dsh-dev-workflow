@@ -165,8 +165,8 @@ function commandPaths(command: string): string[] {
  * @returns the refusal, or `undefined` for an ordinary call.
  */
 export function detectFile(args: unknown, name: string, config: Config): GuardHit | undefined {
-  if (!config.fileGuard.enabled) return undefined
-  const patterns = config.fileGuard.noRead
+  if (!config.fileGuard.enabled.get()) return undefined
+  const patterns = config.fileGuard.noRead.get()
   if (patterns.length === 0) return undefined
 
   const command = commandOf(args)

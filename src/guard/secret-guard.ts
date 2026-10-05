@@ -179,9 +179,9 @@ export function redactSecrets(value: unknown, options: ScanOptions): unknown {
  * @returns the refusal, or `undefined` for an ordinary call.
  */
 export function detectSecret(args: unknown, config: Config): GuardHit | undefined {
-  if (!config.secretGuard.enabled) return undefined
+  if (!config.secretGuard.enabled.get()) return undefined
   const pattern = scanForSecret(args, {
-    genericHighEntropy: config.secretGuard.genericHighEntropy,
+    genericHighEntropy: config.secretGuard.genericHighEntropy.get(),
   })
   if (pattern === undefined) return undefined
   // `params` carries the pattern *name* only. The value that matched is not put

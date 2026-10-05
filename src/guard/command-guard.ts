@@ -180,8 +180,8 @@ function hitsFor(segment: readonly string[], action: GuardAction): GuardHit[] {
  * @returns the strictest recognised operation, or `undefined` for an ordinary command.
  */
 export function detectCommand(command: string, config: Config): GuardHit | undefined {
-  if (!config.commandGuard.enabled) return undefined
-  const action = config.commandGuard.dangerousShell
+  if (!config.commandGuard.enabled.get()) return undefined
+  const action = config.commandGuard.dangerousShell.get()
 
   const hits: GuardHit[] = []
   // Both of these are syntax rather than an invocation, so they are tested

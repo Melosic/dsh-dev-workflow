@@ -1,5 +1,7 @@
 import type { Config } from '../config.js'
 import { commandOf, gitInvocations } from '../shell.js'
+import { createGuardApprover } from './approval.js'
+import type { ApprovalService } from './approval.js'
 import { createGuard, hasShortOption, strictest } from './shared.js'
 import type { GuardHit, GuardOptions } from './shared.js'
 
@@ -17,8 +19,14 @@ import type { GuardHit, GuardOptions } from './shared.js'
 export type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 export { hasShortOption } from './shared.js'
 
-/** Options this guard needs. Same shape as every other guard's. */
-export type GitGuardOptions = GuardOptions
+/** Options this guard needs. Same shape as every other guard's, plus the seam. */
+export type GitGuardOptions = GuardOptions & {
+  /**
+   * The approval seam, read at call time. Absent when the profile composes no
+   * approval service, and in a test that drives this guard on its own.
+   */
+  readonly approval?: () => ApprovalService | undefined
+}
 
 /**
  * Classify a `git push` as forced.
@@ -38,7 +46,7 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
   if (!forced) return undefined
   return {
     reason: 'security.guard.force_push',
-    action: config.gitGuard.forcePush,
+    action: config.gitGuard.forcePush.get(),
     suggestion: 'security.guard.suggest_force_with_lease',
   }
 }
@@ -50,7 +58,7 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
  * @returns the strictest hit, or `undefined` when nothing is destructive.
  */
 export function detectGuard(command: string, config: Config): GuardHit | undefined {
-  if (!config.gitGuard.enabled) return undefined
+  if (!config.gitGuard.enabled.get()) return undefined
   const guard = config.gitGuard
   const hits: GuardHit[] = []
 
@@ -59,25 +67,25 @@ export function detectGuard(command: string, config: Config): GuardHit | undefin
     if (subcommand === 'push') {
       hit = pushHit(args, config)
     } else if (subcommand === 'reset' && args.includes('--hard')) {
-      hit = { reason: 'security.guard.hard_reset', action: guard.hardReset }
+      hit = { reason: 'security.guard.hard_reset', action: guard.hardReset.get() }
     } else if (subcommand === 'rebase') {
-      hit = { reason: 'security.guard.rebase', action: guard.rebase }
+      hit = { reason: 'security.guard.rebase', action: guard.rebase.get() }
     } else if (subcommand === 'clean' && (args.includes('--force') || hasShortOption(args, 'f'))) {
-      hit = { reason: 'security.guard.clean_force', action: guard.cleanForce }
+      hit = { reason: 'security.guard.clean_force', action: guard.cleanForce.get() }
     } else if (subcommand === 'commit' && args.includes('--amend')) {
-      hit = { reason: 'security.guard.amend', action: guard.amend }
+      hit = { reason: 'security.guard.amend', action: guard.amend.get() }
     } else if (
       subcommand === 'branch' &&
       (hasShortOption(args, 'D') || (args.includes('--delete') && args.includes('--force')))
     ) {
-      hit = { reason: 'security.guard.branch_delete', action: guard.branchDelete }
+      hit = { reason: 'security.guard.branch_delete', action: guard.branchDelete.get() }
     } else if (subcommand === 'checkout') {
       // `checkout -- <path>` restores from the index, discarding whatever was
       // edited in those files. A trailing `--` with nothing after it discards
       // nothing.
       const separator = args.indexOf('--')
       if (separator !== -1 && separator < args.length - 1) {
-        hit = { reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard }
+        hit = { reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() }
       }
     }
     if (hit !== undefined) hits.push(hit)
@@ -89,7 +97,7 @@ export function detectGuard(command: string, config: Config): GuardHit | undefin
     // when the hooks themselves are wrong, and closing it would leave no way
     // through.
     if (args.includes('--no-verify')) {
-      hits.push({ reason: 'security.guard.no_verify', action: guard.noVerify })
+      hits.push({ reason: 'security.guard.no_verify', action: guard.noVerify.get() })
     }
   }
 
@@ -105,6 +113,14 @@ export function createGitGuard(options: GitGuardOptions): ReturnType<typeof crea
   return createGuard({
     ...options,
     label: 'git guard',
+    // The switch that remembers an approval lives in `gitGuard`, so this is the
+    // one guard that asks the user itself instead of leaving it to the
+    // dispatcher: only the asker can see the answer.
+    approver: createGuardApprover({
+      approval: options.approval ?? (() => undefined),
+      state: options.state,
+      remembers: () => options.config().gitGuard.rememberApproved.get(),
+    }),
     detect: (exec) => {
       const command = commandOf(exec.arguments)
       return command === undefined ? undefined : detectGuard(command, options.config())
