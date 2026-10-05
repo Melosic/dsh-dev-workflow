@@ -9,7 +9,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [../README.md](../README.md) | 项目简介、功能特性、安装与快速开始（英文） |
+| [../README.md](../README.md) | 项目简介、功能特性、**环境要求**、安装与快速开始（英文） |
 | [../README.zh.md](../README.zh.md) | 同上（中文） |
 | [CONFIGURATION.md](CONFIGURATION.md) | 每一个配置字段、默认值，以及**为什么是这个默认值** |
 | [TOOLS.md](TOOLS.md) | 两个工具与 `/dev-workflow` 命令的合同：名字、参数、返回、执行的每条规则 |

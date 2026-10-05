@@ -2,7 +2,7 @@
 
 **English | [简体中文](README.zh.md)**
 
-A development-workflow gatekeeper and orchestrator plugin for [DSH](https://github.com/deepseek-ai).
+A development-workflow gatekeeper and orchestrator plugin for [DSH](https://github.com/deepseek-ai/deepseek-harness).
 
 It is a plugin, not a mode. It does not try to become a fifth built-in DSH mode; it provides
 workflow capabilities on top of the modes you already use.
@@ -35,6 +35,21 @@ workflow capabilities on top of the modes you already use.
   mode, the locale, the last check, how often the guards have spoken, and where the audit log
   goes; `check` runs the workflow rules over the working tree on demand. Turning it `off`
   unregisters everything, so it costs nothing rather than merely staying quiet.
+
+## Requirements
+
+| Component | Version | Notes |
+| --- | --- | --- |
+| DSH runtime | `>=0.2.0-rc.1 <0.3.0` | Declared in `peerDependencies` and checked by DSH at load time. Check yours with `dsh --version`. |
+| Node.js | `>=20` | The floor declared in `engines.node`, and the version CI runs on. |
+| pnpm | `10.x` | Needed to build from source. `pnpm-lock.yaml` is committed; npm or yarn would resolve a different tree. |
+
+**An unsupported DSH version does not fail the install — it disables the plugin.** DSH checks the
+declared range while loading the profile, drops the plugin when it does not match, and prints
+`disabling profile plugin <label>: <reason>` to stderr. The symptom is a plugin that is installed
+but never appears, which is why the range is worth checking before you file a bug.
+[docs/PUBLISHING.md](docs/PUBLISHING.md) explains how the range is chosen, and the per-profile
+escape hatch if you are on a different DSH line.
 
 ## Quick Start
 
