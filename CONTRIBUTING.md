@@ -110,7 +110,7 @@ docs(readme): document the /dev-workflow command
 |---|---|
 | `README.md` | `README.zh.md` |
 | `locale/en.json` | `locale/zh.json` |
-| `assets/SKILL.md` | `assets/SKILL.zh.md`（章节结构保持一致） |
+| `skills/dsh-dev-workflow/SKILL.md` | `skills/dsh-dev-workflow/SKILL.zh.md`（章节数量与层级顺序一致） |
 | 行为/配置变化 | `CHANGELOG.md` 的 `[Unreleased]` 段 |
 
 ## 代码风格

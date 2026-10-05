@@ -28,7 +28,7 @@ dsh-dev-workflow 是 DSH 的开发工作流守门员与编排器插件。
 - CHANGELOG 的 `[Unreleased]` 段常驻顶部。
 - 改 `README.md` 必须同步改 `README.zh.md`。
 - 改 `locale/en.json` 必须同步改 `locale/zh.json`（DSH 约定目录为单数 `locale/`，短语言 id）。
-- 改 `assets/SKILL.md` 必须同步改 `assets/SKILL.zh.md`，章节结构一致。
+- 改 `skills/dsh-dev-workflow/SKILL.md` 必须同步改 `skills/dsh-dev-workflow/SKILL.zh.md`，章节数量与层级顺序一致。
 - 代码注释用英文；用户可见文本一律走 `t()`，不得硬编码。
 - 敏感文件不得读取，密钥不得硬编码。
 - 包为 ESM-only：`"type": "module"`，源码必须使用 ESM 语法。
@@ -53,7 +53,7 @@ pnpm test:watch     # Vitest 监听模式
 - 完整开发提示词：`.dev-docs/prompt.md`
 - 当前进度：`.dev-docs/PROGRESS.md`
 - API 核对结论：`.dev-docs/DSH-API-NOTES.md`
-- 完整工作流规范：`assets/SKILL.md`（英文）/ `assets/SKILL.zh.md`（中文）
+- 完整工作流规范：`skills/dsh-dev-workflow/SKILL.md`（英文）/ `skills/dsh-dev-workflow/SKILL.zh.md`（中文）
 - 架构说明：`docs/ARCHITECTURE.md`
 - 配置参考：`docs/CONFIGURATION.md`
 - 工具参考：`docs/TOOLS.md`
