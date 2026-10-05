@@ -53,12 +53,15 @@ src/
 │   └── pre-release.ts        git tag / npm publish 的发版检查
 ├── guard/
 │   ├── shared.ts             四道守卫共用的事件接线与档位决策
+│   ├── approval.ts           审批 seam：只有「记住我的选择」的守卫才自己提问
 │   ├── git-guard.ts          危险 git 命令
 │   ├── command-guard.ts      危险 shell 命令
 │   ├── file-guard.ts         敏感路径
 │   └── secret-guard.ts       凭据泄漏
 ├── audit.ts                  脱敏后的审计记录（.dev-docs/audit-log.jsonl）
 └── commands/dev-workflow.ts  /dev-workflow 的子命令分派
+
+client.js                     浏览器半：设置面板（仓库根目录，不走 src/ 的编译）
 ```
 
 依赖方向是单向的：`index.ts` 依赖所有模块，各模块之间只向下依赖（`commands` 与
@@ -98,6 +101,67 @@ disposer，`setActive(false)` 逆序逐个调用。
 是同一个手法。
 
 事件监听器（`ctx.on`）没有这个问题：`on` 返回的 disposer 本来就归当前 fiber。
+
+## 设置面板层
+
+面板是**两半**：Host 半在 `src/index.ts` 里（没有单独模块，因为它只做三件事），浏览器半是
+仓库根目录的 `client.js`。两半通过一个字符串配对：**设置命名空间**。
+
+### Host 半：让出页面，并跟上写入
+
+```ts
+export { Config }                                    // Loader 行据此提供 schema
+ctx.inject(['settings'], (child) => child.effect(() =>
+  (child.get('settings') as SettingsPresentation)
+    .configure({ auto: false }, ctx.fiber)))         // 关掉 schema 自动页
+ctx.events.on('loader/volatile-update', () => resync())
+```
+
+`auto: false` 是因为本插件自己渲染面板（第三、五步的结论）：schema 生成的页面给不了分组、
+说明文字和只读高级区。`settings` 是可选服务，用 `ctx.inject` 而不是写进 `inject`，所以没有它
+的档照样加载，只是没有面板。
+
+`resync()` 只做两件事：重算 locale；若「构建注册时用到的开关」签名变了，就整体重建注册。
+**别的配置项不需要重建**——面板保存时，loader 把新值提交进运行中的 volatile 引用，读取方
+（每次检查、每次守卫）自然看到新值，这也正是「改完不用重启」的机制。手工 `/dev-workflow off`
+不会被一次无关的编辑撤销，因为签名没变。
+
+### 浏览器半：只渲染，不持久化
+
+`client.js` 是**手写的模块**，因为这个包没有打包器：
+
+```js
+window.__ModuleLoader__.load({
+  id: '@melosic/dsh-dev-workflow',   // 必须等于 Loader 行 id
+  factory: (require) => { const React = require('react'); …; return { apply, inject, panel } },
+})
+```
+
+`apply(ctx)` 里三件事：注册双语文案（`ctx.locale.register`）；建一个 `DraftForm`；在
+**Host 已经开始服务该命名空间之后**，往 `settings.section` 槽位注册导航项：
+
+```js
+ctx.configForms.whileServed([NAMESPACE], () =>
+  ctx.slots.inject(SLOT, () => ctx.slots.register({ name: SLOT, id: NAMESPACE, … }, Section)))
+```
+
+`whileServed` 是官方形态：命名空间还没被服务时挂一张卡片，卡片也读不到任何东西。
+
+读写全部交给 `configForms` 提供的控制器，面板**没有自己的存储**：`DraftForm` 只暂存草稿，
+`save()` 把改动拼成一批 `{ op: 'set' | 'unset', path, value }`，带上**读到的 revision** 调
+`scope.mutate(ops, revision)`；版本不符或写入被拒时草稿保留并显示失败，由宿主负责冲突检测、
+落盘和失败后的重载。`unset` 表示「回到继承值」，也就是面板上的「恢复默认」。
+
+命名空间字符串写错两半就永不配对，所以 `tests/settings-schema.spec.ts` 会拿
+`cordis.patch.yml` 里的 `id:` 逐字比对；另外两个 spec 分别覆盖 Host 注册 + volatile 写入
+（`tests/settings-register.spec.ts`）与两个方向的往返（`tests/settings-roundtrip.spec.ts`）。
+
+### 样式与主题
+
+面板不引入任何 DSH 私有组件：按钮、开关、分段控件、复选框都是本地实现，类名统一带
+`dsw-dev-workflow-` 前缀，颜色只用主题发布的 14 个 `--dsw-alias-*` token，不认识的 token
+一律回落到字面量。`<style>` 标签带 `data-plugin` 与 `data-plugin-css` 两个属性，前者让宿主
+知道归属、后者让 HMR 能按归属清理。
 
 ## 数据流：一次动作检查
 

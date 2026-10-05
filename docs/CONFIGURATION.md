@@ -5,6 +5,8 @@
 没有任何操作被默认放行、四道守卫与审计记录全部启用。
 
 配置写在 DSH profile 里，`apply` 之前由宿主完成校验与填默认值——插件内部永远看不到「未填」的状态。
+它也可以在 DSH 设置里的**可视化面板**中修改，两条路写的是同一份配置源：面板保存后落进当前
+profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [可视化面板](#可视化面板)）。
 
 ## 顶层
 
@@ -13,6 +15,8 @@
 | `codePaths` | `string[]` | `['src/']` | 算作「代码」的路径前缀，用于判断文档是否滞后 |
 | `docs` | 对象 | 见下 | 文档相关路径 |
 | `rules` | 对象 | 见下 | 机械约定 |
+| `commitCheck` | 对象 | 见下 | 提交信息检查的开关、档位与类型清单 |
+| `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
 | `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 用户可见文案的语言 |
 | `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的提交前检查 |
@@ -24,11 +28,13 @@
 
 ### `locale: 'auto'` 的解析时机
 
-`auto` 在**插件加载时解析一次**（`src/i18n.ts` 的 `resolveLocale()`），之后不再变化。
-判断依据是 `Intl.DateTimeFormat().resolvedOptions().locale` 是否以 `zh` 开头。
+`auto` 在**插件加载时解析一次**（`src/i18n.ts` 的 `resolveLocale()`），判断依据是
+`Intl.DateTimeFormat().resolvedOptions().locale` 是否以 `zh` 开头。
 
-解析一次而不是每次读取时解析，是为了让技能目录条目与技能正文始终是同一种语言；
-运行中的会话语言本来也不会变。要换语言就显式写 `en-US` 或 `zh-CN` 并重新加载插件。
+解析一次而不是每次读取时解析，是为了让技能目录条目与技能正文始终是同一种语言。
+但它不是「只能重启才能换」：面板改 `locale` 后，宿主把新值提交进运行中的配置，
+插件收到 `loader/volatile-update` 就重新解析一次，技能与提示语随之切换。
+要写死在文件里就显式写 `en-US` 或 `zh-CN`。
 
 ## `docs`
 
@@ -38,6 +44,7 @@
 | `changelog` | `string` | `'CHANGELOG.md'` | CHANGELOG 的路径 |
 | `docsDir` | `string` | `'docs/'` | 文档目录；其下的文件都算文档 |
 | `adrDir` | `string` | `'docs/ADR/'` | ADR 目录。**当前已声明、尚未被任何检查读取** |
+| `exclude` | `string[]` | `[]` | 算作文档的路径前缀；命中的文件不再被当成代码改动，因此不会触发文档滞后检查 |
 | `mirrors` | `string[][]` | 三组 | 必须一起改动的文件组，每组一行 |
 
 `mirrors` 的默认值是本仓库真实存在的三对文件：
@@ -52,6 +59,9 @@
 
 判定规则（`src/tools/check-doc-sync.ts`）：某一组里有文件被改动、但组内还有文件没被改动 → **报错**。
 所以「改了 README.md 却没改 README.zh.md」是阻塞项，而不只是提醒。
+
+`exclude` 在判定「这是不是一个代码改动」之前生效：命中前缀的路径既不算代码，也不算文档，
+于是它可以用来把生成物、快照或脚本放进 `docs/` 这类目录里而不误报。
 
 ## `rules`
 
@@ -83,6 +93,45 @@
 同一次判定里只会出现一条：升级为阻塞时，那条软警告会被移除，不重复提示同一件事
 （`src/checks.ts:146-166`）。
 
+## `commitCheck`
+
+| 字段 | 类型 | 默认值 | 作用 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 提交信息检查的开关。`false` 时提交前不再跑 `check_commit_message`，工具本身仍可手动调用 |
+| `onFailure` | `'warn' \| 'block'` | `'block'` | 检查出的**硬性错误**是阻塞（默认）还是降级为警告 |
+| `types` | `string[]` | 11 项 `COMMIT_TYPES` | 允许的提交类型 |
+| `requireScope` | `boolean` | `false` | `true` 时「缺 scope」从软警告升为硬错误 |
+| `subjectMaxLength` | `number` | `50` | 标题最长字符数，`min(1)` 且必须是整数 |
+
+### 硬性错误与建议性警告
+
+检查信息本身的轻重是固定的，`onFailure` 只决定「硬性错误要不要挡住提交」：
+
+| 问题 | 轻重 |
+| --- | --- |
+| 头部不匹配 / 类型不在 `types` 里 | 硬性错误 |
+| `!` 标了破坏性变更却没有 `BREAKING CHANGE:` footer | 硬性错误 |
+| 标题超过 `subjectMaxLength` | 建议性警告 |
+| 标题以句点结尾 | 建议性警告 |
+| 缺 scope | 建议性警告；`requireScope: true` 时升为硬性错误 |
+
+`onFailure: 'warn'` 只降级提交信息自身的硬性错误，**不影响文档同步检查**：那是另一类问题，
+不该因为「这次只想提醒提交话术」而被一起放过。
+
+`types` 在面板上是 11 个复选框；直接从文件改可以加入自定义类型，面板会把已选中的自定义值
+原样保留并一并提交。
+
+## `docsCheck`
+
+| 字段 | 类型 | 默认值 | 作用 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 文档同步检查的开关 |
+| `requireReadmeOnConfig` | `boolean` | `false` | 改动 `package.json` 或 `cordis.patch.yml` 却没动 `docs.readme` 里的任何文件时给一条警告 |
+
+`docsCheck.enabled` 只作用于**提交前**那一次 `evaluate()`（连同其中的镜像配对与
+`rules.requireChangelogOnFeat`）。`check_doc_sync` 工具不受它影响，始终是个可手动调用的检查——
+否则面板上关掉它就会让「文档是否同步」这个问题彻底无法提问。
+
 ## `gitGuard`
 
 | 字段 | 类型 | 默认值 | 拦截什么 |
@@ -96,6 +145,7 @@
 | `cleanForce` | 动作 | `'ask'` | `git clean -f`（删未跟踪文件） |
 | `checkoutDiscard` | 动作 | `'ask'` | `git checkout -- <path>`（丢弃未暂存改动） |
 | `noVerify` | 动作 | `'ask'` | `--no-verify`（跳过 git 钩子） |
+| `rememberApproved` | `boolean` | `false` | 同会话内已批准过的同一条命令不再重复询问（需要档里挂了审批通道） |
 
 「动作」是 `'deny' | 'ask' | 'allow'` 之一：
 
@@ -121,6 +171,35 @@
 判定按 `deny > ask > allow` 取最严的一条；**同级时先入列者胜**，而操作本身排在修饰符
 （`--no-verify`）之前，所以上面这条报的是 force push，而不是 no-verify——理由栏要说明
 真正会丢工作的那个操作。
+
+### `rememberApproved` 的记忆范围
+
+DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`，没有 `allow-always`，
+也没有授权存储（`dsh-user-approval` 的 README 明说这一点）。而守卫把 `ask` 交给 dispatcher 后
+**拿不到那次提问的答案**。所以「记住我的选择」只能由插件自己发起提问：
+
+`rememberApproved: true` 时，命中的操作若策略为 `ask`，git 守卫会自己经 `ctx.get('approval')`
+发起审批，然后按答案处理：
+
+| 答案 | 处理 |
+| --- | --- |
+| `allowed-once` | 放行，并把这次操作记进本会话 |
+| `rejected` | 拒绝（`security.guard.approval_rejected`） |
+| `cancelled` | 拒绝（`security.guard.approval_cancelled`） |
+| `unavailable` | 拒绝（`security.guard.approval_unavailable`） |
+
+被记住的是**一次具体调用**：工具名加上序列化后的参数。所以 `git clean -f` 与
+`git clean -f -d` 是两次操作，换工作目录也是。记忆按会话隔离，插件重新加载即清空，绝不落盘。
+
+边界（这几条是刻意的）：
+
+- **只作用于 `ask`。** `deny` 永不经过这条路——把某项设成 `deny` 之后不存在「批准过一次就放行」。
+- **拒绝不会被记成批准。** 只有 `allowed-once` 才写入记忆，其余三种都会在下一次重新提问。
+- **没有审批通道时不自行提问。** 档里没挂审批服务、或这次调用没有 agent，守卫就把问题交回
+  dispatcher（与开关关闭时逐字相同的行为），绝不把「问不出来」当成「同意了」。
+- **不吞并别的 gate。** 若另一个 listener 已经拒绝，或者已经要提问，git 守卫不会自己再问一次：
+  别的 gate 的答案不是它该记的。
+- **默认关闭。** `false` 时行为与没有这个开关时完全一致。
 
 ## `commandGuard`
 
@@ -189,6 +268,8 @@
 | --- | --- |
 | 完全关掉插件（零常驻、零介入） | `mode: 'off'` |
 | 只关掉提交前检查（交给 husky / commitlint） | `enableOwnTrigger: false` |
+| 只关掉提交信息检查 | `commitCheck.enabled: false` |
+| 只关掉文档同步检查 | `docsCheck.enabled: false` |
 | 只关掉危险 git 命令守卫 | `gitGuard.enabled: false` |
 | 只关掉危险 shell 命令守卫 | `commandGuard.enabled: false` |
 | 只关掉敏感文件守卫 | `fileGuard.enabled: false` 或 `noRead: []` |
@@ -200,9 +281,49 @@
 `/dev-workflow on` / `off` 是 `mode` 的**运行期等价物**：它同样撤掉全部注册。区别是它不落盘，
 插件重新加载后仍按 `mode` 决定。
 
+## 可视化面板
+
+面板与文件配置**同源**：面板不读也不写任何自己的存储，它走的是 DSH 的设置控制器
+（`configForms`），保存后宿主把新值写进当前 profile 的 `cordis.patch.yml`，并通过
+`loader/volatile-update` 提交给运行中的插件——**不需要重启**。面板里看到的就是文件里的值，
+反过来说，手改文件后重新加载同样会反映到面板。
+
+### 面板可以改的（27 项）
+
+| 分组 | 项目 |
+| --- | --- |
+| 工作流模式 | `mode`、`locale`、`enableOwnTrigger` |
+| 提交规范 | `commitCheck.enabled`、`onFailure`、`types`、`requireScope`、`subjectMaxLength` |
+| 文档同步 | `docsCheck.enabled`、`rules.requireChangelogOnFeat`、`docsCheck.requireReadmeOnConfig` |
+| Git 安全 | `gitGuard.enabled`、八个操作档位、`gitGuard.rememberApproved` |
+| 命令安全 | `commandGuard.enabled`、`commandGuard.dangerousShell` |
+| 文件与密钥 | `fileGuard.enabled`、`secretGuard.enabled`、`secretGuard.genericHighEntropy` |
+| 审计日志 | `audit.enabled` |
+
+主区只有开关与枚举（加上 `subjectMaxLength` 这一个数字输入），不提供自由文本——路径与正则
+是「写错就静默失效」的那一类值，不该交给一个没有校验的输入框。
+
+### 只能在文件里改的（11 项）
+
+面板的**高级**区（默认折叠、**只读**）展示其中 9 项，并提供一个打开当前 profile
+`cordis.patch.yml` 的按钮：`codePaths`、`docs.docsDir`、`docs.adrDir`、`docs.changelog`、
+`docs.exclude`、`rules.branchPattern`、`rules.commitPattern`、`docs.mirrors`、`audit.path`。
+
+另外 2 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）
+与 `fileGuard.noRead`（不许读取的敏感路径清单）。一个路径清单不是开关或枚举，面板给不了
+比编辑文件更好的体验。
+
+### 面板不做什么
+
+- **不重复 DSH 自带的插件总开关。** 插件的启用与停用是插件管理器的事，面板只负责插件内部的
+  配置；`mode: 'off'` 是插件自己的「零常驻」语义，两者互不替代。
+- **不改由 DSH 拥有的东西**（审批策略、沙箱模式、插件名册）。
+- **不写入配置文件以外的地方。** 面板没有自己的持久化，也没有「仅本次会话生效」的开关。
+
 ## 相关文档
 
 - 配置字段在代码里的唯一声明：`src/config.ts`
+- 面板的浏览器半：`client.js`；Host 半（关闭 schema 页、`loader/volatile-update` 后重建注册）在 `src/index.ts:320-344`
 - 每个工具的参数：`docs/TOOLS.md`
 - 默认值为什么这样定：`docs/SECURITY.md`
 - 守卫的判定细节与实测：`docs/TRIGGERS.md`
