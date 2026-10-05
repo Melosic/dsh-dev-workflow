@@ -88,6 +88,19 @@ export const Config = z.object({
       rebase: guardAction(),
       amend: guardAction(),
       branchDelete: guardAction(),
+      /**
+       * `git clean -f` deletes untracked files. It has its own policy rather
+       * than borrowing the hard-reset one: they discard different things.
+       */
+      cleanForce: guardAction(),
+      /** `git checkout -- .` discards unstaged edits. */
+      checkoutDiscard: guardAction(),
+      /**
+       * `--no-verify` skips the hooks that protect the repository. It defaults
+       * to `ask` and never to `deny`: it is the escape hatch for the moment
+       * hooks are wrong, and closing it would leave no way through.
+       */
+      noVerify: guardAction(),
     })
     .default({}),
 })

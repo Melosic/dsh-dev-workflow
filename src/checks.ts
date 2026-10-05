@@ -5,6 +5,7 @@ import type { Translate } from './i18n.js'
 import type { CheckResult } from './tools/result.js'
 import { checkCommitMessage } from './tools/check-commit-message.js'
 import { checkDocSync } from './tools/check-doc-sync.js'
+import { gitInvocations } from './shell.js'
 
 // Inspection of one change, shared by the pre-commit trigger and the
 // `/dev-workflow check` command. The working tree is read once by the caller, so
@@ -26,126 +27,6 @@ export interface EvaluationInput {
   /** The repository-relative paths the change touches. */
   readonly files?: readonly string[]
 }
-
-const OPERATORS = new Set(['&&', '||', ';', '|', '\n'])
-
-/**
- * Split a shell command into words, resolving quotes and escaping. Separators
- * survive as their own token so command boundaries can be recovered.
- * @param command - the command line.
- * @returns the tokens, in order.
- */
-function tokenize(command: string): string[] {
-  const tokens: string[] = []
-  let current = ''
-  let started = false
-  let quote: '"' | "'" | null = null
-
-  const flush = (): void => {
-    if (!started) return
-    tokens.push(current)
-    current = ''
-    started = false
-  }
-
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command.charAt(index)
-    const next = command.charAt(index + 1)
-    if (quote !== null) {
-      if (char === quote) {
-        quote = null
-        started = true
-        continue
-      }
-      // A single-quoted shell string takes backslashes literally; a double
-      // quoted one lets them escape the next character.
-      if (char === '\\' && quote === '"' && index + 1 < command.length) {
-        current += next
-        index += 1
-      } else {
-        current += char
-      }
-      started = true
-      continue
-    }
-    if (char === '"' || char === "'") {
-      quote = char
-      started = true
-      continue
-    }
-    if (char === '\\' && index + 1 < command.length) {
-      current += next
-      index += 1
-      started = true
-      continue
-    }
-    if (char === '\n') {
-      flush()
-      tokens.push('\n')
-      continue
-    }
-    if (char === ' ' || char === '\t' || char === '\r') {
-      flush()
-      continue
-    }
-    if (char === '&' && next === '&') {
-      flush()
-      tokens.push('&&')
-      index += 1
-      continue
-    }
-    if (char === '|' && next === '|') {
-      flush()
-      tokens.push('||')
-      index += 1
-      continue
-    }
-    if (char === '|' || char === ';') {
-      flush()
-      tokens.push(char)
-      continue
-    }
-    // Subshell and group delimiters only matter for where a command starts.
-    if (char === '(' || char === ')' || char === '{' || char === '}') {
-      flush()
-      continue
-    }
-    current += char
-    started = true
-  }
-  flush()
-  return tokens
-}
-
-/**
- * Cut a token stream at its operators.
- * @param tokens - tokens from {@link tokenize}.
- * @returns one word list per command.
- */
-function segments(tokens: readonly string[]): string[][] {
-  const result: string[][] = []
-  let current: string[] = []
-  for (const token of tokens) {
-    if (OPERATORS.has(token)) {
-      if (current.length > 0) result.push(current)
-      current = []
-      continue
-    }
-    current.push(token)
-  }
-  if (current.length > 0) result.push(current)
-  return result
-}
-
-/** Git options that take a separate value, so it is not mistaken for a command. */
-const GIT_VALUE_OPTIONS = new Set([
-  '-C',
-  '-c',
-  '--git-dir',
-  '--work-tree',
-  '--namespace',
-  '--exec-path',
-])
 
 /**
  * Read the message arguments of a `git commit`.
@@ -211,37 +92,8 @@ function commitArguments(args: readonly string[]): CommitCommand {
  * @returns the commit when the command creates one, otherwise `undefined`.
  */
 export function detectCommit(command: string): CommitCommand | undefined {
-  for (const word of segments(tokenize(command))) {
-    let index = 0
-    while (index < word.length) {
-      const token = word[index] ?? ''
-      // Leading `VAR=value` assignments and `env` are not the command itself.
-      if (token === 'env' || /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
-        index += 1
-        continue
-      }
-      break
-    }
-    const program = word[index]
-    if (program === undefined) continue
-    const base = program.replace(/\\/g, '/').split('/').pop() ?? program
-    if (base !== 'git' && base !== 'git.exe') continue
-
-    index += 1
-    while (index < word.length) {
-      const token = word[index] ?? ''
-      if (GIT_VALUE_OPTIONS.has(token)) {
-        index += 2
-        continue
-      }
-      if (token.startsWith('-')) {
-        index += 1
-        continue
-      }
-      break
-    }
-    if (word[index] !== 'commit') continue
-    return commitArguments(word.slice(index + 1))
+  for (const invocation of gitInvocations(command)) {
+    if (invocation.subcommand === 'commit') return commitArguments(invocation.args)
   }
   return undefined
 }

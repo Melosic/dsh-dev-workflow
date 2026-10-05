@@ -7,6 +7,7 @@ import type { WorkflowState } from '../state.js'
 import type { CheckResult } from '../tools/result.js'
 import { listChangedFiles } from '../tools/check-doc-sync.js'
 import { detectCommit, evaluate, fingerprint, resolveCommitMessage, summarize } from '../checks.js'
+import { commandOf } from '../shell.js'
 
 // The automatic half of the plugin: before the agent runs a shell command that
 // creates a commit, check that commit against the workflow rules and route the
@@ -33,17 +34,6 @@ export interface PreCommitTriggerOptions {
   readonly git: (cwd: string) => GitRunner
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
-}
-
-/**
- * Read the `command` string of a tool call, when it has one.
- * @param args - the raw, unvalidated arguments of the tool call.
- * @returns the command line, or `undefined` for a call that runs none.
- */
-function commandOf(args: unknown): string | undefined {
-  if (typeof args !== 'object' || args === null) return undefined
-  const value: unknown = (args as { command?: unknown }).command
-  return typeof value === 'string' ? value : undefined
 }
 
 /**
