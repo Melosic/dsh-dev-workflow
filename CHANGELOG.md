@@ -22,12 +22,15 @@
 - `CONTRIBUTING.md`：环境搭建、分支命名、提交规范、PR 流程、国际化同步规则、安全操作规范。
 - `LICENSE`：MIT。
 - `locale/en.json` 与 `locale/zh.json`：面向用户的展示元数据与文本骨架，key 集合完全对齐。
-- `scripts/ci-checks.mjs`：CI 守护，校验两个 locale 字典 key 一致，且 `cordis.patch.yml` 既被
-  `dsh.bundle.patch` 声明又列入 `files`。
+- `scripts/ci-checks.mjs`：CI 守护，校验两个 locale 字典 key 一致，`cordis.patch.yml` 既被
+  `dsh.bundle.patch` 声明又列入 `files`，以及两份 SKILL 文件的 frontmatter 合法且章节数量与层级顺序一致。
 - `.github/workflows/ci.yml`：push 到 main 与 PR 时执行 install / typecheck / lint / format / test /
   build / locale 与 manifest 校验。
 - commitlint（`commitlint.config.mjs`）与 husky 钩子：`commit-msg` 校验提交信息，
   `pre-commit` 对暂存文件跑 ESLint 与 Prettier。
+- `skills/dsh-dev-workflow/SKILL.md` 与 `skills/dsh-dev-workflow/SKILL.zh.md`：完整开发工作流规范
+  的双语单一事实源，共 9 个章节（核心原则、分支模型、提交信息规范、原子提交、PR 流程与质量门禁、
+  文档同步工作流、版本发布、安全操作规范、自动触发时机）。两份文件的章节数量与层级顺序由 CI 校验。
 
 ### Changed
 
@@ -36,6 +39,8 @@
   （DeepSeek function-name 合同）。
 - 国际化字典目录由 `locales/` 修正为 DSH 实际约定的单数 `locale/`，文件名为短语言 id
   （`locale/en.json`、`locale/zh.json`）。
+- 技能正文目录由预留的 `assets/` 改为 `skills/dsh-dev-workflow/`：`@deepseek-ai/dsh-agent-preset`
+  等官方包即采用 `skills/<name>/SKILL.md` 布局，且该路径由 `package.json` 的 `files` 发布。
 - `ci.yml` 中关于 Node 版本矩阵的注释已修正：单版本是为控制审查节奏，而非私有仓库的 Actions
   分钟配额（仓库已转为 public，标准 runner 免费）。
 

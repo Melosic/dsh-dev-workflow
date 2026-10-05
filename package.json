@@ -41,7 +41,7 @@
   },
   "files": [
     "lib/",
-    "assets/",
+    "skills/",
     "locale/",
     "cordis.patch.yml",
     "README.md",
