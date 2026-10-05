@@ -115,18 +115,17 @@ export const Config = z.object({
       dangerousShell: guardAction(),
     })
     .default({}),
-  /**
-   * Paths a tool must never read. Matched as literal path segments, never by
-   * opening the file: the guard does not depend on the optional `fs` service.
-   */
+  /** Files and directories the plugin never lets a tool name at all. */
   fileGuard: z
     .object({
       enabled: z.boolean().default(true),
       /**
-       * A trailing `/` matches that directory and everything under it; a pattern
-       * containing `/` matches at any depth (`.ssh/id_rsa` catches
-       * `C:/Users/x/.ssh/id_rsa`); anything else matches a file name, and a
-       * leading dot also covers its variants (`.env` covers `.env.local`).
+       * Patterns matched against a tool's path arguments and against the words of
+       * a shell command. A trailing `/` matches that directory and everything
+       * under it; a pattern containing `/` also matches at any depth
+       * (`.ssh/id_rsa` matches `~/.ssh/id_rsa`); anything else matches the file
+       * name, where a leading dot also covers its variants (`.env` covers
+       * `.env.local`).
        */
       noRead: z
         .array(z.string())
@@ -142,16 +141,23 @@ export const Config = z.object({
         ]),
     })
     .default({}),
-  /** Detection of credentials in tool arguments, before they leave the process. */
+  /** Credential patterns scanned for in every tool argument. */
   secretGuard: z
     .object({
       enabled: z.boolean().default(true),
       /**
-       * Off by default: a high-entropy string is a guess, and a guard that cries
-       * wolf on base64, hashes and long identifiers gets switched off entirely.
-       * The named patterns below it carry no such ambiguity.
+       * Also flag long high-entropy strings with no known prefix. Off by default:
+       * it is the pattern most likely to stop an ordinary call.
        */
       genericHighEntropy: z.boolean().default(false),
+    })
+    .default({}),
+  /** Security audit trail. */
+  audit: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** One JSON object per line. Kept out of version control by `.dev-docs/`. */
+      path: z.string().default('.dev-docs/audit-log.jsonl'),
     })
     .default({}),
 })

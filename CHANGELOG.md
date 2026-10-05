@@ -35,6 +35,12 @@
   （高熵是猜测，误报会让守卫被整体关掉）。命中消息只报模式名，**绝不回显匹配到的内容**。
   新增 `secretGuard{enabled, genericHighEntropy}` 配置与
   `security.secret_detected`/`security.secret_pattern_matched` 双语 key。
+- **audit（审计记录）**：四道守卫共用一个 sink，把每次命中写成一行 JSON 到
+  `audit.path`（默认 `.dev-docs/audit-log.jsonl`，已在 `.gitignore` 内）。
+  两道脱敏：参数中的凭据替换为 `[REDACTED]`，敏感文件路径只保留文件名。
+  同步追加（进程崩溃时还留在内存里的行不算记录），写失败只记调试日志、绝不让
+  工具调用失败；审计记录只落盘、绝不返回，因此不进模型上下文。新增
+  `audit{enabled, path}` 配置与 `audit.enabled`/`audit.disabled` 双语 key。
 
 ### Changed
 

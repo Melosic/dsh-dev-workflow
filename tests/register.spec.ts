@@ -60,6 +60,21 @@ describe('src/index.ts', () => {
     expect(harness.effects).toHaveLength(9)
   })
 
+  it('registers only the guards that are enabled', () => {
+    const harness = createHarness()
+    plugin.apply(
+      harness.ctx,
+      Config({
+        enableOwnTrigger: false,
+        gitGuard: { enabled: false },
+        secretGuard: { enabled: false },
+      }),
+    )
+    // Two tools, one provider, and only the command and file guards.
+    expect(harness.listeners).toHaveLength(2)
+    expect(harness.effects).toHaveLength(5)
+  })
+
   it('declares both tools with a name the registry accepts', () => {
     const harness = createHarness()
     plugin.apply(harness.ctx, Config({}))

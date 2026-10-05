@@ -17,6 +17,7 @@ import { createGitGuard } from './guard/git-guard.js'
 import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
 import { createSecretGuard } from './guard/secret-guard.js'
+import { createAudit } from './audit.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -144,6 +145,10 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       )
     }
 
+    // Every guard shares one audit sink: the record should read the same whether
+    // a force push or a leaked token is what tripped it.
+    const audit = createAudit({ config: () => config, log: (message) => ctx.logger.debug(message) })
+
     // The guard is a separate listener on the same gate rather than part of the
     // trigger: one protects conventions and the other protects work, and they
     // are switched on independently.
@@ -156,14 +161,15 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            audit,
           }),
         ),
       )
     }
 
-    // The command guard is a third listener on the same gate: the git one
-    // protects the repository, this one protects the machine. It is its own
-    // switch, so a profile can keep one without the other.
+    // The remaining guards run after the git one, from the widest blast radius to
+    // the narrowest: a machine, then a filesystem, then a single secret. Each is
+    // its own switch, so a profile can keep one without the others.
     if (config.commandGuard.enabled) {
       registrations.push(
         ctx.on(
@@ -173,14 +179,12 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            audit,
           }),
         ),
       )
     }
 
-    // The file guard reads paths out of the tool arguments. DSH has no
-    // before-read event, so matching a path is the only point at which a
-    // sensitive file can be stopped before its contents are in context.
     if (config.fileGuard.enabled) {
       registrations.push(
         ctx.on(
@@ -190,13 +194,12 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            audit,
           }),
         ),
       )
     }
 
-    // The secret guard scans the whole argument object, not one named field: a
-    // credential is a credential wherever it was pasted.
     if (config.secretGuard.enabled) {
       registrations.push(
         ctx.on(
@@ -206,6 +209,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            audit,
           }),
         ),
       )

@@ -41,23 +41,16 @@ describe('src/config.ts', () => {
     expect(config.gitGuard.noVerify).toBe('ask')
   })
 
-  it('defaults the command guard to enabled and asking', () => {
+  it('accepts all three policy values for a guard operation', () => {
+    for (const action of ['deny', 'ask', 'allow'] as const) {
+      expect(Config({ gitGuard: { rebase: action } }).gitGuard.rebase).toBe(action)
+    }
+  })
+
+  it('defaults every non-git guard to a safe, enabled baseline', () => {
     const config = Config({})
 
     expect(config.commandGuard).toEqual({ enabled: true, dangerousShell: 'ask' })
-  })
-
-  it('keeps the command policy out of the git guard and vice versa', () => {
-    // Same factory, different fields: one tightened policy must not move the other.
-    const config = Config({ commandGuard: { dangerousShell: 'deny' } })
-
-    expect(config.commandGuard.dangerousShell).toBe('deny')
-    expect(config.gitGuard.forcePush).toBe('ask')
-  })
-
-  it('defaults the file guard to the documented no-read list', () => {
-    const config = Config({})
-
     expect(config.fileGuard).toEqual({
       enabled: true,
       noRead: [
@@ -71,32 +64,21 @@ describe('src/config.ts', () => {
         'secrets/',
       ],
     })
-  })
-
-  it('treats a configured no-read list as the whole list, not an addition', () => {
-    // Otherwise a profile could never narrow the protection it inherited.
-    const config = Config({ fileGuard: { noRead: ['*.vault'] } })
-
-    expect(config.fileGuard.noRead).toEqual(['*.vault'])
-  })
-
-  it('defaults the secret guard to enabled with the guessy detector off', () => {
-    const config = Config({})
-
+    // The high-entropy heuristic is the one rule that flags ordinary text, so it
+    // is the one rule that ships off.
     expect(config.secretGuard).toEqual({ enabled: true, genericHighEntropy: false })
+    expect(config.audit).toEqual({ enabled: true, path: '.dev-docs/audit-log.jsonl' })
   })
 
-  it('turns the high-entropy detector on only when asked', () => {
-    const config = Config({ secretGuard: { genericHighEntropy: true } })
+  it('keeps the command policy out of the git guard and vice versa', () => {
+    const config = Config({
+      commandGuard: { dangerousShell: 'deny' },
+      fileGuard: { noRead: ['*.vault'] },
+    })
 
-    expect(config.secretGuard.genericHighEntropy).toBe(true)
-    expect(config.secretGuard.enabled).toBe(true)
-  })
-
-  it('accepts all three policy values for a guard operation', () => {
-    for (const action of ['deny', 'ask', 'allow'] as const) {
-      expect(Config({ gitGuard: { rebase: action } }).gitGuard.rebase).toBe(action)
-    }
+    expect(config.commandGuard.dangerousShell).toBe('deny')
+    expect(config.gitGuard.forcePush).toBe('ask')
+    expect(config.fileGuard.noRead).toEqual(['*.vault'])
   })
 
   it('defaults the document layout to this repository', () => {

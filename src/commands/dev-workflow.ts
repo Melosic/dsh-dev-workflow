@@ -104,6 +104,14 @@ function statusLines(options: DevWorkflowCommandOptions): string[] {
           tally: tally.map(([reason, count]) => `${t(reason)}×${count}`).join(', '),
         }),
   )
+
+  // The audit trail is the one part of a guard's work a user cannot see from the
+  // outside, so the status report says whether it is being kept.
+  lines.push(
+    options.config.audit.enabled
+      ? t('audit.enabled', { path: options.config.audit.path })
+      : t('audit.disabled'),
+  )
   return lines
 }
 
