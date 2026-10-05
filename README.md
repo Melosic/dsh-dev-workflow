@@ -48,6 +48,8 @@ absolute path to this package directory as the bundle target.
 
 - [CHANGELOG.md](CHANGELOG.md) — release history, Keep a Changelog format.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to set up, branch, commit, and submit changes.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — the local loop, how the tests are organised, and
+  what to touch when adding a rule.
 - [docs/TOKEN-BUDGET.md](docs/TOKEN-BUDGET.md) — what this plugin costs per request, and how to
   measure it again.
 - [docs/TRIGGERS.md](docs/TRIGGERS.md) — when the plugin intervenes on its own, what it detects,
