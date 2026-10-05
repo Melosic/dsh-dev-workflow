@@ -11,6 +11,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **command-guard（危险命令守卫）**：在工具执行前的同一个闸口上再加一道监听器，
+  按 `commandGuard.dangerousShell` 决定 `deny`/`ask`/`allow`（默认 `ask`）。
+  命中 `rm -rf /` 及其变体、`mkfs` 系列、`dd` 读写裸盘、fork bomb、
+  `chmod -R 777 /`、`> /dev/sda` 六类不可撤销操作；普通删除（`rm -rf node_modules`、
+  `rm -rf ./dist`、`git clean -fd`）一律放行。命中时只回一句短消息，
+  命令行全文不进入模型上下文。新增 `commandGuard{enabled, dangerousShell}` 配置与
+  `command.guard.dangerous_warning`/`command.guard.confirm_required`/`command.guard.denied`
+  三个双语 key。
+
 ### Changed
 
 - `docs/PUBLISHING.md` 的 v0.1.0 发布记录补上真实结果：提交 `219dbdb`、PR #11、

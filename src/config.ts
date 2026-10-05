@@ -34,7 +34,8 @@ export const DEFAULT_COMMIT_PATTERN = `^(${COMMIT_TYPES.join('|')})(\\([^)]+\\))
  *
  * `deny` blocks the call, `ask` routes it through the approval prompt, and
  * `allow` lets it run untouched. A factory rather than a shared instance: the
- * schema builder is reused for five fields and must not share resolved state.
+ * schema builder is reused for every policy field and must not share resolved
+ * state.
  * @returns a fresh policy schema defaulting to `ask`.
  */
 const guardAction = () => z.union(['deny', 'ask', 'allow']).default('ask')
@@ -101,6 +102,17 @@ export const Config = z.object({
        * hooks are wrong, and closing it would leave no way through.
        */
       noVerify: guardAction(),
+    })
+    .default({}),
+  /** Policies for shell commands that can destroy a machine rather than a commit. */
+  commandGuard: z
+    .object({
+      enabled: z.boolean().default(true),
+      /**
+       * One policy for every recognised pattern, because they share one property:
+       * none of them can be undone. They differ only in what they destroy.
+       */
+      dangerousShell: guardAction(),
     })
     .default({}),
 })

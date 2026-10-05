@@ -141,6 +141,10 @@ export function makeExec(
     sessionId?: string
     signal?: AbortSignal
     withoutAgent?: boolean
+    /** Tool name to report; `bash` by default, since most guards read a command. */
+    tool?: string
+    /** Full arguments to report instead of `{ command }`. */
+    arguments?: unknown
   } = {},
 ): ToolExecution {
   const agent =
@@ -154,8 +158,8 @@ export function makeExec(
         }
   return {
     callId: 'call-1',
-    name: 'bash',
-    arguments: { command },
+    name: options.tool ?? 'bash',
+    arguments: options.arguments ?? { command },
     ...(agent === undefined ? {} : { agent }),
     signal: options.signal ?? new AbortController().signal,
   } as unknown as ToolExecution

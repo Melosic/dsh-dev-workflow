@@ -41,6 +41,20 @@ describe('src/config.ts', () => {
     expect(config.gitGuard.noVerify).toBe('ask')
   })
 
+  it('defaults the command guard to enabled and asking', () => {
+    const config = Config({})
+
+    expect(config.commandGuard).toEqual({ enabled: true, dangerousShell: 'ask' })
+  })
+
+  it('keeps the command policy out of the git guard and vice versa', () => {
+    // Same factory, different fields: one tightened policy must not move the other.
+    const config = Config({ commandGuard: { dangerousShell: 'deny' } })
+
+    expect(config.commandGuard.dangerousShell).toBe('deny')
+    expect(config.gitGuard.forcePush).toBe('ask')
+  })
+
   it('accepts all three policy values for a guard operation', () => {
     for (const action of ['deny', 'ask', 'allow'] as const) {
       expect(Config({ gitGuard: { rebase: action } }).gitGuard.rebase).toBe(action)

@@ -14,6 +14,7 @@ import type { CommandRegistry } from './commands/dev-workflow.js'
 import { createDevWorkflowCommand } from './commands/dev-workflow.js'
 import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createGitGuard } from './guard/git-guard.js'
+import { createCommandGuard } from './guard/command-guard.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -149,6 +150,23 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
         ctx.on(
           'tools/pre-execute',
           createGitGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+          }),
+        ),
+      )
+    }
+
+    // The command guard is a third listener on the same gate: the git one
+    // protects the repository, this one protects the machine. It is its own
+    // switch, so a profile can keep one without the other.
+    if (config.commandGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createCommandGuard({
             config: () => config,
             t: () => t,
             state,
