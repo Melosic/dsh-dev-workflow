@@ -43,6 +43,7 @@ pnpm test
 
 - [CHANGELOG.md](CHANGELOG.md) —— 版本历史，Keep a Changelog 格式。
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 环境搭建、分支、提交与提交流程。
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) —— 本地循环、测试如何组织，以及加一条规则要动哪些文件。
 - [docs/TOKEN-BUDGET.md](docs/TOKEN-BUDGET.md) —— 本插件每条请求的成本，以及如何复算它。
 - [docs/TRIGGERS.md](docs/TRIGGERS.md) —— 插件什么时候自动介入、识别什么，以及识别的边界。
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 各模块如何拼在一起：具名导出、`inject`、

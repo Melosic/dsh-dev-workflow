@@ -91,6 +91,15 @@
 - `docs/ADR/template.md` 与两份架构决策记录：`001-skill-first-approach.md`（规范为什么放技能
   而不是系统提示）与 `002-plugin-not-preset.md`（为什么是插件而不是模式或预设），
   含被否决方案及其理由。
+- 测试套件（`tests/`，7 个 spec + 1 个共享脚手架，共 107 个用例）：`register.spec.ts` 覆盖
+  cordis 契约（具名导出、无 `default`、`inject`、注册与注销清单、工具定义形状）、
+  `config.spec.ts` 覆盖每个默认值与校验报错、`i18n.spec.ts` 覆盖两份字典的 key 与占位符对齐
+  及 `t()` 的分语言与回退、`impl.spec.ts` 覆盖两个判定函数与 `evaluate` 的阻塞/建议边界、
+  `guard.spec.ts` 覆盖每条 git-guard 规则与三档策略、`trigger.spec.ts` 覆盖触发时机与去重、
+  `skill-parity.spec.ts` 覆盖 SKILL 两份语言的标题数量与顺序。测试直接 import `../src/*.js`，
+  由 Vitest 转译源码，不依赖 `lib/` 构建产物。
+- `docs/DEVELOPMENT.md`：本地循环、目录职责、测试的组织方式与写测试时的约定、
+  加一条新规则所需的完整改动清单、CI 的守卫范围，以及若干已知的坑。
 
 ### Changed
 

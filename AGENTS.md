@@ -55,6 +55,7 @@ pnpm test:watch     # Vitest 监听模式
 - API 核对结论：`.dev-docs/DSH-API-NOTES.md`
 - 完整工作流规范：`skills/dsh-dev-workflow/SKILL.md`（英文）/ `skills/dsh-dev-workflow/SKILL.zh.md`（中文）
 - 架构说明：`docs/ARCHITECTURE.md`
+- 开发指引：`docs/DEVELOPMENT.md`
 - 配置参考：`docs/CONFIGURATION.md`
 - 工具参考：`docs/TOOLS.md`
 - 国际化策略：`docs/I18N.md`
