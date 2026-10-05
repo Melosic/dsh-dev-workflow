@@ -1,9 +1,10 @@
 // Reading shell command lines without running a shell.
 //
-// Two features need this: the pre-commit trigger asks "does this line create a
-// commit?", and the git guard asks "does this line destroy work?". They must
-// agree on what counts as git and on where one command ends and the next
-// begins, so the parsing lives here rather than in either of them.
+// Every automatic check needs this: the pre-commit trigger asks "does this line
+// create a commit?", the pull request trigger asks "does this line open one?",
+// and the git guard asks "does this line destroy work?". They must agree on
+// where one command ends and the next begins, so the lexing lives here rather
+// than in any of them.
 
 /** Tokens that end one command and begin another. */
 const OPERATORS = new Set(['&&', '||', ';', '|', '\n'])
@@ -126,6 +127,43 @@ export function segments(tokens: readonly string[]): string[][] {
   return result
 }
 
+/** One external program found in a shell command line. */
+export interface ProgramInvocation {
+  /** The program's base name, e.g. `git` for `/usr/bin/git`. */
+  readonly program: string
+  /** Every word after it, options included. */
+  readonly args: readonly string[]
+}
+
+/**
+ * Find each program a shell command line starts, one per segment.
+ *
+ * Leading `VAR=value` assignments and `env` are skipped, because neither is the
+ * command itself. Options are left in place; only callers that know a specific
+ * program can tell which of them take a value.
+ * @param command - a shell command line, as a tool would receive it.
+ * @returns one entry per command, in order.
+ */
+export function programInvocations(command: string): ProgramInvocation[] {
+  const found: ProgramInvocation[] = []
+  for (const word of segments(tokenize(command))) {
+    let index = 0
+    while (index < word.length) {
+      const token = word[index] ?? ''
+      if (token === 'env' || /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+        index += 1
+        continue
+      }
+      break
+    }
+    const program = word[index]
+    if (program === undefined) continue
+    const base = program.replace(/\\/g, '/').split('/').pop() ?? program
+    found.push({ program: base, args: word.slice(index + 1) })
+  }
+  return found
+}
+
 /** One `git <subcommand>` found in a shell command line. */
 export interface GitInvocation {
   /** The subcommand, e.g. `push` or `commit`. */
@@ -141,25 +179,11 @@ export interface GitInvocation {
  */
 export function gitInvocations(command: string): GitInvocation[] {
   const found: GitInvocation[] = []
-  for (const word of segments(tokenize(command))) {
+  for (const { program, args: words } of programInvocations(command)) {
+    if (program !== 'git' && program !== 'git.exe') continue
     let index = 0
-    while (index < word.length) {
-      const token = word[index] ?? ''
-      // Leading `VAR=value` assignments and `env` are not the command itself.
-      if (token === 'env' || /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
-        index += 1
-        continue
-      }
-      break
-    }
-    const program = word[index]
-    if (program === undefined) continue
-    const base = program.replace(/\\/g, '/').split('/').pop() ?? program
-    if (base !== 'git' && base !== 'git.exe') continue
-
-    index += 1
-    while (index < word.length) {
-      const token = word[index] ?? ''
+    while (index < words.length) {
+      const token = words[index] ?? ''
       if (GIT_VALUE_OPTIONS.has(token)) {
         index += 2
         continue
@@ -170,9 +194,9 @@ export function gitInvocations(command: string): GitInvocation[] {
       }
       break
     }
-    const subcommand = word[index]
+    const subcommand = words[index]
     if (subcommand === undefined) continue
-    found.push({ subcommand, args: word.slice(index + 1) })
+    found.push({ subcommand, args: words.slice(index + 1) })
   }
   return found
 }

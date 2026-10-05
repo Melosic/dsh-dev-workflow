@@ -16,6 +16,7 @@
   "command.toggle.status.guards.none": "守卫命中次数：无。",
   "command.toggle.kind.commit": "提交信息",
   "command.toggle.kind.doc": "文档同步",
+  "command.toggle.kind.pr": "PR",
   "command.toggle.check.header": "对工作区执行开发工作流检查：",
   "command.toggle.check.clean": "没有发现阻塞性问题。",
   "command.guard.dangerous_warning": "这条命令做了无法撤销的事：{pattern}。",
@@ -63,6 +64,12 @@
   "trigger.pre_commit.detected": "正在按项目工作流规范检查本次提交。",
   "trigger.pre_commit.reason": "这次提交违反了项目工作流规范。\n{details}",
   "trigger.pre_commit.ask": "开发工作流插件发现本次提交有问题。\n\n{details}\n\n批准则照常提交，拒绝则先修复。",
-  "trigger.pre_commit.omitted": "  （另有 {count} 个问题未显示。）",
+  "trigger.omitted": "  （另有 {count} 个问题未显示。）",
+  "trigger.pre_pr.detected": "正在按项目工作流规范检查本次 PR。",
+  "trigger.pre_pr.reason": "这个 PR 违反了项目工作流规范。\n{details}",
+  "trigger.pre_pr.ask": "开发工作流插件发现这个 PR 有问题。\n\n{details}\n\n批准则照常创建，拒绝则先修复。",
+  "trigger.pre_pr.error.description": "PR 描述缺少模板要求的段落：{sections}。请说明改了什么、为什么改、以及如何验证。",
+  "trigger.pre_pr.error.checklist": "PR 描述里还有 {count} 项检查清单未勾选。请逐项勾选；不适用的请删掉该行。",
+  "trigger.pre_pr.warn.issue": "这个 PR 没有关联 Issue。如果有对应 Issue，请引用它（`Closes #12`），以便追溯到这次改动的起因。",
   "skill.summary": "项目工作流规范已作为技能提供。在提交、建分支或改文档之前先读它。"
 }

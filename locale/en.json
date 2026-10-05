@@ -16,6 +16,7 @@
   "command.toggle.status.guards.none": "Guard hits: none.",
   "command.toggle.kind.commit": "commit message",
   "command.toggle.kind.doc": "documentation sync",
+  "command.toggle.kind.pr": "pull request",
   "command.toggle.check.header": "Development-workflow check of the working tree:",
   "command.toggle.check.clean": "No blocking problem found.",
   "command.guard.dangerous_warning": "This command does something that cannot be undone: {pattern}.",
@@ -63,6 +64,12 @@
   "trigger.pre_commit.detected": "Checking this commit against the project workflow rules.",
   "trigger.pre_commit.reason": "This commit breaks the project workflow rules.\n{details}",
   "trigger.pre_commit.ask": "The development-workflow plugin found problems with this commit.\n\n{details}\n\nApprove to commit anyway, or reject to fix them first.",
-  "trigger.pre_commit.omitted": "  ({count} further problem(s) not shown.)",
+  "trigger.omitted": "  ({count} further problem(s) not shown.)",
+  "trigger.pre_pr.detected": "Checking this pull request against the project workflow rules.",
+  "trigger.pre_pr.reason": "This pull request breaks the project workflow rules.\n{details}",
+  "trigger.pre_pr.ask": "The development-workflow plugin found problems with this pull request.\n\n{details}\n\nApprove to create it anyway, or reject to fix them first.",
+  "trigger.pre_pr.error.description": "The pull request description is missing a section the template asks for: {sections}. Say what changed, why, and how to verify it.",
+  "trigger.pre_pr.error.checklist": "The pull request description leaves {count} checklist item(s) unticked. Tick each one, or delete the line if it does not apply.",
+  "trigger.pre_pr.warn.issue": "The pull request names no issue. Reference one (`Closes #12`) when an issue exists, so the change can be traced back to its reason.",
   "skill.summary": "Project workflow conventions are available as a skill. Read it before committing, branching, or changing documentation."
 }

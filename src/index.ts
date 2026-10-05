@@ -13,6 +13,7 @@ import { createCheckDocSyncTool } from './tools/check-doc-sync.js'
 import type { CommandRegistry } from './commands/dev-workflow.js'
 import { createDevWorkflowCommand } from './commands/dev-workflow.js'
 import { createPreCommitTrigger } from './triggers/pre-commit.js'
+import { createPrePrTrigger } from './triggers/pre-pr.js'
 import { createGitGuard } from './guard/git-guard.js'
 import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
@@ -129,7 +130,14 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     }
 
     // The repository may already enforce these rules with husky and commitlint;
-    // `enableOwnTrigger: false` is how an author says so.
+    // `enableOwnTrigger: false` is how an author says so. It governs both
+    // convention triggers: they are one family, and an author who has the rules
+    // somewhere else does not want any of them.
+    //
+    // They ride on `tools/pre-execute` because the event catalogue has no commit
+    // or pull-request event. Each recognises its action by the shell command that
+    // performs it, and the commit gate stays first so a change that is already
+    // being fixed at commit time is not judged twice.
     if (config.enableOwnTrigger) {
       registrations.push(
         ctx.on(
@@ -139,6 +147,15 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             git: runtime.git,
+            log: (message) => ctx.logger.debug(message),
+          }),
+        ),
+        ctx.on(
+          'tools/pre-execute',
+          createPrePrTrigger({
+            config: () => config,
+            t: () => t,
+            state,
             log: (message) => ctx.logger.debug(message),
           }),
         ),
