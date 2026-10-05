@@ -52,10 +52,17 @@ absolute path to this package directory as the bundle target.
   measure it again.
 - [docs/TRIGGERS.md](docs/TRIGGERS.md) — when the plugin intervenes on its own, what it detects,
   and the limits of that detection.
-
-Deeper reference documents (`docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `docs/TOOLS.md`,
-`docs/SECURITY.md`, `docs/I18N.md`) are written as the corresponding
-implementation phases land, so that they describe real behavior rather than guesses.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces fit together: exports, inject,
+  registration ownership, and the data flow of one check.
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — every configuration field, its default, and
+  why that default.
+- [docs/TOOLS.md](docs/TOOLS.md) — the tool and command contracts: names, arguments, returns,
+  and every rule they enforce.
+- [docs/I18N.md](docs/I18N.md) — how text is translated, how the locale is chosen, and why the
+  approval prompt carries two languages.
+- [docs/SECURITY.md](docs/SECURITY.md) — what the guard protects, what it deliberately does not
+  do, and the division of labour with husky and branch protection.
+- [docs/ADR/](docs/ADR/) — the decisions behind the design, and the alternatives that lost.
 
 ## Contributing
 
