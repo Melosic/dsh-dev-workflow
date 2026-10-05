@@ -47,7 +47,13 @@ src/
 │   ├── check-commit-message.ts
 │   └── check-doc-sync.ts
 ├── triggers/pre-commit.ts    tools/pre-execute 上的提交前检查
-├── guard/git-guard.ts        tools/pre-execute 上的危险命令守卫
+├── guard/
+│   ├── shared.ts             四道守卫共用的事件接线与档位决策
+│   ├── git-guard.ts          危险 git 命令
+│   ├── command-guard.ts      危险 shell 命令
+│   ├── file-guard.ts         敏感路径
+│   └── secret-guard.ts       凭据泄漏
+├── audit.ts                  脱敏后的审计记录（.dev-docs/audit-log.jsonl）
 └── commands/dev-workflow.ts  /dev-workflow 的子命令分派
 ```
 
@@ -95,25 +101,32 @@ disposer，`setActive(false)` 逆序逐个调用。
 agent 调 bash/pwsh 工具
         │
         ▼
-tools/pre-execute   ← Cordis waterfall，本插件挂两个监听器
-        │              ① src/triggers/pre-commit.ts（提交前检查）
-        │              ② src/guard/git-guard.ts   （危险命令守卫）
+tools/pre-execute   ← Cordis waterfall，本插件最多挂五个监听器
+        │              ① src/triggers/pre-commit.ts  （提交前检查）
+        │              ② src/guard/git-guard.ts      （危险 git 命令）
+        │              ③ src/guard/command-guard.ts  （危险 shell 命令）
+        │              ④ src/guard/file-guard.ts     （敏感路径）
+        │              ⑤ src/guard/secret-guard.ts   （凭据泄漏）
         │
         ├─ 监听器先 await next()：链上后面的门禁与内置行为先决定
         │
         └─ 上游 allow 时才自查，命中后返回 ask（guard 也返回 deny）
 ```
 
-两个监听器挂在同一个事件上、互相独立，是刻意的：**一个守规范（提交信息与文档同步），
-一个守工作成果（可能丢数据的 git 命令）**，`enableOwnTrigger` 与 `gitGuard.enabled`
-分别是它们的开关。它们不共享判定，但共享两样东西：
+监听器挂在同一个事件上、互相独立，是刻意的：**一个守规范（提交信息与文档同步），
+四个守工作成果（可能丢数据的 git 命令、不可逆的 shell 命令、不该读的路径、发出即泄漏的
+凭据）**，`enableOwnTrigger` 与各守卫的 `enabled` 分别是它们的开关。它们不共享判定，
+但共享三样东西：
 
-- `src/shell.ts`：把命令行归约成 `git <subcommand> <args>`，两者对「什么算 git」必须一致。
+- `src/shell.ts`：把命令行归约成 `git <subcommand> <args>` 与命令词序列，涉及命令行的守卫
+  必须对「什么算 git」「什么算程序名」有同一个答案。
+- `src/guard/shared.ts`：`createGuard()` 提供接线、计数与档位决策，四道守卫都只是给它一个
+  `detect(exec)`。策略差异（谁是 `ask`、谁固定 `deny`）留在各自文件里。
 - `src/state.ts`：命中计数与「同一会话同一问题只提示一次」的记忆。
 
 `next()` 返回 `{kind:'allow'}` 之外的值时，本插件一律原样透传，绝不改判上游的决定；
 guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上游的 `ask`）时才覆盖，
-理由写在 `src/guard/git-guard.ts:200-208`。
+理由写在 `src/guard/shared.ts:164-172`。
 
 ## 共用的判定层
 

@@ -2,8 +2,8 @@
 
 本文件说明 dsh-dev-workflow 的自动介入路径：**它什么时候开口，靠什么开口，以及什么时候它其实开不了口。**
 
-对应的代码是 `src/triggers/pre-commit.ts`（提交前检查）、`src/guard/git-guard.ts`（危险命令守卫）
-与 `src/commands/dev-workflow.ts`（手动路径）。三者共用 `src/checks.ts` 的判定逻辑与
+对应的代码是 `src/triggers/pre-commit.ts`（提交前检查）、`src/guard/`（四道守卫）与
+`src/commands/dev-workflow.ts`（手动路径）。它们共用 `src/checks.ts` 的判定逻辑与
 `src/shell.ts` 的命令行解析，所以「自动检查」和 `/dev-workflow check` 给出的结论必然一致。
 
 ## 拦在哪个事件上
@@ -12,20 +12,23 @@
 agent 调用 bash / pwsh 工具
         │
         ▼
-tools/pre-execute  ← waterfall 门禁，本插件在此挂两个监听器
+tools/pre-execute  ← waterfall 门禁，本插件在此最多挂五个监听器
         │
         ├─ 先 await next()：上游门禁的 allow / deny / ask / cancel 原样返回，不抢话
         │
-        ├─ 监听器 A（git-guard）：命令命中危险 git 操作 → 按策略 deny / ask
+        ├─ 监听器 A（git-guard）：危险 git 操作 → 按策略 deny / ask
+        ├─ 监听器 B（command-guard）：危险 shell 命令 → 按策略 deny / ask
+        ├─ 监听器 C（file-guard）：参数里有敏感路径 → deny
+        ├─ 监听器 D（secret-guard）：参数里有凭据形状 → deny
         │
-        └─ 监听器 B（pre-commit）：上游 allow 且命令是 git commit → 校验规范
+        └─ 监听器 E（pre-commit）：上游 allow 且命令是 git commit → 校验规范
                  ├─ 通过 → 返回上游结果，命令照常执行
                  └─ 命中 → { kind: 'ask', displayReason: { en, zh } }
 ```
 
 `tools/pre-execute` 是 DSH 官方在派发任何工具调用之前走的 waterfall 钩子
 （`@deepseek-ai/dsh-tools` 的 `prepareExecution`）。它的 `next()` 会继续调用链上后面的监听器，
-默认返回 `{ kind: 'allow' }`。两个监听器**先调 `next()` 再自查**，因此：
+默认返回 `{ kind: 'allow' }`。每个监听器**先调 `next()` 再自查**，因此：
 
 - 上游（例如 auto-review、权限门禁）已经拒绝或取消了这次调用时，本插件绝不改判，
   而是把上游的决定原样透传。
@@ -35,8 +38,9 @@ tools/pre-execute  ← waterfall 门禁，本插件在此挂两个监听器
 插件给的是「要不要照常提交」的选择，而不是否决权。**只有配置里显式写了 `'deny'` 的
 守卫策略才会真正拒绝**（见 [docs/SECURITY.md](SECURITY.md)）。
 
-两个监听器是独立的：`enableOwnTrigger` 管提交前检查，`gitGuard.enabled` 管危险命令守卫，
-关掉一个不影响另一个。
+五道门是独立的：`enableOwnTrigger` 管提交前检查，四道守卫各由自己的 `enabled` 管，
+其中一个出问题不影响其余。注册顺序是「约定 → 破坏性 git → 危险命令 → 敏感文件 → 密钥」：
+更靠前的守卫先写审计记录，而各级决策仍按「更严者胜」汇总，顺序不影响最终结果。
 
 ## 什么算「一次提交」
 
@@ -111,6 +115,35 @@ tools/pre-execute  ← waterfall 门禁，本插件在此挂两个监听器
 唯一的覆盖方向是「自己 `deny` 对上上游 `ask`」，因为拒绝一个已经在被质疑的调用不会让情况变坏。
 细节与默认值的理由见 [docs/SECURITY.md](SECURITY.md)。
 
+## 另外三道守卫
+
+后三个监听器看的是同一件事的三面：**这次调用会不会让东西永久地出去或消失。**
+
+| 监听器 | 看什么 | 命中后 | 默认 |
+| --- | --- | --- | --- |
+| `command-guard` | `command` 里不可逆的 shell 命令 | 按 `commandGuard.dangerousShell` 走 `deny` / `ask` / `allow` | `ask` |
+| `file-guard` | 参数里的路径是否命中 `fileGuard.noRead` | `deny` | `deny` |
+| `secret-guard` | 参数里是否有凭据形状 | `deny` | `deny` |
+
+三处与 git-guard 不同的地方，都是刻意的：
+
+- **`file-guard` 与 `secret-guard` 没有档位字段。** git 与命令守卫拦的是可以重做的工作，
+  所以给一个「我知道我在做什么」的覆盖档是合理的；**读出去的路径与发出去的凭据收不回来**，
+  因此这两道只有拒绝。`fileGuard.noRead: []` 或 `secretGuard.enabled: false` 才是它们的开关。
+- **`file-guard` 与 `secret-guard` 不只看 shell 命令。** 它们扫描**每一次**工具调用的参数：
+  凭据写进源码文件与敲进命令行一样是泄漏，`read` 一个 `.env` 与 `cat` 它一样是读取。
+  `command-guard` 则只认 `command` 字段，因为只有它看的是一行命令。
+- **路径从每个工具真实的参数字段里取**（`file_path` / `path` / `pattern` / `include`），
+  而不是靠工具名猜。判定只看字符串，**从不打开文件**——这一道自己读文件去判断该不该读，
+  就正好是它要防的事。
+
+`command-guard` 的识别细节（什么算危险目标、为什么 `rm -rf node_modules` 放行）见
+[docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
+
+**四道守卫共用 `src/guard/shared.ts` 的 `createGuard()`。** 它负责接线、命中计数、审计回调
+与档位决策；每道守卫只提供一个 `detect(exec)`。因此「先 `await next()`、透传上游决定、
+`signal.aborted` 时返回 `cancel`、同级先入列者胜」这些规则只有一份实现。
+
 ## 提示的语言
 
 审批提示按**客户端的 locale** 选择文案，而客户端 locale 未必等于插件自己的
@@ -162,7 +195,7 @@ tools/pre-execute  ← waterfall 门禁，本插件在此挂两个监听器
 | 用户在**自己的终端**里提交或强推 | 不提示——插件只在 DSH 会话内运行 |
 | 运行时没有 `approval` 服务 | DSH 会把 `ask` 降级为拒绝；操作被拦下，而不是静默放行 |
 | `mode: 'off'` | 监听器根本不注册，零常驻成本、零介入 |
-| `enableOwnTrigger: false` / `gitGuard.enabled: false` | 对应的那一个监听器不注册，另一个照常工作 |
+| `enableOwnTrigger: false` / 某个守卫 `enabled: false` | 对应的那一个监听器不注册，其余照常工作 |
 | 运行时没有 `subprocess` 服务 | `git` 读不到工作区，判定退化为只检查提交信息本身；守卫不受影响（它不需要读仓库） |
 
 第五行与第六行是这套机制与 husky 的分工：**插件管会话内，husky 管会话外。**
@@ -180,6 +213,6 @@ tools/pre-execute  ← waterfall 门禁，本插件在此挂两个监听器
 - 同时把结果记入状态，所以随后的自动检查能看到「最近一次检查结果」。
 
 `/dev-workflow on | off` 切换的是**注册本身**：`off` 会把两个工具、技能 provider、
-命令和两个事件监听器全部注销（`mode: 'off'` 时则一开始就不注册），
+命令和全部事件监听器注销（`mode: 'off'` 时则一开始就不注册），
 所以关掉之后常驻增量为零，而不只是「安静地不回答」。详见
 [docs/TOKEN-BUDGET.md](TOKEN-BUDGET.md)。

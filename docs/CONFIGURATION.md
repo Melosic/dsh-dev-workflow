@@ -1,7 +1,8 @@
 # 配置参考
 
 本文件是 `src/config.ts` 的对照说明。配置面由 Schemastery 声明，**每个字段都带默认值**，
-因此空配置解析出的就是文档里描述的基线：插件开着、危险 git 操作一律 `ask`、没有任何操作被默认放行。
+因此空配置解析出的就是文档里描述的基线：插件开着、危险 git 操作与危险 shell 命令一律 `ask`、
+没有任何操作被默认放行、四道守卫与审计记录全部启用。
 
 配置写在 DSH profile 里，`apply` 之前由宿主完成校验与填默认值——插件内部永远看不到「未填」的状态。
 
@@ -16,6 +17,10 @@
 | `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 用户可见文案的语言 |
 | `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的提交前检查 |
 | `gitGuard` | 对象 | 见下 | 危险 git 操作的策略 |
+| `commandGuard` | 对象 | 见下 | 危险 shell 命令的策略 |
+| `fileGuard` | 对象 | 见下 | 不许读取的敏感路径 |
+| `secretGuard` | 对象 | 见下 | 凭据泄漏预防 |
+| `audit` | 对象 | 见下 | 审计记录的开关与路径 |
 
 ### `locale: 'auto'` 的解析时机
 
@@ -117,14 +122,79 @@
 （`--no-verify`）之前，所以上面这条报的是 force push，而不是 no-verify——理由栏要说明
 真正会丢工作的那个操作。
 
+## `commandGuard`
+
+检测危险 shell 命令。命令文本从工具调用的 `command` 字段读取，**不绑定具体工具名**
+（本机是 `pwsh`，别处可能是 `bash`），判定复用 `src/shell.ts` 的词法切分。
+
+| 字段 | 类型 | 默认值 | 拦截什么 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 守卫总开关 |
+| `dangerousShell` | 动作 | `'ask'` | `rm -rf /`、`mkfs`、`dd ... of=/dev/sda`、fork 炸弹、`chmod -R 777 /` |
+
+普通删除（`rm -rf node_modules`、`rm -rf ./dist`、`rm -rf /tmp/build`）不命中：判定看的是
+**目标**，不是 `-rf` 本身。完整清单见 [docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
+
+## `fileGuard`
+
+从工具调用的参数里取路径并在**不打开文件**的前提下比对，命中即 `deny`。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 守卫总开关 |
+| `noRead` | `string[]` | 见下 | 不许读取的路径模式 |
+
+```json
+{ "fileGuard": { "noRead": [".env", ".ssh/id_rsa", "*.pem", "*.key", "credentials", "*.p12", ".npmrc", "secrets/"] } }
+```
+
+模式语法有三条规则：尾随 `/` 匹配该目录及其中一切；含 `/` 的模式在任意深度匹配
+（`.ssh/id_rsa` 命中 `C:/Users/x/.ssh/id_rsa`）；否则匹配文件名，且首字符是 `.` 时同时覆盖
+其变体（`.env` 覆盖 `.env.local`）。**列表是替换而不是追加**——给了一组自定义值，内置清单
+就不再生效，设空数组等于关掉这一道。
+
+这一道**没有档位字段**：它固定 `deny`，因为审批提示必须展示那条路径本身，而那正是规则要
+挡住的东西。理由见 [docs/SECURITY.md](SECURITY.md#file-guard-保护什么)。
+
+## `secretGuard`
+
+扫描**每一次**工具调用的全部参数，命中即 `deny`。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 守卫总开关 |
+| `genericHighEntropy` | `boolean` | `false` | 额外标记无前缀的高熵字符串 |
+
+**`genericHighEntropy` 默认关闭**，因为它是唯一会拦下普通文本的规则：长 base64、哈希、
+压缩数据都可能越过熵阈值。需要时再打开，并预期要处理误报。
+
+这一道同样**没有档位字段**：git 与命令守卫拦的是能重做的工作，覆盖档是合理的；凭据发出
+即收不回，所以固定 `deny`。
+
+## `audit`
+
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 是否写审计记录 |
+| `path` | `string` | `'.dev-docs/audit-log.jsonl'` | 每行一个 JSON 对象；相对路径按调用的工作目录解析 |
+
+审计记录写的是决策的形状：时间、会话、工具名、命中的规则 key、应用的档位、工作目录与
+**脱敏后**的参数——凭据替换为 `[REDACTED]`，敏感路径只留文件名。写入同步落盘，失败只记
+调试日志，绝不让一次工具调用因为写不出日志而失败。完整说明见
+[docs/SECURITY.md](SECURITY.md#审计日志记什么)。
+
 ## 关闭与降级
 
 | 想要的行为 | 配置 |
 | --- | --- |
 | 完全关掉插件（零常驻、零介入） | `mode: 'off'` |
 | 只关掉提交前检查（交给 husky / commitlint） | `enableOwnTrigger: false` |
-| 只关掉危险命令守卫 | `gitGuard.enabled: false` |
-| 让某个操作放行 | 把该项设为 `'allow'` |
+| 只关掉危险 git 命令守卫 | `gitGuard.enabled: false` |
+| 只关掉危险 shell 命令守卫 | `commandGuard.enabled: false` |
+| 只关掉敏感文件守卫 | `fileGuard.enabled: false` 或 `noRead: []` |
+| 只关掉密钥守卫 | `secretGuard.enabled: false` |
+| 只关掉审计记录 | `audit.enabled: false` |
+| 让某个操作放行 | 把该项设为 `'allow'`（仅限有档位的守卫） |
 | 让某个操作直接拒绝 | 把该项设为 `'deny'` |
 
 `/dev-workflow on` / `off` 是 `mode` 的**运行期等价物**：它同样撤掉全部注册。区别是它不落盘，

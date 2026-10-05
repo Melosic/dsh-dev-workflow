@@ -47,6 +47,40 @@ describe('src/config.ts', () => {
     }
   })
 
+  it('defaults every non-git guard to a safe, enabled baseline', () => {
+    const config = Config({})
+
+    expect(config.commandGuard).toEqual({ enabled: true, dangerousShell: 'ask' })
+    expect(config.fileGuard).toEqual({
+      enabled: true,
+      noRead: [
+        '.env',
+        '.ssh/id_rsa',
+        '*.pem',
+        '*.key',
+        'credentials',
+        '*.p12',
+        '.npmrc',
+        'secrets/',
+      ],
+    })
+    // The high-entropy heuristic is the one rule that flags ordinary text, so it
+    // is the one rule that ships off.
+    expect(config.secretGuard).toEqual({ enabled: true, genericHighEntropy: false })
+    expect(config.audit).toEqual({ enabled: true, path: '.dev-docs/audit-log.jsonl' })
+  })
+
+  it('keeps the command policy out of the git guard and vice versa', () => {
+    const config = Config({
+      commandGuard: { dangerousShell: 'deny' },
+      fileGuard: { noRead: ['*.vault'] },
+    })
+
+    expect(config.commandGuard.dangerousShell).toBe('deny')
+    expect(config.gitGuard.forcePush).toBe('ask')
+    expect(config.fileGuard.noRead).toEqual(['*.vault'])
+  })
+
   it('defaults the document layout to this repository', () => {
     const config = Config({})
 

@@ -195,7 +195,7 @@ describe('src/triggers/pre-commit.ts', () => {
 
   it('does not fire while the mode is off or the trigger is disabled', async () => {
     // The two switches are independent: `mode: off` registers nothing at all,
-    // while `enableOwnTrigger: false` keeps the guard and drops only this
+    // while `enableOwnTrigger: false` keeps the guards and drops only this
     // listener. Both are asserted through the registrations the runtime makes,
     // then by running whatever was registered against a non-compliant commit.
     const off = createHarness()
@@ -205,7 +205,8 @@ describe('src/triggers/pre-commit.ts', () => {
 
     const withoutTrigger = createHarness()
     createRuntime(withoutTrigger.ctx, Config({ enableOwnTrigger: false }))
-    expect(withoutTrigger.listeners).toHaveLength(1)
+    // The four guards: git, command, file, secret.
+    expect(withoutTrigger.listeners).toHaveLength(4)
     expect(await chain(withoutTrigger.listeners, 'git commit -m "Add the thing"')).toEqual({
       kind: 'allow',
     })

@@ -11,8 +11,37 @@
 
 ## [Unreleased]
 
+### Added
+
+- **补全四类安全守卫。** v0.1.0 只有 git-guard，其余三类是写在文档里的承诺；现在它们
+  都是代码，并且共用 `src/guard/shared.ts` 的 `createGuard()`（接线、命中计数、审计回调、
+  档位决策各一份实现）。
+  - `src/guard/command-guard.ts`：拦截不可逆的 shell 命令——`rm -rf /`（含 `/*`、`~`、`.`、
+    `*` 等危险目标）、`mkfs` 系列、`dd` 的 `if=`/`of=` 指向块设备、`> /dev/sda`、
+    fork 炸弹、`chmod -R 777 /`。默认 `ask`（`commandGuard.dangerousShell`），
+    普通删除（`rm -rf node_modules`、`rm -rf ./dist`）放行。
+  - `src/guard/file-guard.ts`：从每次工具调用的参数里取路径（`file_path` / `path` /
+    `pattern` / `include`，以及 shell 里已知读取程序的操作数），比对 `fileGuard.noRead`
+    （默认 `.env`、`.ssh/id_rsa`、`*.pem`、`*.key`、`credentials`、`*.p12`、`.npmrc`、
+    `secrets/`），命中即 `deny`。理由里给出文件名与命中的规则，**从不打开文件**。
+  - `src/guard/secret-guard.ts`：扫描每次调用的全部参数，识别 AWS access key、GitHub
+    token（`ghp_`/`gho_`/`ghs_`/`ghr_`）、Slack token（`xox[baprs]-`）与私钥头，
+    命中即 `deny`；可选的 `secretGuard.genericHighEntropy`（默认关）额外标记无前缀的
+    高熵字符串。**只报模式名，绝不回显匹配到的值**，同一条值也不进入审计记录。
+  - `src/audit.ts`：审计记录写入 `audit.path`（默认 `.dev-docs/audit-log.jsonl`，每行一个
+    JSON 对象）。记录守卫决策的形状与**脱敏后**的参数——凭据替换为 `[REDACTED]`，
+    敏感路径只保留文件名；同步追加，写失败只记调试日志，绝不让工具调用失败。
+  - `src/config.ts`：新增 `commandGuard` / `fileGuard` / `secretGuard` / `audit` 四组配置，
+    全部安全默认（`enabled: true`、危险命令 `ask`、没有任何一项默认 `allow`）。
+  - `locale/en.json` + `locale/zh.json`：8 个新 key，两本字典 key 与占位符保持对齐。
+- `/dev-workflow status` 增加第五行：审计记录的开关与路径。
+
 ### Changed
 
+- `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为四道守卫的完整说明，含各自的
+  默认值与理由；`docs/CONFIGURATION.md` 补四组新配置；`docs/TRIGGERS.md` 与
+  `docs/ARCHITECTURE.md` 的监听器数量与次序更正为「约定 → git → 命令 → 文件 → 密钥」；
+  `docs/DEVELOPMENT.md` 补一节「加一整道新守卫要动什么」。
 - `docs/PUBLISHING.md` 的 v0.1.0 发布记录补上真实结果：提交 `219dbdb`、PR #11、
   annotated tag、发布产物 66 文件 / `shasum 8e35f3866fe53bd1973577ddf1ccbb73e5e0ff4b`、
   发布认证需要 bypass-2FA 的 granular token、以及 GitHub Release 地址；

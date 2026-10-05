@@ -14,6 +14,10 @@ import type { CommandRegistry } from './commands/dev-workflow.js'
 import { createDevWorkflowCommand } from './commands/dev-workflow.js'
 import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createGitGuard } from './guard/git-guard.js'
+import { createCommandGuard } from './guard/command-guard.js'
+import { createFileGuard } from './guard/file-guard.js'
+import { createSecretGuard } from './guard/secret-guard.js'
+import { createAudit } from './audit.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -141,6 +145,10 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       )
     }
 
+    // Every guard shares one audit sink: the record should read the same whether
+    // a force push or a leaked token is what tripped it.
+    const audit = createAudit({ config: () => config, log: (message) => ctx.logger.debug(message) })
+
     // The guard is a separate listener on the same gate rather than part of the
     // trigger: one protects conventions and the other protects work, and they
     // are switched on independently.
@@ -153,6 +161,55 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            audit,
+          }),
+        ),
+      )
+    }
+
+    // The remaining guards run after the git one, from the widest blast radius to
+    // the narrowest: a machine, then a filesystem, then a single secret. Each is
+    // its own switch, so a profile can keep one without the others.
+    if (config.commandGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createCommandGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+          }),
+        ),
+      )
+    }
+
+    if (config.fileGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createFileGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+          }),
+        ),
+      )
+    }
+
+    if (config.secretGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createSecretGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
           }),
         ),
       )

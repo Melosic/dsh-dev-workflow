@@ -34,7 +34,8 @@ export const DEFAULT_COMMIT_PATTERN = `^(${COMMIT_TYPES.join('|')})(\\([^)]+\\))
  *
  * `deny` blocks the call, `ask` routes it through the approval prompt, and
  * `allow` lets it run untouched. A factory rather than a shared instance: the
- * schema builder is reused for five fields and must not share resolved state.
+ * schema builder is reused for every policy field and must not share resolved
+ * state.
  * @returns a fresh policy schema defaulting to `ask`.
  */
 const guardAction = () => z.union(['deny', 'ask', 'allow']).default('ask')
@@ -101,6 +102,62 @@ export const Config = z.object({
        * hooks are wrong, and closing it would leave no way through.
        */
       noVerify: guardAction(),
+    })
+    .default({}),
+  /** Policies for shell commands that can destroy a machine rather than a commit. */
+  commandGuard: z
+    .object({
+      enabled: z.boolean().default(true),
+      /**
+       * One policy for every recognised pattern, because they share one property:
+       * none of them can be undone. They differ only in what they destroy.
+       */
+      dangerousShell: guardAction(),
+    })
+    .default({}),
+  /** Files and directories the plugin never lets a tool name at all. */
+  fileGuard: z
+    .object({
+      enabled: z.boolean().default(true),
+      /**
+       * Patterns matched against a tool's path arguments and against the words of
+       * a shell command. A trailing `/` matches that directory and everything
+       * under it; a pattern containing `/` also matches at any depth
+       * (`.ssh/id_rsa` matches `~/.ssh/id_rsa`); anything else matches the file
+       * name, where a leading dot also covers its variants (`.env` covers
+       * `.env.local`).
+       */
+      noRead: z
+        .array(z.string())
+        .default([
+          '.env',
+          '.ssh/id_rsa',
+          '*.pem',
+          '*.key',
+          'credentials',
+          '*.p12',
+          '.npmrc',
+          'secrets/',
+        ]),
+    })
+    .default({}),
+  /** Credential patterns scanned for in every tool argument. */
+  secretGuard: z
+    .object({
+      enabled: z.boolean().default(true),
+      /**
+       * Also flag long high-entropy strings with no known prefix. Off by default:
+       * it is the pattern most likely to stop an ordinary call.
+       */
+      genericHighEntropy: z.boolean().default(false),
+    })
+    .default({}),
+  /** Security audit trail. */
+  audit: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** One JSON object per line. Kept out of version control by `.dev-docs/`. */
+      path: z.string().default('.dev-docs/audit-log.jsonl'),
     })
     .default({}),
 })

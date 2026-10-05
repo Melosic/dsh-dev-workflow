@@ -95,6 +95,21 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 5. `docs/CONFIGURATION.md` + `docs/SECURITY.md` —— 新字段与新规则。
 6. `CHANGELOG.md` 的 `[Unreleased]`。
 
+**加一整道新守卫同理，但不用碰 `src/index.ts` 以外的事件代码**：写一个
+`src/guard/<name>-guard.ts`，导出纯函数 `detect<Name>(exec, config)` 与一个薄壳
+`create<Name>Guard(options)`——后者把 `detect` 交给 `src/guard/shared.ts` 的
+`createGuard()`，接线、计数、审计与档位决策都由它统一提供。然后：
+
+1. `src/config.ts` 加一组 `<name>Guard`，`.default({})`，`enabled` 默认 `true`。
+2. `src/index.ts` 的 `activate()` 里 `if (config.<name>Guard.enabled) registrations.push(...)`，
+   放在提交前检查之后。**不要新增任何 export**——`tests/register.spec.ts` 断言导出恰好是
+   `Config` / `apply` / `createRuntime` / `inject` / `name` 五个。
+3. `locale/*.json` 加理由 key；若有档位，`ask` 的两份 `displayReason` 由 `createGuard()` 拼好。
+4. `tests/<name>-guard.spec.ts`，另加同步 `tests/register.spec.ts` 里的监听器与 effect 计数。
+5. `docs/SECURITY.md`（这道守卫保护什么、默认值为什么这样定）、`docs/CONFIGURATION.md`、
+   `docs/TRIGGERS.md`（哪一道监听器看什么）。
+6. `CHANGELOG.md` 的 `[Unreleased]`。
+
 新增**检查工具**或**触发器**同理，另外还要确认 `docs/TOOLS.md` / `docs/TRIGGERS.md`。
 新 key 加进字典后，`pnpm ci:checks` 会校验两份字典 key 对齐。
 

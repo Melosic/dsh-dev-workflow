@@ -32,7 +32,7 @@ describe('src/index.ts', () => {
     expect(plugin.inject).toEqual(['tools', 'skills'])
   })
 
-  it('registers two tools, one skill provider, and both pre-execute gates', () => {
+  it('registers two tools, one skill provider, and every pre-execute gate', () => {
     const harness = createHarness()
     plugin.apply(harness.ctx, Config({}))
 
@@ -41,19 +41,38 @@ describe('src/index.ts', () => {
       'check_doc_sync',
     ])
     expect(harness.providers).toHaveLength(1)
+    // Own trigger, git guard, command guard, file guard, secret guard.
     expect(harness.listeners.map((listener) => listener.name)).toEqual([
       'tools/pre-execute',
       'tools/pre-execute',
+      'tools/pre-execute',
+      'tools/pre-execute',
+      'tools/pre-execute',
     ])
-    // Two tools, one provider, two listeners — one effect each.
-    expect(harness.effects).toHaveLength(5)
+    // Two tools, one provider, five listeners — one effect each.
+    expect(harness.effects).toHaveLength(8)
   })
 
   it('skips the command when the profile has no command service', () => {
     const harness = createHarness({ commands: true })
     plugin.apply(harness.ctx, Config({}))
     expect(harness.commands.map((command) => command.name)).toEqual(['dev-workflow'])
-    expect(harness.effects).toHaveLength(6)
+    expect(harness.effects).toHaveLength(9)
+  })
+
+  it('registers only the guards that are enabled', () => {
+    const harness = createHarness()
+    plugin.apply(
+      harness.ctx,
+      Config({
+        enableOwnTrigger: false,
+        gitGuard: { enabled: false },
+        secretGuard: { enabled: false },
+      }),
+    )
+    // Two tools, one provider, and only the command and file guards.
+    expect(harness.listeners).toHaveLength(2)
+    expect(harness.effects).toHaveLength(5)
   })
 
   it('declares both tools with a name the registry accepts', () => {
@@ -122,7 +141,7 @@ describe('createRuntime', () => {
 
     expect(runtime.active).toBe(true)
     expect(harness.tools).toHaveLength(2)
-    expect(harness.listeners).toHaveLength(2)
+    expect(harness.listeners).toHaveLength(5)
 
     runtime.setActive(false)
     expect(runtime.active).toBe(false)
@@ -149,7 +168,7 @@ describe('createRuntime', () => {
     const runtime = plugin.createRuntime(harness.ctx, Config({}))
 
     runtime.setActive(true)
-    expect(harness.effects).toHaveLength(5)
+    expect(harness.effects).toHaveLength(8)
     runtime.setActive(false)
     runtime.setActive(false)
     expect(runtime.active).toBe(false)
