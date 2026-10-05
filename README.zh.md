@@ -45,10 +45,14 @@ pnpm test
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 环境搭建、分支、提交与提交流程。
 - [docs/TOKEN-BUDGET.md](docs/TOKEN-BUDGET.md) —— 本插件每条请求的成本，以及如何复算它。
 - [docs/TRIGGERS.md](docs/TRIGGERS.md) —— 插件什么时候自动介入、识别什么，以及识别的边界。
-
-更深入的参考文档（`docs/ARCHITECTURE.md`、`docs/CONFIGURATION.md`、`docs/TOOLS.md`、
-`docs/SECURITY.md`、`docs/I18N.md`）会随对应阶段落地后再写，
-这样它们描述的是真实行为，而不是猜测。
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 各模块如何拼在一起：具名导出、`inject`、
+  注册的所有权归属，以及一次检查的数据流。
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) —— 每一个配置字段、它的默认值，以及为什么是这个默认值。
+- [docs/TOOLS.md](docs/TOOLS.md) —— 工具与命令的合同：名字、参数、返回，以及它们执行的每一条规则。
+- [docs/I18N.md](docs/I18N.md) —— 文本如何翻译、语言如何选择，以及审批提示为什么带两种语言。
+- [docs/SECURITY.md](docs/SECURITY.md) —— 守卫保护什么、刻意不做什么，以及它与 husky
+  和分支保护的分工。
+- [docs/ADR/](docs/ADR/) —— 设计背后的决策，以及被否决的方案。
 
 ## 贡献指引
 

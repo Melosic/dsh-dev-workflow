@@ -69,6 +69,28 @@
   渲染方式、去重状态模型，以及主路径的真实能力边界（含与 husky 的分工）。
 - `locale/en.json` 与 `locale/zh.json` 补齐命令、触发器与 `feat` 提交强制 CHANGELOG 的文案，
   共 56 个 key。
+- git-guard（`src/guard/git-guard.ts`）：第二个 `tools/pre-execute` 监听器，扫描危险 git 命令。
+  识别 force push（含 `-f` 与 `+refspec`）、`reset --hard`、`rebase`、`commit --amend`、
+  `branch -D`、`clean -f`、`checkout -- <path>` 与 `--no-verify`，按 `config.gitGuard` 决定
+  `deny` / `ask` / `allow`。带 `--force-with-lease` 的推送放行，裸 `--force` 的提示里附带
+  改用 `--force-with-lease` 的建议。多条规则同时命中时取最严的一条，绝不削弱上游更严的决定。
+- 共用命令行解析层（`src/shell.ts`）：不跑 shell 的词法切分，处理引号与转义、按
+  `&&` / `||` / `;` / `|` / 换行切段、跳过 `env` 与前导赋值、跳过 `-C` / `-c` / `--git-dir`
+  等带值的全局选项，取出 `git` 子命令与参数。提交前检查与 git-guard 共用它。
+- `config.gitGuard` 由 6 个字段扩为 9 个：新增 `cleanForce`、`checkoutDiscard` 与 `noVerify`。
+  `cleanForce` 不复用 `hardReset`（`clean -f` 删未跟踪文件，与丢弃已跟踪文件的改动不是一回事）；
+  `noVerify` 默认 `ask` 而非 `deny`，因为它是钩子出错时的逃生通道。
+- `docs/ARCHITECTURE.md`：模块地图、具名导出与 `inject` 的选择、注册所有权的归属、
+  一次检查的数据流与错误处理约定。
+- `docs/CONFIGURATION.md`：全部配置字段与默认值，以及 `gitGuard` 三个不显然默认值的理由。
+- `docs/TOOLS.md`：两个工具与 `/dev-workflow` 命令的合同、参数、返回结构，以及它们执行的每条规则。
+- `docs/I18N.md`：字典读取与插值、`locale` 三取值与 `auto` 的解析时机、`displayReason`
+  双语与中文键必须是字面 `zh`、`ci:checks` 的 key 对齐守护。
+- `docs/SECURITY.md`：git-guard 保护什么、刻意不做什么（不读敏感文件、不联网、不落盘、
+  不写日志文件），以及它与 husky、GitHub 分支保护的分工。
+- `docs/ADR/template.md` 与两份架构决策记录：`001-skill-first-approach.md`（规范为什么放技能
+  而不是系统提示）与 `002-plugin-not-preset.md`（为什么是插件而不是模式或预设），
+  含被否决方案及其理由。
 
 ### Changed
 
@@ -87,9 +109,18 @@
   `**[English](README.md) | 简体中文**`。
 - 双语 README 的文档链接列表去掉 `.dev-docs/` 一条：该目录仅存在于开发者本机、未纳入版本控制，
   对仓库读者没有意义。
+- `src/checks.ts` 中的命令行词法解析（`tokenize` / `segments` / `git` 调用识别）与
+  `commandOf` 提取到 `src/shell.ts`，供提交前检查与 git-guard 共用，避免两处各写一份
+  会漂移的解析。`detectCommit` 相应简化为遍历 `gitInvocations()` 的结果。
+- 双语 README 的文档链接列表改为指向已落地的参考文档（`docs/ARCHITECTURE.md`、
+  `docs/CONFIGURATION.md`、`docs/TOOLS.md`、`docs/I18N.md`、`docs/SECURITY.md`、`docs/ADR/`），
+  不再写「随阶段落地后再写」。
 
 ### Security
 
 - `peerDependencies` 对 DSH 域内包使用显式版本范围 `>=0.2.0-rc.1 <0.3.0`，不使用 `^` / `~`。
+- `config.gitGuard` 的全部策略项默认 `'ask'`，**没有任何一项默认 `'allow'`**；插件自身也不
+  默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
+  （字典 key），不记命令行全文与提交信息内容。
 
 [Unreleased]: https://github.com/Melosic/dsh-dev-workflow/commits/main

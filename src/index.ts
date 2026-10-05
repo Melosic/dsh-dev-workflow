@@ -13,6 +13,7 @@ import { createCheckDocSyncTool } from './tools/check-doc-sync.js'
 import type { CommandRegistry } from './commands/dev-workflow.js'
 import { createDevWorkflowCommand } from './commands/dev-workflow.js'
 import { createPreCommitTrigger } from './triggers/pre-commit.js'
+import { createGitGuard } from './guard/git-guard.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -134,6 +135,23 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             git: runtime.git,
+            log: (message) => ctx.logger.debug(message),
+          }),
+        ),
+      )
+    }
+
+    // The guard is a separate listener on the same gate rather than part of the
+    // trigger: one protects conventions and the other protects work, and they
+    // are switched on independently.
+    if (config.gitGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createGitGuard({
+            config: () => config,
+            t: () => t,
+            state,
             log: (message) => ctx.logger.debug(message),
           }),
         ),
