@@ -29,8 +29,24 @@
 - commitlint（`commitlint.config.mjs`）与 husky 钩子：`commit-msg` 校验提交信息，
   `pre-commit` 对暂存文件跑 ESLint 与 Prettier。
 - `skills/dsh-dev-workflow/SKILL.md` 与 `skills/dsh-dev-workflow/SKILL.zh.md`：完整开发工作流规范
-  的双语单一事实源，共 9 个章节（核心原则、分支模型、提交信息规范、原子提交、PR 流程与质量门禁、
-  文档同步工作流、版本发布、安全操作规范、自动触发时机）。两份文件的章节数量与层级顺序由 CI 校验。
+  的双语单一事实源，共 13 个章节（核心原则、分支模型、提交信息规范、原子提交、PR 流程与质量门禁、
+  文档同步工作流、版本发布、CHANGELOG 维护、安全操作规范、自动触发时机等）。两份文件的章节数量
+  与层级顺序由 CI 校验。
+- 规范补充 14 处此前只能靠自觉的规则：分支保护与大小写约定、用 `git merge main` 保持最新的理由、
+  Issue 引用写法、subject 语言、`BREAKING CHANGE:` 页脚精确格式、PR 粒度上限（200–400 行）、
+  文档同步的五类豁免、`docs/` 只描述 main、发布后验证、预发布版本与 dist-tag、废弃与移除、
+  回滚、72 小时撤回窗口，以及全新的「CHANGELOG 维护」整章（该写什么、不该写什么、怎么写、
+  正反示例、何时写、依赖升级例外、破坏性变更）。
+- 插件核心代码（`src/`，8 个文件）：`src/config.ts` 用 Schemastery 声明配置面（每个字段都带默认值），
+  `src/i18n.ts` 用 `createRequire` 读取 locale 字典并以 `Intl.DateTimeFormat()` 解析 `auto`，
+  `src/git.ts` 通过 `ctx.get('subprocess')` 的可选服务运行 git，`src/skills/provider.ts` 注册单一
+  技能 `dsh-dev-workflow`（目录描述与正文都随当前 locale 动态返回），`src/index.ts` 是插件入口。
+- 两个工具：`check_commit_message`（按 Conventional Commits 校验提交信息，并对过长标题、句尾句号、
+  过宽正文、跨模块提交、缺少 scope 给出可忽略的软警告）与 `check_doc_sync`（成对文件只改一半时报错，
+  代码变更未带文档或 CHANGELOG 条目时给警告）。
+- `docs/TOKEN-BUDGET.md`：常驻 token 的实测数字与复算方法。实测常驻增量约 900 字符
+  （工具定义 + 一行技能目录条目，约 200–250 token），规范全文只在模型主动读取技能时支付。
+- `locale/en.json` 与 `locale/zh.json` 补齐两个工具的参数字典、错误码与软警告文案，共 40 个 key。
 
 ### Changed
 
