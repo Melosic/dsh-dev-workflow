@@ -38,7 +38,7 @@
 
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
-| DSH 运行时 | `>=0.2.0-rc.1 <0.3.0` | 声明在 `peerDependencies` 里，由 DSH 在加载时校验。用 `dsh --version` 查看本机版本。 |
+| DSH 运行时 | `>=0.2.0-rc.2` | 声明在 `peerDependencies` 里，由 DSH 在加载时校验。用 `dsh --version` 查看本机版本。 |
 | Node.js | `>=20` | `engines.node` 声明的下限，也是 CI 实际跑的版本。 |
 | pnpm | `10.x` | 从源码构建时需要。`pnpm-lock.yaml` 已入库，换成 npm 或 yarn 会解析出不同的依赖树。 |
 

@@ -46,7 +46,7 @@ workflow capabilities on top of the modes you already use.
 
 | Component | Version | Notes |
 | --- | --- | --- |
-| DSH runtime | `>=0.2.0-rc.1 <0.3.0` | Declared in `peerDependencies` and checked by DSH at load time. Check yours with `dsh --version`. |
+| DSH runtime | `>=0.2.0-rc.2` | Declared in `peerDependencies` and checked by DSH at load time. Check yours with `dsh --version`. |
 | Node.js | `>=20` | The floor declared in `engines.node`, and the version CI runs on. |
 | pnpm | `10.x` | Needed to build from source. `pnpm-lock.yaml` is committed; npm or yarn would resolve a different tree. |
 
