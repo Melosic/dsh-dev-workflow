@@ -1,6 +1,6 @@
 # dsh-dev-workflow
 
-> **[English](README.md) | [简体中文](README.zh.md)**
+**[English](README.md) | 简体中文**
 
 DSH 的开发工作流守门员与编排器插件。
 
@@ -42,7 +42,6 @@ pnpm test
 
 - [CHANGELOG.md](CHANGELOG.md) —— 版本历史，Keep a Changelog 格式。
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 环境搭建、分支、提交与提交流程。
-- `.dev-docs/` —— 仅本机的开发笔记（未纳入版本控制）。
 
 更深入的参考文档（`docs/ARCHITECTURE.md`、`docs/CONFIGURATION.md`、`docs/TOOLS.md`、
 `docs/TRIGGERS.md`、`docs/SECURITY.md`、`docs/I18N.md`、`docs/TOKEN-BUDGET.md`）会随对应阶段落地后再写，

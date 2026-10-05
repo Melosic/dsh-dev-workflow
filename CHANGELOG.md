@@ -43,6 +43,12 @@
   等官方包即采用 `skills/<name>/SKILL.md` 布局，且该路径由 `package.json` 的 `files` 发布。
 - `ci.yml` 中关于 Node 版本矩阵的注释已修正：单版本是为控制审查节奏，而非私有仓库的 Actions
   分钟配额（仓库已转为 public，标准 runner 免费）。
+- 双语 README 顶部的语言切换行改为普通文本行（不再使用引用块）：去掉指向当前语言自身的链接，
+  当前语言的标签保留为纯文本，另一种语言仍为链接。`README.md` 显示
+  `**English | [简体中文](README.zh.md)**`，`README.zh.md` 显示
+  `**[English](README.md) | 简体中文**`。
+- 双语 README 的文档链接列表去掉 `.dev-docs/` 一条：该目录仅存在于开发者本机、未纳入版本控制，
+  对仓库读者没有意义。
 
 ### Security
 
