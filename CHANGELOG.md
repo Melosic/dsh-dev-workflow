@@ -67,6 +67,8 @@
 
 ### Changed
 
+- `docs/README.md` 的「我想知道为什么这样设计」一节从一行 ADR 目录扩为逐份登记
+  （001–005 各一行说明 + 模板），并补上 ADR 现在有五份。
 - `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为四道守卫的完整说明，含各自的
   默认值与理由；`docs/CONFIGURATION.md` 补四组新配置；`docs/TRIGGERS.md` 与
   `docs/ARCHITECTURE.md` 的监听器数量与次序更正为「约定 → git → 命令 → 文件 → 密钥」；
