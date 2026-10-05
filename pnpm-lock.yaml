@@ -12,13 +12,13 @@ importers:
         specifier: ^4.0.4
         version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
       '@deepseek-ai/dsh':
-        specifier: '>=0.2.0-rc.1 <0.3.0'
+        specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(88998e1511bf810ac6787471f731bfe8)
       '@deepseek-ai/dsh-skill':
-        specifier: '>=0.2.0-rc.1 <0.3.0'
+        specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-llm@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)))
       '@deepseek-ai/dsh-tools':
-        specifier: '>=0.2.0-rc.1 <0.3.0'
+        specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(52b5a8ab481be2b3d891c22a71641755)
       '@deepseek-ai/schemastery':
         specifier: ^3.18.4

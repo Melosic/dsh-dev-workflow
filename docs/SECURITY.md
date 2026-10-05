@@ -183,9 +183,9 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 ## 依赖与供应链
 
 - **运行期零依赖**：`dependencies` 为空。全部能力来自宿主提供的服务与 Node 内建模块。
-- DSH 域内包用**显式版本范围** `>=0.2.0-rc.1 <0.3.0`，不用 `^` / `~`：
-  0.x 版本的次版本号可以包含破坏性变更，`^0.2.0` 的语义在这里会误导人。
-  分段枚举规则的完整推导见 [docs/PUBLISHING.md](PUBLISHING.md)。
+- DSH 域内包用**显式版本范围** `>=0.2.0-rc.2`（下界即实测基线，当前不写上界），
+  不用 `^` / `~`：0.x 版本的次版本号可以包含破坏性变更，`^0.2.0` 的语义在这里会误导人。
+  范围写法的完整推导与「不写上界的代价」见 [docs/PUBLISHING.md](PUBLISHING.md)。
 - 插件通过 `cordis.patch.yml` 声明为 bundle patch，`scripts/ci-checks.mjs` 校验它
   既被 `package.json` 的 `dsh.bundle.patch` 声明，又列入 `files`——避免「发布出去的包缺了
   挂载点」这类只在用户机器上暴露的问题。

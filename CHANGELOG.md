@@ -101,7 +101,15 @@
 
 ### Changed
 
-- `README.md` / `README.zh.md` 新增「环境要求」一节：DSH 运行时 `>=0.2.0-rc.1 <0.3.0`、
+- **DSH `peerDependencies` 改为只写下界 `>=0.2.0-rc.2`，去掉上界 `<0.3.0`。**
+  三个 DSH 域内包（`@deepseek-ai/dsh` / `dsh-skill` / `dsh-tools`）都改成这一条。
+  下界从 `rc.1` 抬到 `rc.2` 是因为实测基线就是 `0.2.0-rc.2`（本机 `dsh --version` 与
+  三个包的实际版本），凭记忆写更低的下界等于宣称一段没人验过的兼容性。
+  去掉上界是**明确的取舍**：`0.3.0` 尚不存在，`<0.3.0` 只是猜测，而代价是 DSH 一旦升到
+  `0.3`，即使 API 变了插件也会被加载、问题推迟到运行时才暴露，不再由加载时的 `preflight()`
+  干净地禁用。规则与代价已写进 `docs/PUBLISHING.md` 第 4 条，`docs/SECURITY.md` 的
+  供应链一节同步；`README.md` / `README.zh.md` 的环境要求表随之更新。
+- `README.md` / `README.zh.md` 新增「环境要求」一节：DSH 运行时 `>=0.2.0-rc.2`、
   Node.js `>=20`、pnpm `10.x`，以及各自的查看方式。此前这三条只写在 `CONTRIBUTING.md` 里
   （贡献者视角），**使用者视角的要求一条都没有**；其中最容易踩的是 DSH 版本——不在范围内
   的后果是被静默禁用而不是安装失败，所以连症状和排查入口一并写在了 README 里；

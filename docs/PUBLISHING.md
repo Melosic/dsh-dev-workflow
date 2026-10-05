@@ -165,16 +165,20 @@ DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `pre
    `semver.satisfies(runtimeVersion, requirement, { includePrerelease: true })`，
    而 `0.x` 的次版本位可以携带破坏性变更，`^0.2.0` 的语义在这里会误导人。
    官方包对 DSH 域内 peer 一律写精确版本（`0.2.0-rc.2`）。
-4. **按实测基线分段枚举。** 本项目采用的写法是：
+4. **按实测基线写下界，暂不写上界（本项目的当前选择）。** 本项目采用的写法是：
 
    ```json
-   "@deepseek-ai/dsh":       ">=0.2.0-rc.1 <0.3.0",
-   "@deepseek-ai/dsh-skill": ">=0.2.0-rc.1 <0.3.0",
-   "@deepseek-ai/dsh-tools": ">=0.2.0-rc.1 <0.3.0"
+   "@deepseek-ai/dsh":       ">=0.2.0-rc.2",
+   "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
+   "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
    ```
 
-   下界是「本插件实测可用过的最低版本」，上界是「下一个可能破坏兼容的次版本」。
-   显式写上界，是为了让不兼容在加载时被发现，而不是在运行到某个分支时才炸。
+   下界是「本插件实测可用过的最低版本」——三个包都在 `0.2.0-rc.2` 上实测过，所以下界写
+   `rc.2` 而不是 `rc.1`（凭记忆写更低的下界，等于宣称一段没人验过的兼容性）。
+   **不写上界的代价要说清楚**：DSH 出到 `0.3` 时，即使 API 变了插件也会被加载，问题会推迟到
+   运行时才暴露，而不是在加载时被 `preflight()` 干净地禁用。这个选择是在「`0.3.0` 尚不存在、
+   上限纯属猜测」与「未来不兼容会静默加载」之间取的偏向前者；等 `0.3` 真正发布并重新实测之后，
+   应当把上界补回来。
 5. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
    不读 `peerDependenciesMeta`。把某个 DSH 包标成 optional 不会让它跳过校验。
 6. **不兼容的后果是「被禁用」而非「安装失败」。** `preflight()` 把该行 `row.disabled = true`
