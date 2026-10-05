@@ -52,8 +52,17 @@ read on demand — nothing below is resident context.
   rebase rewrites the branch's own history, so a reviewer can no longer see what
   changed since the last review.
 - Resolve conflicts on the branch, never on `main`.
+- After resolving a merge conflict, re-run `pnpm typecheck`, `pnpm lint`, and
+  `pnpm test` before committing. A conflict resolution can change what the code
+  means, so the earlier green run no longer covers it — committing without
+  re-verifying treats the merge as risk-free text editing.
 - Merging uses **squash merge**, so `main` keeps one commit per pull request and
   a linear history.
+- The squash commit that lands on `main` takes its message from the **pull
+  request title**, so the PR title must itself follow Conventional Commits.
+- The commits on the branch are squashed away and never appear in `main`'s
+  history. This is why the PR title matters more than any single commit on the
+  branch.
 - Delete the branch as soon as the pull request is merged.
 
 ### Branch Protection
@@ -70,6 +79,16 @@ read on demand — nothing below is resident context.
 
 These are configured on the GitHub repository itself, so they hold for everyone,
 including an administrator.
+
+### Hotfix Flow
+
+- Cut a `hotfix/*` branch from `main`, never from a feature branch.
+- When the fix is done, merge it straight back into `main`. There is no
+  `develop` or `release` branch in this model to route it through.
+- Write the hotfix's `CHANGELOG.md` entry into `[Unreleased]`; it ships with the
+  next release like any other change.
+- If the problem is severe enough to need a release right away, follow
+  *Withdrawing a Published Release* instead of inventing a second flow.
 
 ## Commit Messages (Conventional Commits)
 
@@ -160,6 +179,21 @@ Pull request description template:
 A pull request is mergeable only when CI is green, the branch is up to date with
 `main`, and every review conversation is resolved. Never merge by bypassing a
 failing check: fix the cause, or report the blocker.
+
+When CI fails:
+
+- Fix the cause. Never edit the CI configuration to route around a failure.
+- Never skip the gate with `--no-verify` or an equivalent escape hatch.
+- If the CI setup itself is wrong, open an issue for it. Do not patch the
+  configuration ad hoc inside an unrelated pull request.
+
+### Local Verification vs CI
+
+- The local checklist above is a recommendation, not a hard gate.
+- CI is the hard gate, and it cannot be bypassed.
+- A green local run does not guarantee a green CI run: the environments differ.
+- If a local check fails, do not commit.
+- If CI fails after you push, fix the cause rather than weakening the check.
 
 ### Pull Request Size
 
@@ -362,6 +396,9 @@ unprompted:
   be lost.
 - When a destructive command is requested, prefer the reversible form and say
   why.
+- Scan the staged diff for credential patterns before committing. If one turns
+  up, rotate the secret — deleting the commit is not enough. A secret that
+  reached the remote is already exposed.
 
 ## Automatic Triggers
 
