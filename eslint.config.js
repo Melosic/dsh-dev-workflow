@@ -33,6 +33,20 @@ export default tseslint.config(
   },
 
   {
+    // The browser half is a plain script the DSH module loader serves as-is:
+    // it runs in the page, not on Node, so it gets the browser globals instead.
+    files: ['client.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+      },
+    },
+  },
+
+  {
     files: ['**/*.ts'],
     languageOptions: {
       ecmaVersion: 2022,
