@@ -47,6 +47,14 @@
 - `docs/TOKEN-BUDGET.md`：常驻 token 的实测数字与复算方法。实测常驻增量约 900 字符
   （工具定义 + 一行技能目录条目，约 200–250 token），规范全文只在模型主动读取技能时支付。
 - `locale/en.json` 与 `locale/zh.json` 补齐两个工具的参数字典、错误码与软警告文案，共 40 个 key。
+- 工作流规范补充 6 处：本地验证与 CI 的分工（本地是建议、CI 是硬门禁、本地通过不等于 CI 通过）、
+  squash merge 的提交信息来源（squash 提交取 PR 标题，故 PR 标题必须符合 Conventional Commits）、
+  hotfix 流程（从 `main` 切出、直接合回、条目写入 `[Unreleased]`）、冲突解决后必须重新跑
+  typecheck / lint / test、CI 失败的处理（修根因而非改配置）、提交前扫描密钥模式且泄露后必须轮换密钥。
+  SKILL 双语章节数由 26 增至 28。
+- 贡献者规范 `CONTRIBUTING.md` 补充 4 节：依赖管理（固定 pnpm、锁文件入库、不混用包管理器）、
+  版本号单一源（只在 `package.json` 维护，徽章与文档引用均派生）、忽略规则清单、测试规范
+  （测试放 `tests/` 目录、命名与覆盖率要求）。
 
 ### Changed
 
