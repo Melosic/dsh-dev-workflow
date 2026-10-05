@@ -5,31 +5,36 @@ import { createTranslator, resolveLocale } from './i18n.js'
 import type { Locale } from './i18n.js'
 import { createGitRunner } from './git.js'
 import type { GitRunner } from './git.js'
+import { createWorkflowState } from './state.js'
+import type { WorkflowState } from './state.js'
 import { createSkillProvider } from './skills/provider.js'
 import { createCheckCommitMessageTool } from './tools/check-commit-message.js'
 import { createCheckDocSyncTool } from './tools/check-doc-sync.js'
+import type { CommandRegistry } from './commands/dev-workflow.js'
+import { createDevWorkflowCommand } from './commands/dev-workflow.js'
+import { createPreCommitTrigger } from './triggers/pre-commit.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
 
 // `tools` and `skills` are read as services, so they are declared: the plugin
-// cannot load before them and cannot outlive them. `subprocess` is deliberately
-// absent — it is an optional capability read through `ctx.get` inside the check,
-// so a profile without a subprocess provider still mounts this plugin and
-// reports "git was not found" instead of failing to load.
+// cannot load before them and cannot outlive them. `subprocess` (used by the git
+// runner) and `commands` (used by `/dev-workflow`) are deliberately absent — they
+// are optional capabilities read through `ctx.get`, so a profile without either
+// still mounts this plugin and simply offers less.
 export const inject = ['tools', 'skills']
 
 /**
  * Live plugin state, shared by everything registered during `apply`.
  *
- * The mode is mutable: turning the plugin off has to unregister the tool and
- * skill registrations, not merely stop answering, because the resident cost of
- * this plugin is exactly those registrations. Keeping the state in one object
- * lets the command surface (and the pre-commit trigger) reach the same
- * registration without reimplementing it.
+ * The mode is mutable: turning the plugin off has to unregister the tool, skill,
+ * command, and trigger registrations, not merely stop answering, because the
+ * resident cost of this plugin is exactly those registrations. Keeping the state
+ * in one object lets the command surface reach the same registrations the
+ * trigger does, without reimplementing them.
  */
 export interface Runtime {
-  /** Whether the tool and skill registrations are currently active. */
+  /** Whether the registrations are currently active. */
   readonly active: boolean
   /** The locale in effect, resolved from configuration. */
   locale(): Locale
@@ -37,6 +42,8 @@ export interface Runtime {
   t(): Translate
   /** A git runner bound to one working directory. */
   git(cwd: string): GitRunner
+  /** What this plugin remembers while it is loaded. */
+  readonly state: WorkflowState
   /**
    * Turn the plugin on or off.
    * @param on - `true` to register, `false` to unregister.
@@ -62,10 +69,83 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
   const t: Translate = (key, params) =>
     params === undefined ? translate(key) : translate(key, params)
 
+  const state = createWorkflowState()
   const gitCache = new Map<string, GitRunner>()
+
+  // Effects that undo the current registration, newest first. Holding them here
+  // is what makes `off` more than a flag: the resident cost of this plugin is
+  // exactly the registrations, so they have to go away.
+  const releases: (() => void)[] = []
+
+  const bind = (dispose: () => void): void => {
+    let released = false
+    const once = (): void => {
+      if (released) return
+      released = true
+      dispose()
+    }
+    // The tool and command registries tie what they return to their own context,
+    // not to this fiber, so an unload alone would leave the registration behind.
+    // Binding it as an effect is what makes an unload (or a hot reload) clean up;
+    // the explicit call in `setActive(false)` unregisters at runtime, and the
+    // `released` flag keeps the second call harmless.
+    releases.push(ctx.effect(() => once))
+  }
+
+  const activate = (): void => {
+    const registrations: (() => void)[] = [
+      ctx.tools.register(createCheckCommitMessageTool({ t: () => t })),
+      ctx.tools.register(
+        createCheckDocSyncTool({ t: () => t, config: () => config, git: runtime.git }),
+      ),
+      // A provider instance per registration would be wrong here: the registry
+      // reads the locale on every `list()`/`get()`, so one provider serves
+      // whichever locale is in effect without being re-registered.
+      ctx.skills.registerProvider(() =>
+        createSkillProvider({ currentLocale: () => runtime.locale(), t }),
+      ),
+    ]
+
+    const commands: unknown = ctx.get('commands')
+    if (commands !== undefined && commands !== null) {
+      registrations.push(
+        (commands as CommandRegistry).register(
+          createDevWorkflowCommand({
+            config,
+            t,
+            locale,
+            active: () => runtime.active,
+            setActive: (on) => runtime.setActive(on),
+            state,
+            git: runtime.git,
+          }),
+        ),
+      )
+    }
+
+    // The repository may already enforce these rules with husky and commitlint;
+    // `enableOwnTrigger: false` is how an author says so.
+    if (config.enableOwnTrigger) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createPreCommitTrigger({
+            config: () => config,
+            t: () => t,
+            state,
+            git: runtime.git,
+            log: (message) => ctx.logger.debug(message),
+          }),
+        ),
+      )
+    }
+
+    for (const dispose of registrations) bind(dispose)
+  }
+
   const runtime: Runtime = {
     get active() {
-      return disposers.length > 0
+      return releases.length > 0
     },
     locale: () => locale,
     t: () => t,
@@ -76,31 +156,12 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       gitCache.set(cwd, runner)
       return runner
     },
+    state,
     setActive: (on) => {
       if (on === runtime.active) return
       if (on) activate()
-      else for (const dispose of disposers.splice(0).reverse()) dispose()
+      else for (const release of releases.splice(0).reverse()) release()
     },
-  }
-
-  // Disposers of the current registration. Both registries tie what they return
-  // to this plugin's fiber, so an unload cleans up even if `setActive(false)`
-  // never runs; the array only exists to support turning off at runtime.
-  let disposers: (() => void)[] = []
-
-  const activate = (): void => {
-    disposers = [
-      ctx.tools.register(createCheckCommitMessageTool({ t: () => t })),
-      ctx.tools.register(
-        createCheckDocSyncTool({ t: () => t, config: () => config, git: runtime.git }),
-      ),
-      // Returning the same provider instance each call would be wrong here: the
-      // registry reads the locale on every `list()`/`get()`, so one provider
-      // serves whichever locale is in effect without being re-registered.
-      ctx.skills.registerProvider(() =>
-        createSkillProvider({ currentLocale: () => runtime.locale(), t: t }),
-      ),
-    ]
   }
 
   if (config.mode === 'on') activate()
