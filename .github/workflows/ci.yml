@@ -5,9 +5,9 @@ on:
     branches: [main]
   pull_request:
 
-# A private repository gets 2000 GitHub Actions minutes per month. Running a
-# single Node version keeps frequent pushes from eating that budget; Node 22 is
-# added once the project is stable, not before.
+# Early phases run a single Node version. GitHub Actions is free for public
+# repositories, so the limit is review turnaround rather than minutes: Node 22
+# is added to the matrix once the plugin is stable, not before.
 jobs:
   verify:
     runs-on: ubuntu-latest
