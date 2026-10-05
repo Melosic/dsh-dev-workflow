@@ -37,10 +37,17 @@ pnpm lint
 pnpm test
 ```
 
-然后把插件安装到你的 DSH profile：在 DSH 会话中用插件管理器，以本包目录的绝对路径作为 bundle 目标。
+然后把插件安装到你的 DSH profile：
+
+```bash
+dsh plugin --profile <profile> add @melosic/dsh-dev-workflow
+```
+
+若想从本地检出安装，把插件管理器指向本包目录即可。
 
 ## 文档链接
 
+- [docs/README.md](docs/README.md) —— 文档索引：从这里挑一条阅读路径。
 - [CHANGELOG.md](CHANGELOG.md) —— 版本历史，Keep a Changelog 格式。
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 环境搭建、分支、提交与提交流程。
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) —— 本地循环、测试如何组织，以及加一条规则要动哪些文件。
@@ -54,6 +61,9 @@ pnpm test
 - [docs/SECURITY.md](docs/SECURITY.md) —— 守卫保护什么、刻意不做什么，以及它与 husky
   和分支保护的分工。
 - [docs/ADR/](docs/ADR/) —— 设计背后的决策，以及被否决的方案。
+- [docs/PUBLISHING.md](docs/PUBLISHING.md) —— 发布前的检查清单、实际命令，以及决定 DSH
+  会不会加载本插件的 peerDependencies 规则。
+- [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) —— 本插件所依赖的上游项目、官方包与规范。
 
 ## 贡献指引
 

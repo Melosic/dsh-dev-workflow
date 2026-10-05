@@ -97,13 +97,61 @@
 - **运行期零依赖**：`dependencies` 为空。全部能力来自宿主提供的服务与 Node 内建模块。
 - DSH 域内包用**显式版本范围** `>=0.2.0-rc.1 <0.3.0`，不用 `^` / `~`：
   0.x 版本的次版本号可以包含破坏性变更，`^0.2.0` 的语义在这里会误导人。
+  分段枚举规则的完整推导见 [docs/PUBLISHING.md](PUBLISHING.md)。
 - 插件通过 `cordis.patch.yml` 声明为 bundle patch，`scripts/ci-checks.mjs` 校验它
   既被 `package.json` 的 `dsh.bundle.patch` 声明，又列入 `files`——避免「发布出去的包缺了
   挂载点」这类只在用户机器上暴露的问题。
+
+### 发布产物里有什么
+
+`package.json` 的 `files` 是**白名单**，发布出去的 tarball 只含：
+
+```
+lib/  skills/  locale/  cordis.patch.yml  README.md  README.zh.md  CHANGELOG.md  LICENSE
+```
+
+据此可以给出三条可验证的结论：
+
+| 不发布 | 为什么这很重要 |
+| --- | --- |
+| 源码 `src/` | 发布的是编译产物 `lib/`。源码里的注释、TODO 与内部路径名不进入用户环境 |
+| `tests/` | 测试不在用户机器上跑，也不需要在那里存在 |
+| `docs/` | 深度文档面向本仓库贡献者，不面向使用者 |
+| `.dev-docs/`、`.env`、任何密钥文件 | 前者被 `.gitignore` 忽略且从未进入任何提交；后者从未被读取过（见上表） |
+
+因为白名单只增不减地暴露一个风险：**新加的必要文件忘了写进 `files`**。
+两个结构守卫专治这个——`ci:checks` 会校验 `cordis.patch.yml` 是否同时被声明并列入 `files`，
+而 `pnpm pack --dry-run` 的输出则是发布前的最后一道肉眼核对。
+
+### 发布前的审计
+
+```bash
+pnpm audit --registry=https://registry.npmjs.org
+```
+
+必须显式指定官方 registry：本项目开发机的 `.npmrc` 指向只读镜像源，
+走默认值只会拿到 `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`（pnpm）或 `ENOLOCK`（npm，本仓库用 pnpm、
+没有 `package-lock.json`）。
+
+**读审计结果时先问一句：这条路径能到达用户吗？** 本项目运行期零依赖，所以所有命中都必然在
+开发期路径上。开发期路径上的漏洞影响的是贡献者的机器，不是使用者的机器——要修，但它与
+「用户装了这个包是否安全」是两个问题，不能混为一谈，也不该为了让命令变绿而删掉一个真实的
+开发工具。
+
+### 发布者的凭据
+
+- npm 凭据只存在于开发机的 `~/.npmrc` 或 `npm login` 的凭据存储里，**从不写入仓库**。
+  项目的 `.npmrc` 只含 `auto-install-peers` / `strict-peer-dependencies` / `resolution-mode`
+  三个 pnpm 配置项，没有 `_authToken`。
+- 发布命令必须显式带 `--registry=https://registry.npmjs.org`：镜像源是同步端点，不是发布端点，
+  把凭据发往它没有意义。
+- **不由本插件自己执行发布。** git-guard 覆盖的是危险 git 命令；`npm publish` 不在它的范围内，
+  它也不会被诱导去执行——插件的唯一子进程是 `git`。
 
 ## 相关文档
 
 - 判定细节与边界：[docs/TRIGGERS.md](TRIGGERS.md)
 - 策略字段与取值：[docs/CONFIGURATION.md](CONFIGURATION.md)
+- 发布流程与 peerDependencies 分段规则：[docs/PUBLISHING.md](PUBLISHING.md)
 - 规范中的安全操作规范：[skills/dsh-dev-workflow/SKILL.md](../skills/dsh-dev-workflow/SKILL.md)
 - 为什么是插件而不是模式：[docs/ADR/002-plugin-not-preset.md](ADR/002-plugin-not-preset.md)

@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-05
+
 ### Added
 
 - 项目骨架：`package.json`、`tsconfig.json`、`cordis.patch.yml`、`.gitignore`、
@@ -100,6 +102,15 @@
   由 Vitest 转译源码，不依赖 `lib/` 构建产物。
 - `docs/DEVELOPMENT.md`：本地循环、目录职责、测试的组织方式与写测试时的约定、
   加一条新规则所需的完整改动清单、CI 的守卫范围，以及若干已知的坑。
+- `ACKNOWLEDGEMENTS.md`：上游依赖、作为实现范式被研读的官方包、作为形态参照的社区项目、
+  被引用的规范，以及开发工具链，逐项列出作者与许可证。
+- `docs/PUBLISHING.md`：发布前检查清单、每一步的实际命令、DSH peerDependencies 的
+  分段枚举规则（写错这一节的后果是插件被静默禁用而非安装失败）、撤回与废弃的处置，
+  以及本机踩过的坑（镜像源不能发布、`npm audit` 必须显式指定官方 registry）。
+- `docs/README.md`：文档索引，按「想用插件 / 想贡献 / 想发版 / 想知道为什么这样设计」
+  四条读者路径组织。
+- `docs/SECURITY.md` 补发布相关章节：发布产物的白名单能推导出什么、审计结果该怎么读
+  （运行期零依赖意味着所有命中都在开发期路径上），以及发布者的凭据放在哪里。
 
 ### Changed
 
@@ -132,4 +143,5 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/commits/main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.1.0...main
+[0.1.0]: https://github.com/Melosic/dsh-dev-workflow/releases/tag/v0.1.0

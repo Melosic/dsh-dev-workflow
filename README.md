@@ -41,11 +41,17 @@ pnpm lint
 pnpm test
 ```
 
-Then install the plugin into your DSH profile. In a DSH session, use the plugin manager with the
-absolute path to this package directory as the bundle target.
+Then install the plugin into a DSH profile:
+
+```bash
+dsh plugin --profile <profile> add @melosic/dsh-dev-workflow
+```
+
+To install from a local checkout instead, point the plugin manager at this package directory.
 
 ## Documentation
 
+- [docs/README.md](docs/README.md) — the documentation index: start here and pick a reading path.
 - [CHANGELOG.md](CHANGELOG.md) — release history, Keep a Changelog format.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to set up, branch, commit, and submit changes.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — the local loop, how the tests are organised, and
@@ -65,6 +71,10 @@ absolute path to this package directory as the bundle target.
 - [docs/SECURITY.md](docs/SECURITY.md) — what the guard protects, what it deliberately does not
   do, and the division of labour with husky and branch protection.
 - [docs/ADR/](docs/ADR/) — the decisions behind the design, and the alternatives that lost.
+- [docs/PUBLISHING.md](docs/PUBLISHING.md) — the release checklist, the commands, and the
+  `peerDependencies` rule that decides whether DSH will load the plugin at all.
+- [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) — the upstream projects, official packages, and
+  specifications this plugin is built on.
 
 ## Contributing
 
