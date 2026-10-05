@@ -21,8 +21,10 @@ workflow capabilities on top of the modes you already use.
   rebase, `commit --amend`, `checkout -- .`) are intercepted before they run. Each operation
   defaults to `ask`, never to `allow`. A bare `--force` is reported with a suggestion to use
   `--force-with-lease` instead.
-- **One switch.** `/dev-workflow` toggles between `on` (default) and `off`. There is no third
-  gear: if you have to remember to change a setting, the design already failed.
+- **One switch.** `/dev-workflow` toggles between `on` (default) and `off`; `status` reports the
+  mode, the locale, the last check, and how often the guards have spoken; `check` runs the
+  workflow rules over the working tree on demand. Turning it `off` unregisters everything, so it
+  costs nothing rather than merely staying quiet.
 
 ## Quick Start
 
@@ -48,9 +50,11 @@ absolute path to this package directory as the bundle target.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to set up, branch, commit, and submit changes.
 - [docs/TOKEN-BUDGET.md](docs/TOKEN-BUDGET.md) — what this plugin costs per request, and how to
   measure it again.
+- [docs/TRIGGERS.md](docs/TRIGGERS.md) — when the plugin intervenes on its own, what it detects,
+  and the limits of that detection.
 
 Deeper reference documents (`docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `docs/TOOLS.md`,
-`docs/TRIGGERS.md`, `docs/SECURITY.md`, `docs/I18N.md`) are written as the corresponding
+`docs/SECURITY.md`, `docs/I18N.md`) are written as the corresponding
 implementation phases land, so that they describe real behavior rather than guesses.
 
 ## Contributing
