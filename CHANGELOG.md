@@ -55,6 +55,20 @@
 - 贡献者规范 `CONTRIBUTING.md` 补充 4 节：依赖管理（固定 pnpm、锁文件入库、不混用包管理器）、
   版本号单一源（只在 `package.json` 维护，徽章与文档引用均派生）、忽略规则清单、测试规范
   （测试放 `tests/` 目录、命名与覆盖率要求）。
+- `/dev-workflow` 命令：`on` / `off` 切换插件，`status` 报告当前模式、locale、
+  最近一次检查结果与守卫命中次数，`check` 按工作流规则即时检查整个工作区。
+  命令在 DSH 命令服务存在时注册，不存在时静默跳过。
+- pre-commit 触发器（`src/triggers/pre-commit.ts`）：挂在 `tools/pre-execute` waterfall 上，
+  当 agent 通过 `bash` / `pwsh` 工具执行 `git commit` 时，把提交信息检查、变更文件检查与
+  `rules.requireChangelogOnFeat` 合起来跑一遍（`src/checks.ts`），命中问题时给出
+  `ask` 提示。提示文案按客户端 locale 双语渲染，每一份都用对应语言的翻译器重新判定。
+  先调用链上后面的门禁，只在它返回 `allow` 之后才自查，绝不改判上游的决定。
+- 会话内去重状态（`src/state.ts`）：按 `${sessionId}:${checkType}:${targetId}` 记住已报告过的
+  问题，同一会话同一问题只提示一次，跨会话允许重新提示；只存在内存中，不落盘。
+- `docs/TRIGGERS.md`：触发器挂载的事件、判定一次「提交」的保守规则、检查内容、双语提示的
+  渲染方式、去重状态模型，以及主路径的真实能力边界（含与 husky 的分工）。
+- `locale/en.json` 与 `locale/zh.json` 补齐命令、触发器与 `feat` 提交强制 CHANGELOG 的文案，
+  共 56 个 key。
 
 ### Changed
 
