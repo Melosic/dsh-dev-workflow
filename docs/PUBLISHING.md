@@ -50,6 +50,30 @@ pnpm audit --registry=https://registry.npmjs.org
 - `cordis.patch.yml` **同时**被 `dsh.bundle.patch` 声明并列入 `files`——
   由 `pnpm ci:checks` 的第二项守卫强制。
 
+#### bundle manifest 完整性检查
+
+DSH 装的不是一个 npm 包，是一个 bundle：`package.json` 的 `dsh.bundle.patch` 指向一份 patch，
+宿主把它插进 profile 的 Cordis 入口列表。**这四处任何一处断了，症状都发生在用户机器上，
+而不在本仓库的 CI 里。** 发布前逐条核：
+
+| 要核的东西 | 怎么核 | 断了的症状 |
+| --- | --- | --- |
+| `dsh.bundle.patch` 声明了 | `node -e "console.log(require('./package.json').dsh.bundle.patch)"` | 装上了也不会被挂载；用户看到「装成功但没反应」 |
+| 声明的文件真实存在 | 上一条的输出能在仓库根找到 | 同上，且 `pnpm pack` 不会报错 |
+| 该文件在 `files` 白名单里 | `pnpm ci:checks` 第二项守卫 | 本地一切正常，tarball 里没有它——只在用户机器上炸 |
+| patch 内容与入口 id | patch 里 `id: dsh-dev-workflow`、`name: '@melosic/dsh-dev-workflow'`；id 不能与 DSH 已有 loader 条目冲突 | 与别人的条目打架，或加载到错的包 |
+
+`pnpm ci:checks` 只强制其中两条（声明 + 随包发布）。**剩下两条没有自动守卫**，
+所以要靠 `pnpm pack --dry-run`（看 `cordis.patch.yml` 在不在列表里）与一次真实安装来确认：
+
+```bash
+pnpm pack --dry-run                                  # 产物里有 cordis.patch.yml
+dsh plugin --profile <scratch> add @melosic/dsh-dev-workflow   # 装完能挂载、命令能出现
+```
+
+最可靠的验收是**装到一个空 profile 里**跑一次：`/dev-workflow status` 能出五行、
+两个工具出现在工具列表里，就说明 manifest 的整条链路是通的。这一步不能靠「CI 绿了」代替。
+
 ### 2. 打包产物
 
 ```bash
@@ -79,8 +103,10 @@ skills/dsh-dev-workflow/SKILL.md  skills/dsh-dev-workflow/SKILL.zh.md
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
 ```
 
-`ci:checks` 输出 `locale keys aligned (56 keys); bundle patch declared and shipped;
+`ci:checks` 输出 `locale keys aligned (81 keys); bundle patch declared and shipped;
 skill headings aligned (28 sections).`——这三行就是全部三个结构守卫。
+（`81` 与 `28` 是当前值，脚本按实际内容算出，不硬编码；换句话说这两个数字会随内容变，
+不要拿这里出现的具体数字去断言 CI 是否通过。）
 
 ### 4. 审计
 
@@ -253,9 +279,26 @@ git push origin main --follow-tags
 
 | 情况 | 做法 |
 | --- | --- |
-| 发布 < 72 小时，版本有致命问题 | `npm unpublish @melosic/dsh-dev-workflow@0.1.0` |
+| 发布 < 72 小时，版本有致命问题 | `npm unpublish @melosic/dsh-dev-workflow@<version> --registry=https://registry.npmjs.org` |
 | 发布 > 72 小时 | `npm unpublish` 已不可用，改用 `npm deprecate` 标注问题版本，再发修复版 |
 | 只是功能要回退 | 用 `revert` 提交回退，在 `[Unreleased]` 对应分类下写明回退了什么、为什么 |
+
+### 0.x 阶段的撤回策略
+
+0.x 有一条与 1.0 之后不同的现实：**破坏性变更本来就在允许范围内**
+（`CHANGELOG.md` 顶部的说明写着 MINOR 位可以携带 `BREAKING`），
+所以「这个版本引入了不兼容」本身不是撤回的理由。判断标准只有一个：
+**这个版本对已经装了它的人是否造成了实际伤害。**
+
+按这个标准分三类处置：
+
+| 情况 | 0.x 下的处置 | 为什么 |
+| --- | --- | --- |
+| 版本装不上、装上就崩、静默禁用（例如 manifest 或 peer 范围写错） | 立刻处理：< 72 小时 `npm unpublish`；> 72 小时 `npm deprecate` + 尽快发补丁版 | 这是**没人能正常使用**的版本，留着只会让每个新用户踩一次 |
+| 行为与文档不符，但功能可用（例如触发器少拦了一种命令） | **不撤回。** 在 `[Unreleased]` 的 `Fixed` 下写明，随下一个版本发出 | 撤回会让已经按文档适配过的人白做。0.x 的兼容性承诺本来就不包括这种细节 |
+| 设计方向错了（例如某个配置项的语义应该反过来） | **不撤回旧版本。** 改在新版本里，`[Unreleased]` 用 `Changed` + `BREAKING` 标注，附迁移说明 | 这正是 0.x 允许的：MINOR 位带破坏性变更。撤回会让「哪些版本还能装」变成一件需要查 history 的事 |
+
+四条不随版本阶段变化的底线：
 
 - **废弃信息必须说清三件事**：问题是什么、影响哪些版本、应该用什么替代。
   它的读者是已经装了坏版本的人，那是他唯一会看的地方。
@@ -263,6 +306,20 @@ git push origin main --follow-tags
 - **不要删除原来的 CHANGELOG 条目。** CHANGELOG 记录的是发生过的事，
   一个发布过的版本确实发生过。
 - 密钥一旦进了提交并被推送，就已经泄露；删除提交不够，必须**轮换密钥**。
+
+**`unpublish` 的三个技术前提**，不了解它们会把「命令自己拒绝了」当成「发布失败」：
+
+- **必须在 72 小时内**（npm 的撤回政策），且只能指定**单个版本或整个项目**，
+  不接受 tag 与范围——`npm unpublish @melosic/dsh-dev-workflow@0.1.x` 会得到
+  `Can only unpublish a single version, or the entire project. Tags and ranges are not supported.`
+- **必须显式带 `--registry=https://registry.npmjs.org`**——镜像源不接受 unpublish
+  （见开头「镜像源不能发布」）。执行后确认的是 packument：
+  `npm view @melosic/dsh-dev-workflow versions --registry=https://registry.npmjs.org`
+  里不再有那个版本号。
+- 撤掉**最后一个版本**时 npm 会先拦住你：
+  `Refusing to delete the last version of the package. It will block from republishing a new version for 24 hours.`
+  带 `--force` 可以继续，但接下来 24 小时内同名同版本发不回来——
+  0.x 阶段出现这种情况时，正确做法通常不是 `--force`，而是直接发一个更高的补丁版。
 
 ## 本项目的 v0.1.0 发布记录
 

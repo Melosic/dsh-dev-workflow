@@ -55,8 +55,27 @@
     `command.toggle.kind.release` 与两个触发器的文案，共 17 个新 key；
     `trigger.pre_commit.omitted` 提升为共用的 `trigger.omitted`。
 
+- **补全架构决策记录。** `docs/ADR/` 从两份扩到五份，三份新 ADR 补齐了此前只在
+  `docs/TOKEN-BUDGET.md`、`.dev-docs/prompt.md` 与代码注释里零散存在的推理过程：
+  - `docs/ADR/003-summary-plus-on-demand.md`：为什么常驻的只有一行目录条目与两个工具定义、
+    规范全文按需读取；含 token 成本算法（全文常驻 ≈ 2600 token/轮，是验收线的十倍）。
+  - `docs/ADR/004-action-triggered-not-manual-mode.md`：为什么按动作自动触发而不让用户手动切档；
+    **记录了手动切档的失败教训——用户会忘记切，而忘记切比不装更糟**。
+  - `docs/ADR/005-agents-md-as-context-anchor.md`：`AGENTS.md` 与 `SKILL.md` 的分工
+    （每轮都要成立的稳定规则 vs 做事时才读的规范全文），含
+    `@deepseek-ai/dsh-agent-instructions` 的加载链、候选名、65536 字节预算与「不 watch」约束。
+
 ### Changed
 
+- `docs/README.md` 的「我想知道为什么这样设计」一节从一行 ADR 目录扩为逐份登记
+  （001–005 各一行说明 + 模板），并补上 ADR 现在有五份。
+- `docs/PUBLISHING.md` 补三节：**bundle manifest 完整性检查**（四处链路逐条核对，
+  其中两条无自动守卫，必须靠 `pnpm pack --dry-run` 与一次真实安装确认）、
+  **0.x 阶段的撤回策略**（按「是否对已装用户造成实际伤害」分三类处置，
+  因为 0.x 允许 MINOR 位带破坏性变更，不兼容本身不是撤回理由）、
+  以及 `unpublish` 的三个技术前提（72 小时窗口、只接受单个版本或整个项目、
+  撤掉最后一个版本会被拦且 24 小时内发不回来）；并把 `ci:checks` 输出示例里的
+  过期数字 `locale keys aligned (56 keys)` 更正为 81。
 - `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为四道守卫的完整说明，含各自的
   默认值与理由；`docs/CONFIGURATION.md` 补四组新配置；`docs/TRIGGERS.md` 与
   `docs/ARCHITECTURE.md` 的监听器数量与次序更正为「约定 → git → 命令 → 文件 → 密钥」；
