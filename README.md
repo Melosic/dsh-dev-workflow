@@ -1,6 +1,6 @@
 # dsh-dev-workflow
 
-> **[English](README.md) | [简体中文](README.zh.md)**
+**English | [简体中文](README.zh.md)**
 
 A development-workflow gatekeeper and orchestrator plugin for [DSH](https://github.com/deepseek-ai).
 
@@ -46,7 +46,6 @@ absolute path to this package directory as the bundle target.
 
 - [CHANGELOG.md](CHANGELOG.md) — release history, Keep a Changelog format.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to set up, branch, commit, and submit changes.
-- `.dev-docs/` — local-only development notes (not in version control).
 
 Deeper reference documents (`docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `docs/TOOLS.md`,
 `docs/TRIGGERS.md`, `docs/SECURITY.md`, `docs/I18N.md`, `docs/TOKEN-BUDGET.md`) are written as the
