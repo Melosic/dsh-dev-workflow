@@ -55,6 +55,16 @@
     `command.toggle.kind.release` 与两个触发器的文案，共 17 个新 key；
     `trigger.pre_commit.omitted` 提升为共用的 `trigger.omitted`。
 
+- **补全架构决策记录。** `docs/ADR/` 从两份扩到五份，三份新 ADR 补齐了此前只在
+  `docs/TOKEN-BUDGET.md`、`.dev-docs/prompt.md` 与代码注释里零散存在的推理过程：
+  - `docs/ADR/003-summary-plus-on-demand.md`：为什么常驻的只有一行目录条目与两个工具定义、
+    规范全文按需读取；含 token 成本算法（全文常驻 ≈ 2600 token/轮，是验收线的十倍）。
+  - `docs/ADR/004-action-triggered-not-manual-mode.md`：为什么按动作自动触发而不让用户手动切档；
+    **记录了手动切档的失败教训——用户会忘记切，而忘记切比不装更糟**。
+  - `docs/ADR/005-agents-md-as-context-anchor.md`：`AGENTS.md` 与 `SKILL.md` 的分工
+    （每轮都要成立的稳定规则 vs 做事时才读的规范全文），含
+    `@deepseek-ai/dsh-agent-instructions` 的加载链、候选名、65536 字节预算与「不 watch」约束。
+
 ### Changed
 
 - `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为四道守卫的完整说明，含各自的
