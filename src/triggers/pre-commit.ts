@@ -1,13 +1,12 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../config.js'
-import { createTranslator } from '../i18n.js'
 import type { Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
 import type { WorkflowState } from '../state.js'
-import type { CheckResult } from '../tools/result.js'
 import { listChangedFiles } from '../tools/check-doc-sync.js'
 import { detectCommit, evaluate, fingerprint, resolveCommitMessage, summarize } from '../checks.js'
 import { commandOf } from '../shell.js'
+import { askAbout } from './shared.js'
 
 // The automatic half of the plugin: before the agent runs a shell command that
 // creates a commit, check that commit against the workflow rules and route the
@@ -18,9 +17,6 @@ import { commandOf } from '../shell.js'
 // gate that already denies the call is not second-guessed), and it must always
 // settle — a tool call that throws inside the gate would surface as a tool
 // failure rather than a finding.
-
-/** How many findings an approval prompt shows before it summarises the rest. */
-const MAX_DETAILS = 5
 
 /** Options the trigger needs. Everything is a getter: the runtime owns it. */
 export interface PreCommitTriggerOptions {
@@ -34,23 +30,6 @@ export interface PreCommitTriggerOptions {
   readonly git: (cwd: string) => GitRunner
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
-}
-
-/**
- * Render findings as the body of an approval prompt.
- * @param outcome - what the check found.
- * @param t - translator for the truncation line.
- * @returns one line per finding, capped at {@link MAX_DETAILS}.
- */
-function detailsOf(outcome: CheckResult, t: Translate): string {
-  const lines = [
-    ...outcome.errors.map((line) => `✖ ${line}`),
-    ...outcome.warnings.map((line) => `⚠ ${line}`),
-  ]
-  const shown = lines.slice(0, MAX_DETAILS)
-  const omitted = lines.length - shown.length
-  if (omitted > 0) shown.push(t('trigger.pre_commit.omitted', { count: omitted }))
-  return shown.join('\n')
 }
 
 /**
@@ -117,22 +96,13 @@ export function createPreCommitTrigger(
 
     // The approval prompt selects one of these by the client's locale, which is
     // not necessarily the plugin's own, so each side is rendered from scratch
-    // with its own translator — findings included, not just the wrapper. The
-    // Chinese key is the literal `zh`: the client lower-cases a locale and falls
-    // back to `en`, so `zh-CN` would never match.
-    const english = createTranslator('en-US')
-    const chinese = createTranslator('zh-CN')
-    return {
-      kind: 'ask',
-      reason: t('trigger.pre_commit.reason', { details: detailsOf(outcome, t) }),
-      displayReason: {
-        en: english('trigger.pre_commit.ask', {
-          details: detailsOf(evaluate(input, config, english), english),
-        }),
-        zh: chinese('trigger.pre_commit.ask', {
-          details: detailsOf(evaluate(input, config, chinese), chinese),
-        }),
-      },
-    }
+    // with its own translator — findings included, not just the wrapper.
+    return askAbout({
+      reasonKey: 'trigger.pre_commit.reason',
+      askKey: 'trigger.pre_commit.ask',
+      outcome,
+      t,
+      assess: (translator) => evaluate(input, config, translator),
+    })
   }
 }

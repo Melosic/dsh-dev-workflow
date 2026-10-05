@@ -15,8 +15,12 @@ workflow capabilities on top of the modes you already use.
 - **Two tools for the checks that matter.**
   - `check_commit_message` — validates a commit message against Conventional Commits.
   - `check_doc_sync` — checks that documentation moved together with the code it describes.
-- **A pre-commit trigger that stays quiet.** The plugin does nothing until you are about to
-  commit. That is the one moment a workflow gatekeeper earns its keep.
+- **Three triggers that stay quiet until the moment matters.** The plugin does nothing while you
+  write code. It speaks at the three points where a workflow gatekeeper earns its keep: before a
+  commit (message, CHANGELOG, docs), before `gh pr create` (the title becomes the squash commit,
+  plus a description with What / Why / How to verify), and before `git tag` or `npm publish`
+  (SemVer, tag-versus-manifest, pre-releases off `latest`, a non-empty `[Unreleased]`). Each
+  problem is raised once per session; ignoring it lets the action through.
 - **git-guard.** Destructive git commands (force push, hard reset, `clean -f`, `branch -D`,
   rebase, `commit --amend`, `checkout -- .`) are intercepted before they run. Each operation
   defaults to `ask`, never to `allow`. A bare `--force` is reported with a suggestion to use

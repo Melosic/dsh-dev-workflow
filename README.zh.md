@@ -13,8 +13,11 @@ DSH 的开发工作流守门员与编排器插件。
 - **两个真正有用的检查工具。**
   - `check_commit_message` —— 按 Conventional Commits 校验提交信息。
   - `check_doc_sync` —— 检查文档是否与它描述的代码一起更新。
-- **一个不打扰人的 pre-commit 触发器。** 在你要提交之前，插件什么都不做。
-  提交前正是工作流守门员唯一值得开口的时刻。
+- **三个只在关键时刻开口的触发器。** 写代码时插件什么都不做，只在三处拦一下：
+  提交前（提交信息、CHANGELOG、文档同步）、`gh pr create` 前（标题在 squash merge 后会成为
+  提交信息，描述需有 What / Why / How to verify 三段）、`git tag` 或 `npm publish` 前
+  （SemVer、tag 与 manifest 是否一致、预发布不能推 `latest`、`[Unreleased]` 不能为空）。
+  每个问题在一个会话里只提示一次；忽略之后动作照常执行。
 - **git-guard 安全守卫。** 危险 git 命令（force push、hard reset、`clean -f`、`branch -D`、
   rebase、`commit --amend`、`checkout -- .`）会在执行前被拦截。
   每个操作的默认值都是 `ask`，绝不默认 `allow`。识别到裸 `--force` 时会提示改用 `--force-with-lease`。
