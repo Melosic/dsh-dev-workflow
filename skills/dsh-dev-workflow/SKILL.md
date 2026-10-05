@@ -44,13 +44,32 @@ read on demand — nothing below is resident context.
   | `docs/*`    | documentation only        |
   | `hotfix/*`  | urgent fix against `main` |
 
-- Use kebab-case and a topic that reads on its own: `feature/skill-md`,
-  `fix/guard-force-push` — not `feature/stuff`.
-- Keep a branch on one topic. Merge from `main` or rebase onto it to stay
-  current, and resolve conflicts on the branch, never on `main`.
+- Branch names are all lowercase and kebab-case (the same style as the type and
+  scope in a commit). A name that reads on its own is required: `feature/skill-md`
+  and `fix/guard-force-push`, not `feature/stuff` or `feature/NewStuff`.
+- Keep a branch on one topic.
+- Stay current with `git merge main`, not `git rebase main`. Under squash merge a
+  rebase rewrites the branch's own history, so a reviewer can no longer see what
+  changed since the last review.
+- Resolve conflicts on the branch, never on `main`.
 - Merging uses **squash merge**, so `main` keeps one commit per pull request and
   a linear history.
 - Delete the branch as soon as the pull request is merged.
+
+### Branch Protection
+
+`main` is protected in the repository settings, not by convention. The rules:
+
+- Direct pushes are forbidden.
+- Force pushes are forbidden.
+- Deletion is forbidden.
+- A pull request is required, with at least one review.
+- All required CI checks must pass.
+- The branch must be up to date with `main` before it can merge.
+- Every review conversation must be resolved.
+
+These are configured on the GitHub repository itself, so they hold for everyone,
+including an administrator.
 
 ## Commit Messages (Conventional Commits)
 
@@ -64,9 +83,11 @@ read on demand — nothing below is resident context.
 
 - `scope` is optional but encouraged when a change is clearly local.
 - **Subject**: imperative mood ("add", not "added"), no trailing period, and at
-  most 50 characters.
+  most 50 characters. Write the subject in English, so it matches the `type` and
+  `scope`, which are English by definition.
 - **Body**: wrap at 72 characters and explain *why*. Do not restate what the
-  diff already shows.
+  diff already shows. A body or footer may be English or Chinese, but one
+  project should pick one and stay with it.
 - **Footer**: reference issues (`Closes #12`) and record breaking changes.
 
   | Type       | Meaning                                             |
@@ -85,8 +106,19 @@ read on demand — nothing below is resident context.
 
 - Breaking change: append `!` after the type or scope (`feat(api)!: ...`) **and**
   explain it in a `BREAKING CHANGE:` footer.
+- The footer is written exactly `BREAKING CHANGE: <explanation>` — all uppercase,
+  a single space after the colon. The hyphenated `BREAKING-CHANGE` is a different
+  token and is not recognised.
 - The 50/72 rule is not cosmetic. Many tools truncate a subject, and a wrapped
   body stays readable in a terminal and in a diff.
+
+### Issue References
+
+- `Closes #12` — once this commit lands, issue #12 can be closed.
+- `Refs #12` — this commit relates to issue #12 but does not close it.
+- Several issues: `Closes #12, #15`.
+- Reference the number only. A full URL is not used, because the repository is
+  already known and the URL is longer than the fact it carries.
 
 ## Atomic Commits (Recommended Practice)
 
@@ -129,6 +161,15 @@ A pull request is mergeable only when CI is green, the branch is up to date with
 `main`, and every review conversation is resolved. Never merge by bypassing a
 failing check: fix the cause, or report the blocker.
 
+### Pull Request Size
+
+- Aim for roughly 200–400 changed lines.
+- Past 500 lines, split the pull request, or walk a reviewer through it before
+  they start reading.
+- The reason is practical: a small pull request is reviewed quickly, conflicts
+  with less, and is easy to revert if it turns out to be wrong. A large one
+  tends to be approved on trust, which is the opposite of review.
+
 ## Documentation Sync
 
 | Change                                        | Update in the same PR                           |
@@ -147,6 +188,22 @@ failing check: fix the cause, or report the blocker.
 - CI enforces what is mechanical: locale keys line up, and the two skill files
   expose the same sections in the same order. Whether a translation reads well
   stays a human review item.
+- `docs/` always describes the current state of `main`. It is not versioned
+  documentation: to read how an older version behaved, check out its git tag.
+
+### When Documentation Sync Does Not Apply
+
+These changes need no `README.md` and no `docs/` update:
+
+- A purely internal refactor that leaves externally visible behaviour unchanged.
+- A test-only change.
+- A dependency upgrade that does not change user-visible behaviour.
+- Code style or formatting.
+- CI configuration.
+
+The exemption covers prose only. If any of these does change what a user sees,
+it still needs a `CHANGELOG.md` entry — the two obligations are separate, and
+this list waives just one of them.
 
 ## Releases (SemVer + Keep a Changelog)
 
@@ -168,7 +225,111 @@ failing check: fix the cause, or report the blocker.
   3. Bump `version` in `package.json` to match the new heading.
   4. Commit as `chore(release): <version>`, then tag `v<version>` and push it.
   5. Publish from the tagged commit with `npm publish`.
+  6. Verify the publish landed: `npm view <package> versions` shows the new
+     version, or `npx <package>@latest --version` installs and reports it. If
+     the verification fails, check the dist-tag and the registry status before
+     assuming the publish succeeded.
 - Do not edit a released section. Corrections become new entries.
+
+### Pre-release Versions
+
+- A pre-release version follows SemVer:
+  `MAJOR.MINOR.PATCH-<pre-release>`.
+- The common identifiers are `-rc.1`, `-beta.1`, and `-alpha.1`, in descending
+  order of readiness.
+- A pre-release is not published to the `latest` tag. Publish it with
+  `npm publish --tag next`, so nobody installs a release candidate by accident.
+- Examples: `0.2.0-rc.1`, `1.0.0-beta.3`.
+
+### Deprecation and Removal
+
+- To deprecate something, add an entry under `Deprecated` in `[Unreleased]`
+  naming the replacement and when the removal is planned.
+- Keep a deprecated feature for at least one `MINOR` release before removing it.
+  A security problem is the one reason to skip that wait.
+- Removing it is a `Removed` entry, and under 0.x it is marked `BREAKING`.
+
+### Rollback
+
+- To roll back a published change, revert it with a `revert` commit and add an
+  entry under the matching `[Unreleased]` category saying what was rolled back
+  and why.
+- Do not delete the original changelog entry. The changelog is a record of what
+  happened, and a version that was published did happen.
+- Whether a rollback needs its own release depends on how far the original
+  change had spread; a rollback of something users already depend on does.
+
+### Withdrawing a Published Release
+
+- A version published less than 72 hours ago can be removed with
+  `npm unpublish`.
+- Past 72 hours, `npm unpublish` is no longer available. Deprecate the version
+  with `npm deprecate` instead, then publish a fixed version.
+- A deprecation message must state the problem, which versions are affected, and
+  what to use instead. It is read by someone who already has the broken version
+  installed, so it is the only place they will look.
+- Never cover a bad release by deleting the version. Publish a new one.
+
+## CHANGELOG Maintenance
+
+The changelog answers one question for someone who is deciding whether to
+upgrade: *what changed for me?* It is not a summary of the commit log.
+
+### What to Write
+
+- Any user-visible behaviour change: a new capability, a fix, a changed
+  configuration option, or a changed API.
+- A breaking change. Always, with a `BREAKING` marker and migration notes.
+- A security fix — but do not disclose the vulnerability in the entry until the
+  fix has been released.
+- A deprecation: what is deprecated, what replaces it, and when it is planned to
+  go away.
+
+### What Not to Write
+
+- Internal refactors, code style, test changes, and dependency upgrades.
+- A restatement of the commit messages. The changelog is not a commit log.
+- Implementation detail, such as which function was renamed.
+- Anything that has not been released yet.
+- Sensitive information of any kind.
+
+### How to Write
+
+- Use the imperative, and address the reader.
+- One entry per change.
+- Say what it means for the user, not what the code does.
+- For a breaking change, give the migration path.
+
+### Examples
+
+| Bad entry                              | Why it falls short                                | Better entry                                                         |
+| -------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------- |
+| `Fixed — fixed a bug`                  | A reader cannot tell whether it affects them.     | `Fixed — a failed push left the branch dirty; the error now rolls back` |
+| `Added — refactored the parser`        | A refactor is not an addition, nor user-visible.  | `Changed — the parser accepts a single leading "+" before a number`  |
+| `Changed — updated dependencies`       | A routine upgrade is not a change to the user.    | *(no entry)*                                                          |
+
+### When to Write
+
+- At the moment the change happens, into the matching `[Unreleased]` category.
+- Not at release time. By then the detail is lost and the entries become vague.
+- `docs`, `test`, `chore`, `ci`, and `build` commits usually need no entry.
+- `feat`, `fix`, and `perf` need one. `refactor` needs one only when it changes
+  something a user can observe. `revert` needs one.
+
+### Dependency Upgrades
+
+- A dependency upgrade does not get a changelog entry by itself.
+- The exception is an upgrade that changes user-visible behaviour — for example,
+  a parser that now rejects input it used to accept. That is written under the
+  category it actually belongs to, not under `Changed — dependencies`.
+
+### Breaking Changes
+
+- Write the entry under the matching `[Unreleased]` category and prefix it with
+  `**BREAKING:**`.
+- Include the migration path: what to do instead, and what happens if you do
+  nothing.
+- This matters most in the 0.x stage, where a `MINOR` bump can carry the change.
 
 ## Safe Operations
 
