@@ -48,4 +48,4 @@ jobs:
       # shipped. Translation *correctness* is intentionally not checked here:
       # it is a human review item.
       - name: Verify locale keys and bundle manifest
-        run: node scripts/ci-checks.mjs
+        run: pnpm ci:checks
