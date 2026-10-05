@@ -67,6 +67,11 @@
 
 ### Changed
 
+- `README.md` / `README.zh.md` 新增「环境要求」一节：DSH 运行时 `>=0.2.0-rc.1 <0.3.0`、
+  Node.js `>=20`、pnpm `10.x`，以及各自的查看方式。此前这三条只写在 `CONTRIBUTING.md` 里
+  （贡献者视角），**使用者视角的要求一条都没有**；其中最容易踩的是 DSH 版本——不在范围内
+  的后果是被静默禁用而不是安装失败，所以连症状和排查入口一并写在了 README 里；
+  `docs/README.md` 的 README 那行也补上了这一节。
 - `docs/README.md` 的「我想知道为什么这样设计」一节从一行 ADR 目录扩为逐份登记
   （001–005 各一行说明 + 模板），并补上 ADR 现在有五份。
 - `docs/PUBLISHING.md` 补三节：**bundle manifest 完整性检查**（四处链路逐条核对，

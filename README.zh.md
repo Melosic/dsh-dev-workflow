@@ -30,6 +30,20 @@ DSH 的开发工作流守门员与编排器插件。
   最近一次检查结果、守卫开口的次数，以及审计日志的落点；`check` 按工作流规则即时检查整个工作区。
   关闭时会注销全部注册，因此它是「零成本」，而不只是「安静地不回答」。
 
+## 环境要求
+
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| DSH 运行时 | `>=0.2.0-rc.1 <0.3.0` | 声明在 `peerDependencies` 里，由 DSH 在加载时校验。用 `dsh --version` 查看本机版本。 |
+| Node.js | `>=20` | `engines.node` 声明的下限，也是 CI 实际跑的版本。 |
+| pnpm | `10.x` | 从源码构建时需要。`pnpm-lock.yaml` 已入库，换成 npm 或 yarn 会解析出不同的依赖树。 |
+
+**DSH 版本不在支持范围内，不会让安装失败——它会把这个插件禁用掉。** DSH 在加载 profile 时
+校验上面声明的范围，不匹配就把插件丢掉，并在 stderr 打印
+`disabling profile plugin <label>: <reason>`。症状是「装上了但从来不出现」，
+所以报 bug 之前值得先对一下版本。[docs/PUBLISHING.md](docs/PUBLISHING.md) 说明了范围的选取依据，
+以及你确实在另一条 DSH 版本线上时，按 profile 开的那个应急口子。
+
 ## 快速开始
 
 ```bash
