@@ -2,7 +2,7 @@
 
 **[English](README.md) | 简体中文**
 
-DSH 的开发工作流守门员与编排器插件。
+[DSH](https://github.com/deepseek-ai/deepseek-harness) 的开发工作流守门员与编排器插件。
 
 它是插件，不是模式。它不试图成为 DSH 内置的第五种模式，而是在你已经在用的模式之上提供工作流能力。
 

@@ -2,7 +2,7 @@
 
 **English | [简体中文](README.zh.md)**
 
-A development-workflow gatekeeper and orchestrator plugin for [DSH](https://github.com/deepseek-ai).
+A development-workflow gatekeeper and orchestrator plugin for [DSH](https://github.com/deepseek-ai/deepseek-harness).
 
 It is a plugin, not a mode. It does not try to become a fifth built-in DSH mode; it provides
 workflow capabilities on top of the modes you already use.
