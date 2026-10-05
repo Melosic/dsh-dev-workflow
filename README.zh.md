@@ -42,9 +42,10 @@ pnpm test
 
 - [CHANGELOG.md](CHANGELOG.md) —— 版本历史，Keep a Changelog 格式。
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 环境搭建、分支、提交与提交流程。
+- [docs/TOKEN-BUDGET.md](docs/TOKEN-BUDGET.md) —— 本插件每条请求的成本，以及如何复算它。
 
 更深入的参考文档（`docs/ARCHITECTURE.md`、`docs/CONFIGURATION.md`、`docs/TOOLS.md`、
-`docs/TRIGGERS.md`、`docs/SECURITY.md`、`docs/I18N.md`、`docs/TOKEN-BUDGET.md`）会随对应阶段落地后再写，
+`docs/TRIGGERS.md`、`docs/SECURITY.md`、`docs/I18N.md`）会随对应阶段落地后再写，
 这样它们描述的是真实行为，而不是猜测。
 
 ## 贡献指引

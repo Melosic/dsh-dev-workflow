@@ -46,10 +46,12 @@ absolute path to this package directory as the bundle target.
 
 - [CHANGELOG.md](CHANGELOG.md) — release history, Keep a Changelog format.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to set up, branch, commit, and submit changes.
+- [docs/TOKEN-BUDGET.md](docs/TOKEN-BUDGET.md) — what this plugin costs per request, and how to
+  measure it again.
 
 Deeper reference documents (`docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `docs/TOOLS.md`,
-`docs/TRIGGERS.md`, `docs/SECURITY.md`, `docs/I18N.md`, `docs/TOKEN-BUDGET.md`) are written as the
-corresponding implementation phases land, so that they describe real behavior rather than guesses.
+`docs/TRIGGERS.md`, `docs/SECURITY.md`, `docs/I18N.md`) are written as the corresponding
+implementation phases land, so that they describe real behavior rather than guesses.
 
 ## Contributing
 
