@@ -1,5 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { COMMIT_TYPES, SUBJECT_MAX_LENGTH } from '../config.js'
+import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { CheckResult } from './result.js'
 import { renderCheck } from './result.js'
@@ -7,12 +7,15 @@ import { renderCheck } from './result.js'
 // Local mirror of the specification's Commit Messages section. Everything that
 // can be decided from the message text alone lives here; anything needing the
 // repository is the caller's job to supply as `files`.
+//
+// The four rules a repository may retune — the accepted types, whether a scope
+// is required, the subject length, and what a failure does — come in as
+// configuration rather than as constants. `onFailure` is *not* applied here: the
+// line between a blocking problem and an advisory one is a property of the
+// message, and what the gate does with it belongs to the gate.
 
 /** Body lines the specification asks to wrap at. */
 const BODY_MAX_LENGTH = 72
-
-/** Files that must change together, as configured. */
-export type Mirrors = readonly (readonly string[])[]
 
 /** Inputs the check needs beyond the message itself. */
 export interface CommitCheckInput {
@@ -37,10 +40,17 @@ function sections(message: string): { subject: string; body: string } {
 /**
  * Check one commit message against Conventional Commits.
  * @param input - the message and, when known, the paths it touches.
+ * @param config - resolved plugin configuration; the `commitCheck` rules are read from it.
  * @param t - translator for every returned line.
  * @returns blocking problems and advisory observations.
  */
-export function checkCommitMessage(input: CommitCheckInput, t: Translate): CheckResult {
+export function checkCommitMessage(
+  input: CommitCheckInput,
+  config: Config,
+  t: Translate,
+): CheckResult {
+  const rules = config.commitCheck
+  const types = [...rules.types.get()]
   const errors: string[] = []
   const warnings: string[] = []
   const { subject, body } = sections(input.message)
@@ -62,22 +72,23 @@ export function checkCommitMessage(input: CommitCheckInput, t: Translate): Check
   const scope = header[2]
   const bang = header[3]
   const rest = header[4] ?? ''
-  if (!(COMMIT_TYPES as readonly string[]).includes(type)) {
+  if (!types.includes(type)) {
     errors.push(
       t('tool.check_commit_message.error.unknown_type', {
         type,
-        allowed: COMMIT_TYPES.join(', '),
+        allowed: types.join(', '),
       }),
     )
   }
 
   // Soft rules. Each names the problem, the expected form, and the fix, so the
   // reader can act without opening the specification.
-  if (rest.length > SUBJECT_MAX_LENGTH) {
+  const max = rules.subjectMaxLength.get()
+  if (rest.length > max) {
     warnings.push(
       t('tool.check_commit_message.warn.subject_length', {
         length: rest.length,
-        max: SUBJECT_MAX_LENGTH,
+        max,
       }),
     )
   }
@@ -106,8 +117,12 @@ export function checkCommitMessage(input: CommitCheckInput, t: Translate): Check
       t('tool.check_commit_message.warn.multiple_modules', { modules: modules.join(', ') }),
     )
   }
-  if (scope === undefined && modules.length === 1) {
-    warnings.push(t('tool.check_commit_message.warn.missing_scope', { module: modules[0]! }))
+  if (scope === undefined) {
+    if (rules.requireScope.get()) {
+      errors.push(t('tool.check_commit_message.error.missing_scope'))
+    } else if (modules.length === 1) {
+      warnings.push(t('tool.check_commit_message.warn.missing_scope', { module: modules[0]! }))
+    }
   }
 
   return { ok: errors.length === 0, errors, warnings }
@@ -129,12 +144,15 @@ function modulesOf(files: readonly string[]): string[] {
 
 /**
  * Build the `check_commit_message` tool.
- * @param options - the active translator and the conflict-group configuration.
+ * @param options - the active translator and the live configuration.
  * @param options.t - translator for parameters, descriptions, and output.
- * @param options.mirrors - reserved for the trigger; unused by the text check.
+ * @param options.config - resolves the configuration the rules are read from.
  * @returns the registry-ready tool definition.
  */
-export function createCheckCommitMessageTool(options: { t: () => Translate; mirrors?: Mirrors }) {
+export function createCheckCommitMessageTool(options: {
+  t: () => Translate
+  config: () => Config
+}) {
   return defineTool({
     name: 'check_commit_message',
     description: options.t()('tool.check_commit_message.description'),
@@ -188,7 +206,7 @@ export function createCheckCommitMessageTool(options: { t: () => Translate; mirr
         message: args.message,
         ...(args.files === undefined ? {} : { files: args.files }),
       }
-      return checkCommitMessage(input, options.t())
+      return checkCommitMessage(input, options.config(), options.t())
     },
   })
 }

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { CONFIG_FILES } from './config.js'
 import type { Config } from './config.js'
 import type { Translate } from './i18n.js'
 import type { CheckResult } from './tools/result.js'
@@ -129,41 +130,51 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
   const errors: string[] = []
   const warnings: string[] = []
 
-  if (input.files !== undefined) {
+  if (input.files !== undefined && config.docsCheck.enabled.get()) {
     const docs = checkDocSync({ files: input.files }, config, t)
     errors.push(...docs.errors)
     warnings.push(...docs.warnings)
-  }
 
-  if (input.message !== undefined) {
-    const commit = checkCommitMessage(
-      { message: input.message, ...(input.files === undefined ? {} : { files: input.files }) },
-      t,
-    )
-    errors.push(...commit.errors)
-    warnings.push(...commit.warnings)
-
-    const type = /^([a-z]+)/.exec(input.message)?.[1]
+    const readme = [...config.docs.readme.get()]
     if (
-      config.rules.requireChangelogOnFeat &&
-      input.files !== undefined &&
+      config.docsCheck.requireReadmeOnConfig.get() &&
+      input.files.some((path) => (CONFIG_FILES as readonly string[]).includes(path)) &&
+      !input.files.some((path) => readme.includes(path))
+    ) {
+      warnings.push(
+        t('tool.check_doc_sync.warn.readme_on_config', { files: CONFIG_FILES.join(', ') }),
+      )
+    }
+
+    const type = input.message === undefined ? undefined : /^([a-z]+)/.exec(input.message)?.[1]
+    const changelog = config.docs.changelog.get()
+    if (
+      config.rules.requireChangelogOnFeat.get() &&
       type === 'feat' &&
-      !input.files.includes(config.docs.changelog)
+      !input.files.includes(changelog)
     ) {
       // The documentation check already says this softly. The repository rule
       // makes it blocking for a feature, so the advisory line is replaced
       // rather than repeated.
-      const advisory = t('tool.check_doc_sync.warn.changelog', {
-        changelog: config.docs.changelog,
-      })
+      const advisory = t('tool.check_doc_sync.warn.changelog', { changelog })
       const index = warnings.indexOf(advisory)
       if (index !== -1) warnings.splice(index, 1)
-      errors.push(
-        t('tool.check_commit_message.error.changelog_required', {
-          changelog: config.docs.changelog,
-        }),
-      )
+      errors.push(t('tool.check_commit_message.error.changelog_required', { changelog }))
     }
+  }
+
+  if (input.message !== undefined && config.commitCheck.enabled.get()) {
+    const commit = checkCommitMessage(
+      { message: input.message, ...(input.files === undefined ? {} : { files: input.files }) },
+      config,
+      t,
+    )
+    warnings.push(...commit.warnings)
+    // `onFailure` is the gate's policy, not the check's: a hard problem is
+    // reported either way, and only here does the setting decide whether it
+    // stops the commit or merely warns about it.
+    if (config.commitCheck.onFailure.get() === 'warn') warnings.push(...commit.errors)
+    else errors.push(...commit.errors)
   }
 
   return { ok: errors.length === 0, errors, warnings }

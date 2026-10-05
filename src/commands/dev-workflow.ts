@@ -54,7 +54,7 @@ export interface DevWorkflowCommandOptions {
   /** Translator for the locale in effect. */
   readonly t: Translate
   /** The locale actually in effect, after `auto` was resolved. */
-  readonly locale: Locale
+  readonly locale: () => Locale
   /** Whether the plugin's registrations are currently active. */
   readonly active: () => boolean
   /** Turn the plugin on or off. */
@@ -79,8 +79,8 @@ function statusLines(options: DevWorkflowCommandOptions): string[] {
   const lines = [options.active() ? t('command.toggle.status.on') : t('command.toggle.status.off')]
   lines.push(
     t('command.toggle.status.locale', {
-      locale: options.locale,
-      setting: options.config.locale,
+      locale: options.locale(),
+      setting: options.config.locale.get(),
     }),
   )
 
@@ -108,8 +108,8 @@ function statusLines(options: DevWorkflowCommandOptions): string[] {
   // The audit trail is the one part of a guard's work a user cannot see from the
   // outside, so the status report says whether it is being kept.
   lines.push(
-    options.config.audit.enabled
-      ? t('audit.enabled', { path: options.config.audit.path })
+    options.config.audit.enabled.get()
+      ? t('audit.enabled', { path: options.config.audit.path.get() })
       : t('audit.disabled'),
   )
   return lines

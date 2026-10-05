@@ -66,8 +66,16 @@ export function checkDocSync(input: DocSyncInput, config: Config, t: Translate):
   const errors: string[] = []
   const warnings: string[] = []
   const changed = new Set(input.files)
+  const docsDir = config.docs.docsDir.get()
+  const changelog = config.docs.changelog.get()
+  const readme = [...config.docs.readme.get()]
+  const codePaths = [...config.codePaths.get()]
+  // Excluded prefixes are removed from the "is this a code change" question
+  // before it is asked, so a tree kept under `codePaths` can opt out by path.
+  const excluded = [...config.docs.exclude.get()]
 
-  for (const group of config.docs.mirrors) {
+  const mirrors = [...config.docs.mirrors.get()].map((group) => [...group])
+  for (const group of mirrors) {
     const touched = group.filter((path) => changed.has(path))
     if (touched.length === 0 || touched.length === group.length) continue
     const missing = group.filter((path) => !changed.has(path))
@@ -81,14 +89,12 @@ export function checkDocSync(input: DocSyncInput, config: Config, t: Translate):
 
   const code = input.files.filter(
     (path) =>
-      config.codePaths.some((prefix) => path.startsWith(prefix)) &&
-      !path.startsWith(config.docs.docsDir),
+      !excluded.some((prefix) => path.startsWith(prefix)) &&
+      codePaths.some((prefix) => path.startsWith(prefix)) &&
+      !path.startsWith(docsDir),
   )
   const documents = [...changed].filter(
-    (path) =>
-      path.startsWith(config.docs.docsDir) ||
-      config.docs.readme.includes(path) ||
-      path === config.docs.changelog,
+    (path) => path.startsWith(docsDir) || readme.includes(path) || path === changelog,
   )
 
   if (code.length > 0 && documents.length === 0) {
@@ -96,12 +102,12 @@ export function checkDocSync(input: DocSyncInput, config: Config, t: Translate):
       t('tool.check_doc_sync.warn.no_document', {
         count: code.length,
         example: code[0]!,
-        docsDir: config.docs.docsDir,
+        docsDir,
       }),
     )
   }
-  if (code.length > 0 && !changed.has(config.docs.changelog)) {
-    warnings.push(t('tool.check_doc_sync.warn.changelog', { changelog: config.docs.changelog }))
+  if (code.length > 0 && !changed.has(changelog)) {
+    warnings.push(t('tool.check_doc_sync.warn.changelog', { changelog }))
   }
 
   return { ok: errors.length === 0, errors, warnings }

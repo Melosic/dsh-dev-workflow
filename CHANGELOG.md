@@ -13,6 +13,40 @@
 
 ### Added
 
+- **可视化设置面板。** 插件现在在 DSH 设置里有一张自己的卡片，由两半组成：浏览器半
+  `client.js`（手写的模块表格式，注册进 `settings.section` 槽位）与 Host 半
+  （`src/index.ts` 里关闭 schema 自动页、并监听 `loader/volatile-update`）。
+  - **与文件配置同源。** 面板没有自己的存储：保存经宿主的设置控制器写入当前 profile 的
+    `cordis.patch.yml`，再提交进运行中的配置引用，**不需要重启**；`locale` 也会随之
+    重新解析。
+  - 27 项可在面板修改（开关与枚举，外加 `commitCheck.subjectMaxLength` 一个数字输入）；
+    8 个危险 git 操作的档位、四道守卫与审计的开关、提交与文档两组检查的规则都在其中。
+  - 9 项（`codePaths`、`docs.docsDir`、`docs.adrDir`、`docs.changelog`、`docs.exclude`、
+    `rules.branchPattern`、`rules.commitPattern`、`docs.mirrors`、`audit.path`）只读展示在
+    默认折叠的**高级**区，旁边有按钮直接打开 profile 的 `cordis.patch.yml`；另有 2 项
+    （`docs.readme`、`fileGuard.noRead`）只能改文件。路径与正则不下沉到主区：写错就静默失效
+    的值不该交给没有校验的输入框。
+  - **不重复 DSH 的插件总开关**，也不改由 DSH 拥有的设置（审批策略、沙箱模式）。
+  - 样式只用主题发布的 `--dsw-alias-*` token，类名统一 `dsw-dev-workflow-` 前缀，
+    `<style>` 带 `data-plugin` / `data-plugin-css`，HMR 能按归属清理。
+- **配置面补齐并全部标记为可变。** `src/config.ts` 的每个叶子都加了 `.volatile()`——这是
+  面板能读到并写入的前提；新增九个字段：
+  - `commitCheck`：`enabled`（默认 `true`）、`onFailure`（`'warn' | 'block'`，默认 `block`）、
+    `types`（默认 11 个 `COMMIT_TYPES`）、`requireScope`（默认 `false`，开启后「缺 scope」
+    从软警告升为硬错误）、`subjectMaxLength`（默认 `50`，`min(1)` 且必须是整数）。
+  - `docsCheck`：`enabled`（默认 `true`，只作用于提交前那次判定，`check_doc_sync` 工具不受
+    影响）、`requireReadmeOnConfig`（默认 `false`：改 `package.json` / `cordis.patch.yml`
+    却没动 README 类文档时给一条警告）。
+  - `docs.exclude`（默认 `[]`）：命中的路径既不算代码也不算文档，用来排除生成物。
+  - `gitGuard.rememberApproved`（默认 `false`）：见下一条。
+- **`gitGuard.rememberApproved`：记住一次批准，同一操作本会话不再询问。** DSH 的审批是
+  一次性的（`allowed-once`，没有 `allow-always`，也没有授权存储），而守卫把 `ask` 交给
+  dispatcher 后**看不到答案**。所以开启后 git 守卫经 `ctx.get('approval')` 自己发起审批、
+  自己读结果：`allowed-once` 放行并记进会话，`rejected` / `cancelled` / `unavailable` 一律拒绝。
+  记忆键是「工具名 + 序列化参数」，`git clean -f` 与 `git clean -f -d` 是两次操作，换工作
+  目录也是；按会话隔离，插件重新加载即清空，不落盘。`deny` 永不经过这条路；档里没有审批服务
+  时把问题交回 dispatcher（与开关关闭时逐字相同），绝不把「问不出来」当成「同意了」；
+  别的 gate 已经拒绝或已经要提问时也不自行再问。
 - **补全四类安全守卫。** v0.1.0 只有 git-guard，其余三类是写在文档里的承诺；现在它们
   都是代码，并且共用 `src/guard/shared.ts` 的 `createGuard()`（接线、命中计数、审计回调、
   档位决策各一份实现）。

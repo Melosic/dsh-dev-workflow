@@ -40,6 +40,49 @@ export interface GuardHit {
   readonly params?: TranslationParams
 }
 
+/**
+ * A seam that asks the user a question the guard can read the answer to.
+ *
+ * The tool dispatcher asks on the guard's behalf when the guard returns `ask`,
+ * but it never reports the outcome back — an approval applies only to the
+ * request it answered. A policy that wants to remember the answer therefore has
+ * to ask itself. Supplied only by the guards whose configuration offers that.
+ */
+export interface GuardApprover {
+  /**
+   * Whether this hit's policy remembers an approval.
+   * @param hit - the recognised operation.
+   * @returns whether an answer about this hit is worth remembering.
+   */
+  readonly remembers: (hit: GuardHit) => boolean
+  /**
+   * Whether this exact operation was already approved in this session.
+   * @param hit - the recognised operation.
+   * @param exec - the call the agent is about to make.
+   * @returns whether the question was already answered with a yes.
+   */
+  readonly approved: (hit: GuardHit, exec: ToolExecution) => boolean
+  /**
+   * Remember an operation the user just approved.
+   * @param hit - the recognised operation.
+   * @param exec - the call the agent is about to make.
+   */
+  readonly remember: (hit: GuardHit, exec: ToolExecution) => void
+  /**
+   * Ask the user about one operation, and read the answer.
+   * @param hit - the recognised operation.
+   * @param exec - the call the agent is about to make.
+   * @param t - translator for the plugin's own locale.
+   * @returns `undefined` when the user approved, so the caller remembers it;
+   * otherwise the decision that settles the call.
+   */
+  readonly ask: (
+    hit: GuardHit,
+    exec: ToolExecution,
+    t: Translate,
+  ) => Promise<PreToolDecision | undefined>
+}
+
 /** Options every guard needs. Everything is a getter: the runtime owns it. */
 export interface GuardOptions {
   /** Resolved plugin configuration. */
@@ -58,6 +101,11 @@ export interface GuardOptions {
    * can review afterwards.
    */
   readonly audit?: (hit: GuardHit, exec: ToolExecution) => void
+  /**
+   * Asks the user on the guard's behalf, for a guard whose policy remembers the
+   * answer. Optional: the other three guards never ask themselves.
+   */
+  readonly approver?: GuardApprover
 }
 
 /** What a concrete guard adds to the shared options. */
@@ -164,6 +212,24 @@ export function createGuard(
     if (downstream.kind === 'cancel') return downstream
     if (hit.action === 'deny') return decide(hit, t)
     if (downstream.kind === 'deny') return downstream
+
+    const approver = definition.approver
+    if (approver !== undefined && approver.remembers(hit)) {
+      // Already answered in this session. The operation may proceed, and any
+      // question another gate still wants to ask stays that gate's to ask.
+      if (approver.approved(hit, exec)) return downstream
+      // Ask only when this guard's question would be the one the user answers.
+      // If another gate already asks, its outcome is not ours to remember, so
+      // the question stays with the dispatcher — the behaviour with the policy
+      // switched off.
+      if (downstream.kind === 'allow') {
+        const refused = await approver.ask(hit, exec, t)
+        if (refused !== undefined) return refused
+        approver.remember(hit, exec)
+        return { kind: 'allow' }
+      }
+    }
+
     // Otherwise the call was going to proceed. The guard's own question replaces
     // any other `ask`, so the reason shown names the operation that was actually
     // recognised; the approval it needs is the same either way.

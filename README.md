@@ -35,6 +35,12 @@ workflow capabilities on top of the modes you already use.
   mode, the locale, the last check, how often the guards have spoken, and where the audit log
   goes; `check` runs the workflow rules over the working tree on demand. Turning it `off`
   unregisters everything, so it costs nothing rather than merely staying quiet.
+- **A settings panel in DSH Settings.** Every switch and enum the plugin has — mode and locale, the
+  commit rules, the documentation rules, the eight git policies, the command, file and secret
+  guards, the audit log — is editable from one card, with a short note where the right choice is
+  not obvious. Saving writes to the same source the file configuration is read from, and the plugin
+  picks the change up without a restart. Paths, patterns and mappings stay read-only under
+  **Advanced**, next to a button that opens the profile's `cordis.patch.yml`.
 
 ## Requirements
 

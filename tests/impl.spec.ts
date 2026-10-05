@@ -16,7 +16,7 @@ const config = Config({})
 
 describe('src/tools/check-commit-message.ts', () => {
   it('rejects an empty message', () => {
-    expect(checkCommitMessage({ message: '   ' }, t)).toEqual({
+    expect(checkCommitMessage({ message: '   ' }, config, t)).toEqual({
       ok: false,
       errors: [t('tool.check_commit_message.error.empty')],
       warnings: [],
@@ -24,7 +24,7 @@ describe('src/tools/check-commit-message.ts', () => {
   })
 
   it('rejects a subject with no Conventional Commits type', () => {
-    const outcome = checkCommitMessage({ message: 'Add the thing' }, t)
+    const outcome = checkCommitMessage({ message: 'Add the thing' }, config, t)
     expect(outcome.ok).toBe(false)
     expect(outcome.errors).toEqual([
       t('tool.check_commit_message.error.missing_type'),
@@ -33,7 +33,7 @@ describe('src/tools/check-commit-message.ts', () => {
   })
 
   it('rejects a type outside the accepted list', () => {
-    const outcome = checkCommitMessage({ message: 'feature: add the thing' }, t)
+    const outcome = checkCommitMessage({ message: 'feature: add the thing' }, config, t)
     expect(outcome.ok).toBe(false)
     expect(outcome.errors).toEqual([t('tool.check_commit_message.error.unknown_type')])
   })
@@ -52,12 +52,15 @@ describe('src/tools/check-commit-message.ts', () => {
       'chore',
       'revert',
     ]) {
-      expect(checkCommitMessage({ message: `${type}(cli): something` }, t).errors, type).toEqual([])
+      expect(
+        checkCommitMessage({ message: `${type}(cli): something` }, config, t).errors,
+        type,
+      ).toEqual([])
     }
   })
 
   it('accepts a well-formed subject with nothing else to say', () => {
-    expect(checkCommitMessage({ message: 'feat(cli): add a flag' }, t)).toEqual({
+    expect(checkCommitMessage({ message: 'feat(cli): add a flag' }, config, t)).toEqual({
       ok: true,
       errors: [],
       warnings: [],
@@ -66,7 +69,7 @@ describe('src/tools/check-commit-message.ts', () => {
 
   it('warns when the description exceeds the subject budget', () => {
     const long = `feat(cli): ${'a'.repeat(51)}`
-    const outcome = checkCommitMessage({ message: long }, t)
+    const outcome = checkCommitMessage({ message: long }, config, t)
     expect(outcome.ok).toBe(true)
     expect(outcome.warnings).toContain(
       t('tool.check_commit_message.warn.subject_length', { length: 51, max: 50 }),
@@ -76,20 +79,24 @@ describe('src/tools/check-commit-message.ts', () => {
   it('measures only the description, not the whole subject line', () => {
     // `feat(a-very-long-scope): ` is 26 characters and must not count towards
     // the 50-character budget, which covers the text after the colon.
-    const outcome = checkCommitMessage({ message: `feat(${'a'.repeat(60)}): ${'b'.repeat(50)}` }, t)
+    const outcome = checkCommitMessage(
+      { message: `feat(${'a'.repeat(60)}): ${'b'.repeat(50)}` },
+      config,
+      t,
+    )
     expect(outcome.warnings).not.toContain(
       t('tool.check_commit_message.warn.subject_length', { length: 76, max: 50 }),
     )
   })
 
   it('warns about a trailing period', () => {
-    const outcome = checkCommitMessage({ message: 'fix(cli): stop crashing.' }, t)
+    const outcome = checkCommitMessage({ message: 'fix(cli): stop crashing.' }, config, t)
     expect(outcome.ok).toBe(true)
     expect(outcome.warnings).toContain(t('tool.check_commit_message.warn.trailing_period'))
   })
 
   it('requires a BREAKING CHANGE footer behind a bang', () => {
-    const outcome = checkCommitMessage({ message: 'feat(cli)!: drop the old flag' }, t)
+    const outcome = checkCommitMessage({ message: 'feat(cli)!: drop the old flag' }, config, t)
     expect(outcome.ok).toBe(false)
     expect(outcome.errors).toContain(t('tool.check_commit_message.error.breaking_without_footer'))
   })
@@ -97,6 +104,7 @@ describe('src/tools/check-commit-message.ts', () => {
   it('accepts a bang that explains itself in a footer', () => {
     const outcome = checkCommitMessage(
       { message: 'feat(cli)!: drop the old flag\n\nBREAKING CHANGE: use --new instead' },
+      config,
       t,
     )
     expect(outcome.ok).toBe(true)
@@ -105,7 +113,7 @@ describe('src/tools/check-commit-message.ts', () => {
 
   it('reports the first over-wide body line only', () => {
     const wide = 'w'.repeat(73)
-    const outcome = checkCommitMessage({ message: `fix: thing\n\n${wide}\n${wide}` }, t)
+    const outcome = checkCommitMessage({ message: `fix: thing\n\n${wide}\n${wide}` }, config, t)
     const lines = outcome.warnings.filter((line) => line.includes('72'))
     expect(lines).toHaveLength(1)
   })
@@ -116,14 +124,18 @@ describe('src/tools/check-commit-message.ts', () => {
     // row looks like once the leading pipe is written as part of the cell.
     const url = `https://example.com/${'a'.repeat(80)}`
     const row = `column | ${'a'.repeat(80)} |`
-    const outcome = checkCommitMessage({ message: `docs: thing\n\n${url}\n${row}` }, t)
+    const outcome = checkCommitMessage({ message: `docs: thing\n\n${url}\n${row}` }, config, t)
     expect(outcome.warnings).toEqual([])
   })
 
   it('still reports a body line that merely starts with a pipe', () => {
     // Leading-pipe tables are not what the exemption matches, so the warning
     // stands: a false negative here would hide a genuinely unwrapped body.
-    const outcome = checkCommitMessage({ message: `docs: thing\n\n| ${'a'.repeat(80)} |` }, t)
+    const outcome = checkCommitMessage(
+      { message: `docs: thing\n\n| ${'a'.repeat(80)} |` },
+      config,
+      t,
+    )
     expect(outcome.warnings).toContain(
       t('tool.check_commit_message.warn.body_width', { length: 84, max: 72 }),
     )
@@ -132,6 +144,7 @@ describe('src/tools/check-commit-message.ts', () => {
   it('warns when a change spans more than one module', () => {
     const outcome = checkCommitMessage(
       { message: 'refactor: split the parser', files: ['src/a.ts', 'tests/a.spec.ts'] },
+      config,
       t,
     )
     expect(outcome.warnings).toContain(
@@ -140,7 +153,11 @@ describe('src/tools/check-commit-message.ts', () => {
   })
 
   it('warns when a single-module change names no scope', () => {
-    const outcome = checkCommitMessage({ message: 'fix: stop crashing', files: ['src/a.ts'] }, t)
+    const outcome = checkCommitMessage(
+      { message: 'fix: stop crashing', files: ['src/a.ts'] },
+      config,
+      t,
+    )
     expect(outcome.warnings).toContain(
       t('tool.check_commit_message.warn.missing_scope', { module: 'src' }),
     )
@@ -149,6 +166,7 @@ describe('src/tools/check-commit-message.ts', () => {
   it('stays quiet about scope when the change already names one', () => {
     const outcome = checkCommitMessage(
       { message: 'fix(cli): stop crashing', files: ['src/a.ts'] },
+      config,
       t,
     )
     expect(outcome.warnings).not.toContain(

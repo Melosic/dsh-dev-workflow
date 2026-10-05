@@ -283,7 +283,7 @@ export function createPreReleaseTrigger(
     options.log(t('trigger.pre_release.detected'))
 
     const packageVersion = await readPackageVersion(join(cwd, 'package.json'))
-    const changelog = await readText(join(cwd, config.docs.changelog))
+    const changelog = await readText(join(cwd, config.docs.changelog.get()))
     const version = release.tag?.replace(/^v/, '') ?? packageVersion
 
     const input: ReleaseInput = {

@@ -1,5 +1,6 @@
 import { isAbsolute, join } from 'node:path'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { CheckResult } from '../tools/result.js'
 import { checkCommitMessage } from '../tools/check-commit-message.js'
@@ -159,15 +160,20 @@ function uncheckedBoxes(body: string): number {
  * template; the issue reference is advisory, because nothing here can tell
  * whether an issue exists to reference.
  * @param input - the title and description known about the pull request.
+ * @param config - resolved plugin configuration.
  * @param t - translator for every returned line.
  * @returns blocking problems and advisory observations.
  */
-export function evaluatePullRequest(input: PullRequestInput, t: Translate): CheckResult {
+export function evaluatePullRequest(
+  input: PullRequestInput,
+  config: Config,
+  t: Translate,
+): CheckResult {
   const errors: string[] = []
   const warnings: string[] = []
 
   if (input.title !== undefined) {
-    const title = checkCommitMessage({ message: input.title }, t)
+    const title = checkCommitMessage({ message: input.title }, config, t)
     errors.push(...title.errors)
     warnings.push(...title.warnings)
   }
@@ -230,7 +236,7 @@ export function createPrePrTrigger(
       ...(pullRequest.title === undefined ? {} : { title: pullRequest.title }),
       ...(body === undefined ? {} : { body }),
     }
-    const outcome = evaluatePullRequest(input, t)
+    const outcome = evaluatePullRequest(input, options.config(), t)
     options.state.record({
       kind: 'pr',
       ok: outcome.ok,
@@ -250,7 +256,7 @@ export function createPrePrTrigger(
       askKey: 'trigger.pre_pr.ask',
       outcome,
       t,
-      assess: (translator) => evaluatePullRequest(input, translator),
+      assess: (translator) => evaluatePullRequest(input, options.config(), translator),
     })
   }
 }

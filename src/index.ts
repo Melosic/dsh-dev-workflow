@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import { Config } from './config.js'
 import type { Translate } from './i18n.js'
 import { createTranslator, resolveLocale } from './i18n.js'
@@ -16,6 +16,7 @@ import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createPrePrTrigger } from './triggers/pre-pr.js'
 import { createPreReleaseTrigger } from './triggers/pre-release.js'
 import { createGitGuard } from './guard/git-guard.js'
+import type { ApprovalService } from './guard/approval.js'
 import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
 import { createSecretGuard } from './guard/secret-guard.js'
@@ -59,22 +60,47 @@ export interface Runtime {
 }
 
 /**
+ * The part of the `settings` service this plugin uses.
+ *
+ * The service is read through `ctx.get`, so its shape is described here rather
+ * than imported: the package ships no types at all.
+ */
+interface SettingsPresentation {
+  /**
+   * Declare who renders this plugin's page.
+   * @param page - `auto: false` turns off the page generated from the schema.
+   * @param owner - the plugin fiber the choice belongs to.
+   * @returns the disposer that withdraws the choice.
+   */
+  configure(page: { auto?: boolean }, owner: Fiber): () => void
+}
+
+/**
  * Create the runtime for one plugin instance.
  * @param ctx - the context the plugin is applied to.
  * @param config - resolved configuration.
  * @returns the runtime, with nothing registered yet.
  */
 export function createRuntime(ctx: Context, config: Config): Runtime {
-  // `locale: 'auto'` is resolved once, at load: the runtime locale cannot change
-  // while a session is running, and a stable value keeps the catalog entry and
-  // the skill body in the same language.
-  const locale = resolveLocale(config.locale)
-  const translate = createTranslator(locale)
+  // `locale: 'auto'` is resolved to one concrete language, but not once for the
+  // life of the process: the settings panel can change it, so it is re-resolved
+  // whenever it is read and the dictionary is rebuilt only when it actually
+  // moved. The catalog entry and the skill body then stay in the same language.
+  let locale = resolveLocale(config.locale.get())
+  let translate = createTranslator(locale)
+  const refreshLocale = (): void => {
+    const next = resolveLocale(config.locale.get())
+    if (next === locale) return
+    locale = next
+    translate = createTranslator(next)
+  }
 
   // Only one locale is ever translated per process, but the accessor keeps the
   // call sites identical to the ones an explicit locale switch would need.
-  const t: Translate = (key, params) =>
-    params === undefined ? translate(key) : translate(key, params)
+  const t: Translate = (key, params) => {
+    refreshLocale()
+    return params === undefined ? translate(key) : translate(key, params)
+  }
 
   const state = createWorkflowState()
   const gitCache = new Map<string, GitRunner>()
@@ -83,6 +109,20 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
   // is what makes `off` more than a flag: the resident cost of this plugin is
   // exactly the registrations, so they have to go away.
   const releases: (() => void)[] = []
+
+  // What the live registrations were built from. Everything else a setting
+  // controls is read at the moment a check or a guard runs, so it needs no
+  // rebuilding; these switches decide whether something is registered at all.
+  const registrationSignature = (): string =>
+    [
+      config.mode.get(),
+      config.enableOwnTrigger.get(),
+      config.gitGuard.enabled.get(),
+      config.commandGuard.enabled.get(),
+      config.fileGuard.enabled.get(),
+      config.secretGuard.enabled.get(),
+    ].join(':')
+  let registered = ''
 
   const bind = (dispose: () => void): void => {
     let released = false
@@ -100,8 +140,9 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
   }
 
   const activate = (): void => {
+    registered = registrationSignature()
     const registrations: (() => void)[] = [
-      ctx.tools.register(createCheckCommitMessageTool({ t: () => t })),
+      ctx.tools.register(createCheckCommitMessageTool({ t: () => t, config: () => config })),
       ctx.tools.register(
         createCheckDocSyncTool({ t: () => t, config: () => config, git: runtime.git }),
       ),
@@ -120,7 +161,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
           createDevWorkflowCommand({
             config,
             t,
-            locale,
+            locale: () => runtime.locale(),
             active: () => runtime.active,
             setActive: (on) => runtime.setActive(on),
             state,
@@ -139,7 +180,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // pull-request, or release event. Each recognises its action by the shell
     // command that performs it, and the commit gate stays first so a change that
     // is already being fixed at commit time is not judged twice.
-    if (config.enableOwnTrigger) {
+    if (config.enableOwnTrigger.get()) {
       registrations.push(
         ctx.on(
           'tools/pre-execute',
@@ -179,7 +220,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // The guard is a separate listener on the same gate rather than part of the
     // trigger: one protects conventions and the other protects work, and they
     // are switched on independently.
-    if (config.gitGuard.enabled) {
+    if (config.gitGuard.enabled.get()) {
       registrations.push(
         ctx.on(
           'tools/pre-execute',
@@ -189,6 +230,10 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             log: (message) => ctx.logger.debug(message),
             audit,
+            // Read at call time and never injected: a profile without an
+            // approval service still mounts the plugin, and every question then
+            // falls back to the dispatcher's own prompt.
+            approval: () => ctx.get('approval') as ApprovalService | undefined,
           }),
         ),
       )
@@ -197,7 +242,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // The remaining guards run after the git one, from the widest blast radius to
     // the narrowest: a machine, then a filesystem, then a single secret. Each is
     // its own switch, so a profile can keep one without the others.
-    if (config.commandGuard.enabled) {
+    if (config.commandGuard.enabled.get()) {
       registrations.push(
         ctx.on(
           'tools/pre-execute',
@@ -212,7 +257,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       )
     }
 
-    if (config.fileGuard.enabled) {
+    if (config.fileGuard.enabled.get()) {
       registrations.push(
         ctx.on(
           'tools/pre-execute',
@@ -227,7 +272,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       )
     }
 
-    if (config.secretGuard.enabled) {
+    if (config.secretGuard.enabled.get()) {
       registrations.push(
         ctx.on(
           'tools/pre-execute',
@@ -249,7 +294,10 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     get active() {
       return releases.length > 0
     },
-    locale: () => locale,
+    locale: () => {
+      refreshLocale()
+      return locale
+    },
     t: () => t,
     git: (cwd) => {
       const existing = gitCache.get(cwd)
@@ -262,13 +310,42 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     setActive: (on) => {
       if (on === runtime.active) return
       if (on) activate()
-      else for (const release of releases.splice(0).reverse()) release()
+      else {
+        for (const release of releases.splice(0).reverse()) release()
+        registered = ''
+      }
     },
   }
 
-  if (config.mode === 'on') activate()
+  // The panel writes configuration, which the loader commits into the live
+  // reference without reloading this plugin. Every read then sees the new value
+  // by itself; only the registrations have to be rebuilt, and only when one of
+  // the switches they were built from actually moved. A manual
+  // `/dev-workflow off` is not undone unless the edit itself asks for a switch:
+  // the signature is unchanged by any other setting.
+  const resync = (): void => {
+    refreshLocale()
+    if (registered === registrationSignature()) return
+    runtime.setActive(false)
+    if (config.mode.get() === 'on') runtime.setActive(true)
+  }
+  // Declared on this context, not inside the `inject` below: the loader delivers
+  // the event to listeners owned by this plugin's own fiber.
+  void ctx.events.on('loader/volatile-update', () => {
+    resync()
+  })
+
+  // The plugin renders its own page, so the schema-driven one is turned off.
+  // The service is optional — a profile without it simply has no panel.
+  void ctx.inject(['settings'], (child) => {
+    child.effect(() =>
+      (child.get('settings') as SettingsPresentation).configure({ auto: false }, ctx.fiber),
+    )
+  })
+
+  if (config.mode.get() === 'on') activate()
   ctx.logger.debug(
-    `[dsh-dev-workflow] mounted (mode=${config.mode}, locale=${locale}, ownTrigger=${config.enableOwnTrigger})`,
+    `[dsh-dev-workflow] mounted (mode=${config.mode.get()}, locale=${locale}, ownTrigger=${config.enableOwnTrigger.get()})`,
   )
 
   return runtime
