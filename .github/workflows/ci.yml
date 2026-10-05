@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A private repository gets 2000 GitHub Actions minutes per month. Running a
+# single Node version keeps frequent pushes from eating that budget; Node 22 is
+# added once the project is stable, not before.
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `src/` does not exist yet in the early phases. `scripts/with-src.mjs`
+      # exits 0 with a notice instead of letting tsc fail with TS18003
+      # ("No inputs were found in config file"), which is what makes this step
+      # conditional on the sources actually being there.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # Locale key alignment, and that the bundle patch is both declared and
+      # shipped. Translation *correctness* is intentionally not checked here:
+      # it is a human review item.
+      - name: Verify locale keys and bundle manifest
+        run: node scripts/ci-checks.mjs

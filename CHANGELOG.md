@@ -21,6 +21,13 @@
 - 双语 README：`README.md`（英文）与 `README.zh.md`（中文）。
 - `CONTRIBUTING.md`：环境搭建、分支命名、提交规范、PR 流程、国际化同步规则、安全操作规范。
 - `LICENSE`：MIT。
+- `locale/en.json` 与 `locale/zh.json`：面向用户的展示元数据与文本骨架，key 集合完全对齐。
+- `scripts/ci-checks.mjs`：CI 守护，校验两个 locale 字典 key 一致，且 `cordis.patch.yml` 既被
+  `dsh.bundle.patch` 声明又列入 `files`。
+- `.github/workflows/ci.yml`：push 到 main 与 PR 时执行 install / typecheck / lint / format / test /
+  build / locale 与 manifest 校验。
+- commitlint（`commitlint.config.mjs`）与 husky 钩子：`commit-msg` 校验提交信息，
+  `pre-commit` 对暂存文件跑 ESLint 与 Prettier。
 
 ### Changed
 

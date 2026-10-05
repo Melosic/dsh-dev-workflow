@@ -58,7 +58,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --passWithNoTests"
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "ci:checks": "node scripts/ci-checks.mjs",
+    "prepare": "husky"
   },
   "dependencies": {},
   "peerDependencies": {

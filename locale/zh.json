@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "title": "开发工作流",
+    "description": "开发工作流守门员：以技能注入规范，校验提交信息与文档同步，并守护危险的 git 命令。"
+  },
+  "command.toggle.description": "开启或关闭开发工作流守门员。",
+  "command.toggle.status.on": "dev-workflow 已开启。规范以简短摘要常驻，细节按需读取。",
+  "command.toggle.status.off": "dev-workflow 已关闭。不再注入摘要，也不再做任何检查。",
+  "tool.check_commit_message.description": "按 Conventional Commits 校验提交信息。",
+  "tool.check_commit_message.error.missing_type": "提交信息缺少类型前缀。",
+  "tool.check_commit_message.error.unknown_type": "提交类型不在允许列表内。",
+  "tool.check_commit_message.ok": "提交信息符合 Conventional Commits。",
+  "tool.check_doc_sync.description": "检查文档是否与它描述的代码一起更新。",
+  "tool.check_doc_sync.warn.stale": "被文档描述的文件已变更，但对应文档未更新。",
+  "tool.check_doc_sync.ok": "文档与代码保持同步。",
+  "error.not_a_git_repository": "当前目录不是 git 仓库。",
+  "error.git_not_available": "PATH 中找不到 git。",
+  "security.guard.force_push": "force push 会重写远端历史，可能丢掉他人的提交。",
+  "security.guard.hard_reset": "hard reset 会永久丢弃未提交的改动。",
+  "security.guard.clean_force": "git clean -f 会永久删除未跟踪的文件。",
+  "security.guard.branch_delete": "删除分支可能丢弃只存在于该分支的提交。",
+  "security.guard.rebase": "rebase 会重写历史。",
+  "security.guard.amend": "对已发布的提交做 amend 会重写共享历史。",
+  "security.guard.checkout_discard": "checkout -- . 会丢弃所有未暂存的改动。",
+  "security.guard.no_verify": "--no-verify 会跳过保护本仓库的钩子。",
+  "security.guard.suggest_force_with_lease": "建议改用 --force-with-lease：它会拒绝覆盖你尚未看到的提交。",
+  "trigger.pre_commit.detected": "正在按项目工作流规范检查本次提交。",
+  "skill.summary": "项目工作流规范已作为技能提供。在提交、建分支或改文档之前先读它。"
+}
