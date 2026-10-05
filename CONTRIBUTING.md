@@ -47,6 +47,34 @@ pnpm install
 `lint-staged@17` 要求 Node >= 22.22.1，`@commitlint/*@21` 要求 Node >= 22.12.0，
 两者都会破坏 Node 20 支持。升级这些依赖时必须同步提升 `engines.node`。
 
+## 依赖管理
+
+- 包管理器固定为 **pnpm**，不使用 npm，也不使用 yarn。
+- `pnpm-lock.yaml` 提交到仓库；`node_modules/` 不提交。
+- **不要混用包管理器。** `npm install` 或 `yarn add` 会写出与本仓库无关的锁文件，
+  让下一个人装出不同的依赖树。
+- 安装运行时依赖用 `pnpm add <pkg>`，安装开发依赖用 `pnpm add -D <pkg>`，
+  升级依赖用 `pnpm update`。
+
+## 版本号
+
+- 版本号**只在 `package.json` 的 `version` 字段维护**，这是唯一来源。
+- 需要展示版本号的地方（README 徽章、文档里的版本引用）都从它派生，不硬编码字面量。
+- 理由：版本号散落在多处时，总有一处会先过期，而「哪一处是权威」也会随之变得模糊。
+
+## 忽略规则（`.gitignore`）
+
+必须包含以下条目：
+
+- `node_modules/`
+- `lib/`
+- `dist/`
+- `.dev-docs/`
+- `*.log`
+- `.DS_Store`
+
+构建产物、编辑器临时文件、本机开发文档都不进版本控制。
+
 ## 分支命名
 
 采用 GitHub Flow，只使用以下前缀：
@@ -122,9 +150,12 @@ docs(readme): document the /dev-workflow command
 - 路径处理用 `node:path` / `node:url`，不要拼接正斜杠字符串——本项目的开发环境包含 Windows。
 - 包为 ESM-only，源码必须使用 ESM 语法（`import` / `export`，无 `require`）。
 
-## 测试命名
+## 测试
 
-测试文件与源文件同目录，命名 `<name>.test.ts`。
+- 测试文件放在 **`tests/` 目录下**（`tsconfig.json` 已把 `**/*.test.ts` 排除在构建之外）。
+- 命名：`describe` 用被测模块名，`it` 用行为描述。
+- 覆盖率建议 ≥ 80%，新代码优先。
+- 新功能、修 bug、重构都需要补测试；纯文档、纯配置变更不需要。
 
 测试名用英文、描述行为而非实现：
 
