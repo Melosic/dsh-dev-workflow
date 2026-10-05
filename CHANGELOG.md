@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/PUBLISHING.md` 的 v0.1.0 发布记录补上真实结果：提交 `219dbdb`、PR #11、
+  annotated tag、发布产物 66 文件 / `shasum 8e35f3866fe53bd1973577ddf1ccbb73e5e0ff4b`、
+  发布认证需要 bypass-2FA 的 granular token、以及 GitHub Release 地址；
+  并记下「发布成功后 packument 短时 404 是 CDN 负缓存，判断发布是否成功应看 PUT 状态码
+  与 tarball shasum」。
+
 ## [0.1.0] - 2026-10-05
 
 ### Added

@@ -271,12 +271,22 @@ git push origin main --follow-tags
 | 步骤 | 结果 |
 | --- | --- |
 | 分支 | `release/0.1.0`（`main` 受保护，不能直接推） |
-| 提交 | `chore(release): prepare v0.1.0` |
-| tag | `v0.1.0` |
+| 提交 | `chore(release): prepare v0.1.0`（`219dbdb`） |
+| 合并 | PR [#11](https://github.com/Melosic/dsh-dev-workflow/pull/11) squash 合并，`main` = `389b4c6` |
+| tag | `v0.1.0`（annotated，指向 `389b4c6`） |
 | 版本号 | `0.1.0`（发前已是，无需修改） |
 | 安装命令 | `dsh plugin --profile <name> add @melosic/dsh-dev-workflow`，或从源码目录安装 |
 | npm 包名 | `@melosic/dsh-dev-workflow`（`dsh-dev-workflow` 已被他人占用） |
+| 发布认证 | 需要 **bypass-2FA 的 granular access token**；会话 token 会被 `E403 Two-factor authentication ... is required` 拒绝 |
+| 发布产物 | 66 个文件 / 69.3 kB tarball / 232.0 kB 解包；`shasum 8e35f3866fe53bd1973577ddf1ccbb73e5e0ff4b` |
+| 发布结果 | `PUT .../@melosic%2fdsh-dev-workflow → 200`，`dist-tags.latest = 0.1.0` |
+| GitHub Release | <https://github.com/Melosic/dsh-dev-workflow/releases/tag/v0.1.0> |
 | 审计 | moderate 1（`fflate`，开发期路径）、high 1（`braces`，上游无修复版），运行期零依赖 |
+
+发布后有一段时间 packument（`GET /@melosic%2fdsh-dev-workflow`）仍返回 404，
+而 `/…/0.1.0`、`/-/package/…/dist-tags` 与 tarball 都已 200 —— 这是 CDN 的负缓存，
+不是发布失败。判断发布是否成功的可靠信号是 **PUT 的状态码**与 **tarball 的 shasum**，
+不要用发布后立刻执行的那条 `npm view` 下结论。
 
 ## 相关文档
 
