@@ -18,8 +18,13 @@ DSH 的开发工作流守门员与编排器插件。
 - **git-guard 安全守卫。** 危险 git 命令（force push、hard reset、`clean -f`、`branch -D`、
   rebase、`commit --amend`、`checkout -- .`）会在执行前被拦截。
   每个操作的默认值都是 `ask`，绝不默认 `allow`。识别到裸 `--force` 时会提示改用 `--force-with-lease`。
+- **四道守卫，一个形状。** 除了 git，插件还挡住收不回来的事：不可逆的 shell 命令
+  （`rm -rf /`、`mkfs`、`dd of=/dev/sda`、fork 炸弹）默认 `ask`；读取敏感路径
+  （`.env`、`*.pem`、`.ssh/id_rsa`、`secrets/`）直接 `deny`；调用参数里带着真实凭据
+  （AWS key、GitHub 与 Slack token、私钥）同样 `deny`，且只报模式名、绝不回显。
+  守卫的判定还会写进脱敏后的审计日志——凭据变成 `[REDACTED]`，敏感路径只留文件名。
 - **一个开关。** `/dev-workflow` 在 `on`（默认）与 `off` 之间切换；`status` 报告当前模式、语言、
-  最近一次检查结果与守卫开口的次数；`check` 按工作流规则即时检查整个工作区。
+  最近一次检查结果、守卫开口的次数，以及审计日志的落点；`check` 按工作流规则即时检查整个工作区。
   关闭时会注销全部注册，因此它是「零成本」，而不只是「安静地不回答」。
 
 ## 快速开始

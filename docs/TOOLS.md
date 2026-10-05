@@ -129,15 +129,18 @@ rename 形态（`old -> new`）取右侧，并还原 git 的 C 风格转义（`\
 
 | 子命令 | 行为 |
 | --- | --- |
-| 无参数 / `status` | 输出四行：开关状态、locale（含配置里的原始值）、最近一次检查结果、守卫命中计数 |
+| 无参数 / `status` | 输出五行：开关状态、locale（含配置里的原始值）、最近一次检查结果、守卫命中计数、审计记录状态 |
 | `on` | 注册全部资源，并回显状态行 |
-| `off` | 注销全部资源（工具、技能 provider、命令、两个监听器），并回显状态行 |
+| `off` | 注销全部资源（工具、技能 provider、命令、五个监听器），并回显状态行 |
 | `check` | 对当前工作区跑一次 `evaluate()`，结果记入状态，输出 `✖` / `⚠` 清单 |
 | 其它 | `{kind: 'error'}`，提示可用取值 |
 
 `status` 的守卫命中计数把字典 key 渲染成可读文本并带上次数，例如
 `Guard hits: A force push rewrites remote history…×2, git clean -f deletes untracked files permanently.×1`；
 一次都没命中时输出一条明确的「无」。
+
+第五行是审计记录的状态：开着时给出 `audit.path`，关掉时明确说「未启用」。审计是守卫工作中
+用户从外部看不到的那部分，所以它值得在状态里占一行。
 
 `check` 在 git 不可用或不在仓库里时返回 `{kind: 'error', text}`，而不是抛异常。
 

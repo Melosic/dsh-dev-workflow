@@ -21,10 +21,16 @@ workflow capabilities on top of the modes you already use.
   rebase, `commit --amend`, `checkout -- .`) are intercepted before they run. Each operation
   defaults to `ask`, never to `allow`. A bare `--force` is reported with a suggestion to use
   `--force-with-lease` instead.
+- **Four guards, one shape.** Beyond git, the plugin refuses what cannot be undone: irrecoverable
+  shell commands (`rm -rf /`, `mkfs`, `dd of=/dev/sda`, fork bombs) at `ask` by default; reads of
+  sensitive paths (`.env`, `*.pem`, `.ssh/id_rsa`, `secrets/`) at `deny`; and tool arguments
+  carrying live credentials (AWS keys, GitHub and Slack tokens, private keys) at `deny`, reported
+  by pattern name and never echoed back. What the guards decide is also written to a redacted
+  audit log — credentials become `[REDACTED]`, sensitive paths keep only their file name.
 - **One switch.** `/dev-workflow` toggles between `on` (default) and `off`; `status` reports the
-  mode, the locale, the last check, and how often the guards have spoken; `check` runs the
-  workflow rules over the working tree on demand. Turning it `off` unregisters everything, so it
-  costs nothing rather than merely staying quiet.
+  mode, the locale, the last check, how often the guards have spoken, and where the audit log
+  goes; `check` runs the workflow rules over the working tree on demand. Turning it `off`
+  unregisters everything, so it costs nothing rather than merely staying quiet.
 
 ## Quick Start
 
