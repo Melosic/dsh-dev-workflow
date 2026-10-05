@@ -46,7 +46,11 @@ src/
 │   ├── result.ts             CheckResult 与统一的渲染格式
 │   ├── check-commit-message.ts
 │   └── check-doc-sync.ts
-├── triggers/pre-commit.ts    tools/pre-execute 上的提交前检查
+├── triggers/
+│   ├── shared.ts             三个触发器共用的截断、双语提示与文件读取
+│   ├── pre-commit.ts         tools/pre-execute 上的提交前检查
+│   ├── pre-pr.ts             gh pr create 的标题与描述检查
+│   └── pre-release.ts        git tag / npm publish 的发版检查
 ├── guard/
 │   ├── shared.ts             四道守卫共用的事件接线与档位决策
 │   ├── git-guard.ts          危险 git 命令
@@ -95,34 +99,38 @@ disposer，`setActive(false)` 逆序逐个调用。
 
 事件监听器（`ctx.on`）没有这个问题：`on` 返回的 disposer 本来就归当前 fiber。
 
-## 数据流：一次提交检查
+## 数据流：一次动作检查
 
 ```
 agent 调 bash/pwsh 工具
         │
         ▼
-tools/pre-execute   ← Cordis waterfall，本插件最多挂五个监听器
-        │              ① src/triggers/pre-commit.ts  （提交前检查）
-        │              ② src/guard/git-guard.ts      （危险 git 命令）
-        │              ③ src/guard/command-guard.ts  （危险 shell 命令）
-        │              ④ src/guard/file-guard.ts     （敏感路径）
-        │              ⑤ src/guard/secret-guard.ts   （凭据泄漏）
+tools/pre-execute   ← Cordis waterfall，本插件最多挂七个监听器
+        │              ① src/triggers/pre-commit.ts   （提交前检查）
+        │              ② src/triggers/pre-pr.ts       （PR 创建前检查）
+        │              ③ src/triggers/pre-release.ts  （打 tag / 发布前检查）
+        │              ④ src/guard/git-guard.ts       （危险 git 命令）
+        │              ⑤ src/guard/command-guard.ts   （危险 shell 命令）
+        │              ⑥ src/guard/file-guard.ts      （敏感路径）
+        │              ⑦ src/guard/secret-guard.ts    （凭据泄漏）
         │
         ├─ 监听器先 await next()：链上后面的门禁与内置行为先决定
         │
         └─ 上游 allow 时才自查，命中后返回 ask（guard 也返回 deny）
 ```
 
-监听器挂在同一个事件上、互相独立，是刻意的：**一个守规范（提交信息与文档同步），
-四个守工作成果（可能丢数据的 git 命令、不可逆的 shell 命令、不该读的路径、发出即泄漏的
-凭据）**，`enableOwnTrigger` 与各守卫的 `enabled` 分别是它们的开关。它们不共享判定，
-但共享三样东西：
+监听器挂在同一个事件上、互相独立，是刻意的：**三个守规范（提交信息与文档同步、
+PR 标题与描述、发版步骤与 CHANGELOG），四个守工作成果（可能丢数据的 git 命令、
+不可逆的 shell 命令、不该读的路径、发出即泄漏的凭据）**，`enableOwnTrigger` 与各守卫的
+`enabled` 分别是它们的开关。它们不共享判定，但共享四样东西：
 
-- `src/shell.ts`：把命令行归约成 `git <subcommand> <args>` 与命令词序列，涉及命令行的守卫
-  必须对「什么算 git」「什么算程序名」有同一个答案。
+- `src/shell.ts`：把命令行归约成 `git <subcommand> <args>`、`<program> <args>` 与命令词序列，
+  涉及命令行的监听器必须对「什么算 git」「什么算程序名」有同一个答案。
+- `src/triggers/shared.ts`：`detailsOf()` 的截断、`askAbout()` 的双语 `displayReason` 与
+  文件读取，三个约定触发器共用；它们各自只提供识别函数与判定函数。
 - `src/guard/shared.ts`：`createGuard()` 提供接线、计数与档位决策，四道守卫都只是给它一个
   `detect(exec)`。策略差异（谁是 `ask`、谁固定 `deny`）留在各自文件里。
-- `src/state.ts`：命中计数与「同一会话同一问题只提示一次」的记忆。
+- `src/state.ts`：命中计数与「同一会话同一问题只提示一次」的记忆（四种 `CheckKind`）。
 
 `next()` 返回 `{kind:'allow'}` 之外的值时，本插件一律原样透传，绝不改判上游的决定；
 guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上游的 `ask`）时才覆盖，
@@ -139,6 +147,10 @@ guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上
 | `triggers/pre-commit.ts` | 同上，但用另一语言的 `t` | 渲染双语提示 |
 | `commands/dev-workflow.ts` | 工作区文件集（无提交信息） | `/dev-workflow check` |
 
+`src/tools/check-commit-message.ts` 的 `checkCommitMessage(input, t)` 也被两处调用：
+工具本身，以及 `triggers/pre-pr.ts`——**PR 标题在 squash merge 之后就是 `main` 上的提交信息**，
+所以它必须过同一套规则，而不是另写一份更松的校验。
+
 「纯函数」这条不是洁癖：触发器要为审批提示同时给出中英两份，而**每一份都必须用对应语言的
 翻译器重新跑一遍 `evaluate`**。如果清单是一次算好再翻译外层的，就会出现「英文提示里嵌着
 中文问题」。详见 [docs/TRIGGERS.md](TRIGGERS.md#提示的语言)。
@@ -148,7 +160,8 @@ guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上
 
 ## 不跑 shell 的命令行解析
 
-插件需要识别「agent 正要用 `git commit`」和「agent 正要用 `git push --force`」，
+插件需要识别「agent 正要用 `git commit`」「正要用 `gh pr create`」「正要用 `git tag` /
+`npm publish`」和「正要用 `git push --force`」，
 但它**不通过执行 shell 来识别**——那会带来两个问题：需要真的跑一遍命令（有副作用），
 以及依赖 shell 的可用性。
 
@@ -156,11 +169,13 @@ guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上
 
 1. `tokenize()` 处理单双引号、反斜杠转义，把 `&&` / `||` / `;` / `|` / 换行保留为独立 token。
 2. `segments()` 按这些运算符切段，每段独立判断（`pnpm test && git commit -m "..."` 照样命中）。
-3. `gitInvocations()` 跳过前导 `VAR=value` 与 `env`，取程序名 basename，匹配 `git` / `git.exe`，
-   跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，取出子命令。
+3. `programInvocations()` 跳过前导 `VAR=value` 与 `env`，取程序名 basename，返回该段的
+   `{ program, args }`——`git tag`、`npm publish`、`gh pr create` 都从这一步往下判。
+4. `gitInvocations()` 在它之上跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，取出子命令。
 
 它的**刻意的能力边界**：引号里的 `git commit` 不算命令；提交信息含 `$(...)` 或反引号时放弃判定
-（插件看不到 git 最终收到的字面量）；`git commit -F -` 放弃判定。这些不是待修的缺陷，
+（插件看不到 git 最终收到的字面量）；`git commit -F -` 与 `gh pr create --body-file -` 放弃判定。
+这些不是待修的缺陷，
 而是「宁可不开口，也不误报」的取舍，清单见 [docs/TRIGGERS.md](TRIGGERS.md#降级路径)。
 
 ## 错误处理约定

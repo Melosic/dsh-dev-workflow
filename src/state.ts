@@ -7,7 +7,7 @@
 // in-memory structure owned by the plugin fiber, never on disk.
 
 /** Which check produced an outcome. */
-export type CheckKind = 'commit' | 'doc' | 'pr'
+export type CheckKind = 'commit' | 'doc' | 'pr' | 'release'
 
 /** The most recent outcome of one check, as the status line renders it. */
 export interface CheckOutcome {

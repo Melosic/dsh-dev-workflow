@@ -35,6 +35,25 @@
     全部安全默认（`enabled: true`、危险命令 `ask`、没有任何一项默认 `allow`）。
   - `locale/en.json` + `locale/zh.json`：8 个新 key，两本字典 key 与占位符保持对齐。
 - `/dev-workflow status` 增加第五行：审计记录的开关与路径。
+- **补全 PR 触发器与发版触发器。** v0.1.0 只有提交前触发器；现在三个约定触发器齐备，
+  共用 `src/triggers/shared.ts` 的 `detailsOf()` / `askAbout()`（截断、双语 `displayReason`、
+   `MAX_DETAILS = 5` 各一份实现），由 `enableOwnTrigger` 统一开关。
+  - `src/triggers/pre-pr.ts`：识别 `gh pr create`，校验 PR 标题（**直接复用
+    `checkCommitMessage`**——squash merge 后标题就是 main 上的提交信息）、描述的
+    `## What` / `## Why` / `## How to verify` 三段（缺段或段内为空都算缺失）、
+    未勾选的 `- [ ]` 清单项；无 `#<数字>` 的 Issue 引用只给警告。支持
+    `--title` / `--body` / `--body-file`（含 `--opt=value` 写法），
+    `-F` 指向的文件在判定时刻读取，`-F -` 跳过描述规则。
+  - `src/triggers/pre-release.ts`：识别 `git tag <name>` 与 `npm`/`pnpm publish`（同一条命令
+    行两件都做时一起收集）。校验 SemVer、tag 与 `package.json` 的 `version` 是否一致、
+    预发布版本是否被推到 `latest`（未写 `--tag` 时按 npm 的默认值记为 `latest`）、
+    CHANGELOG 是否有 `## [Unreleased]` 段、段内 `###` 分类是否为 Keep a Changelog 的六类之一、
+    `[Unreleased]` 与 `[<version>]` 是否两段皆空。
+  - `src/state.ts` 的 `CheckKind` 由 `'commit' | 'doc'` 扩为四种，新增 `'pr' | 'release'`；
+    targetId 分别为标题指纹与版本号。
+  - `locale/en.json` + `locale/zh.json`：新增 `command.toggle.kind.pr` /
+    `command.toggle.kind.release` 与两个触发器的文案，共 17 个新 key；
+    `trigger.pre_commit.omitted` 提升为共用的 `trigger.omitted`。
 
 ### Changed
 
@@ -42,6 +61,10 @@
   默认值与理由；`docs/CONFIGURATION.md` 补四组新配置；`docs/TRIGGERS.md` 与
   `docs/ARCHITECTURE.md` 的监听器数量与次序更正为「约定 → git → 命令 → 文件 → 密钥」；
   `docs/DEVELOPMENT.md` 补一节「加一整道新守卫要动什么」。
+- `docs/TRIGGERS.md` 补 PR 与发版两个断点的完整说明：为什么三者都挂在 `tools/pre-execute`
+  （事件目录里没有 PR 创建或发版事件，但动作本身经过 `bash` / `pwsh`，能在动作发生前拦下，
+  不构成降级条件）、各自的识别规则与检查项、状态模型扩为四种 `checkType`，
+  并更新能力边界表。
 - `docs/PUBLISHING.md` 的 v0.1.0 发布记录补上真实结果：提交 `219dbdb`、PR #11、
   annotated tag、发布产物 66 文件 / `shasum 8e35f3866fe53bd1973577ddf1ccbb73e5e0ff4b`、
   发布认证需要 bypass-2FA 的 granular token、以及 GitHub Release 地址；

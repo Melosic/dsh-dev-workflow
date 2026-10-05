@@ -11,7 +11,7 @@ pnpm install
 pnpm test:watch     # 边改边跑
 ```
 
-提交前跑与 CI 完全相同的五个检查：
+提交前跑与 CI 完全相同的六个检查：
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
@@ -33,11 +33,11 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 | `src/config.ts` | Schemastery 配置面，唯一声明处 | 每个字段都要有默认值；新字段同步 `docs/CONFIGURATION.md` |
 | `src/i18n.ts` | locale 解析与 `t()` | 新 key 必须同时进 `locale/en.json` 与 `locale/zh.json` |
 | `src/state.ts` | 会话内去重与守卫计数（纯内存） | 不落盘：重启即忘是设计目标 |
-| `src/shell.ts` | 不跑 shell 的命令行解析 | 两个特性共用，改动会同时影响触发器和守卫 |
+| `src/shell.ts` | 不跑 shell 的命令行解析 | 三个特性共用（提交、PR、发版），改动会同时影响触发器与守卫 |
 | `src/checks.ts` | 一次变更的判定逻辑 | 触发器与 `/dev-workflow check` 共用，别只改一侧 |
 | `src/git.ts` | 通过可选服务 `subprocess` 跑 git | 每次使用前重新取服务，不要在插件存活期间缓存 |
 | `src/tools/` | 两个工具的 `defineTool` 定义 | 工具名只能含 `[A-Za-z0-9_-]`，且 ≤ 64 字符 |
-| `src/guard/` | git-guard 的识别与判定 | 新规则默认必须是 `ask` |
+| `src/guard/` | 四道守卫的识别与判定 | 新规则默认必须是 `ask`；`file-guard` / `secret-guard` 固定 `deny` |
 | `src/triggers/` | `tools/pre-execute` 监听器 | waterfall：必须先 `await next()` 再决定 |
 | `src/commands/` | `/dev-workflow` 子命令 | 用户可见文本一律走 `t()` |
 | `locale/` | 插件展示元数据（标题/描述） | 目录名必须是单数 `locale/`，文件名是短 id |
@@ -60,7 +60,13 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 | `tests/i18n.spec.ts` | 两份字典的 key 集合与占位符一致、`t()` 的分语言与回退行为 |
 | `tests/impl.spec.ts` | 两个判定函数与 `evaluate` 的边界：阻塞 vs 建议 |
 | `tests/guard.spec.ts` | 每条 git-guard 规则、三档策略、与上下游门禁的交互 |
+| `tests/command-guard.spec.ts` | 危险 shell 命令的识别与误报边界 |
+| `tests/file-guard.spec.ts` | 敏感路径匹配（目录语义、任意深度）、各工具读哪个字段 |
+| `tests/secret-guard.spec.ts` | 四种凭据模式、可选的高熵检测、脱敏不泄漏 |
+| `tests/audit.spec.ts` | 审计记录的字段、脱敏、路径与写失败 |
 | `tests/trigger.spec.ts` | 什么时候开口、什么时候沉默、去重与跨会话重报 |
+| `tests/trigger-pr.spec.ts` | `gh pr create` 的识别、标题/描述/清单规则 |
+| `tests/trigger-release.spec.ts` | `git tag` / `npm publish` 的识别与发版规则 |
 | `tests/skill-parity.spec.ts` | SKILL 两份语言的标题数量与顺序一致 |
 | `tests/harness.ts` | 公共脚手架：记录注册的假 ctx、假 git、`makeExec` |
 
@@ -79,7 +85,7 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
   一半」和「`feat` 没补 CHANGELOG」这类 `errors` 才会。断言这类行为时写清楚断言在哪一层。
 - **断言报错文本用 `t()` 而不是字面量。** 字典改动时测试会跟着动，而不是留下一条
   读不出意图的字符串比较。
-- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 55 个 key、扁平化后 56 个路径。
+- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 80 个 key、扁平化后 81 个路径。
   数 key 时想清楚数的是哪一层。
 
 ## 加一条新规则要动什么

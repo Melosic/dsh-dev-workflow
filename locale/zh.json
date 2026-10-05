@@ -17,6 +17,7 @@
   "command.toggle.kind.commit": "提交信息",
   "command.toggle.kind.doc": "文档同步",
   "command.toggle.kind.pr": "PR",
+  "command.toggle.kind.release": "版本发布",
   "command.toggle.check.header": "对工作区执行开发工作流检查：",
   "command.toggle.check.clean": "没有发现阻塞性问题。",
   "command.guard.dangerous_warning": "这条命令做了无法撤销的事：{pattern}。",
@@ -71,5 +72,14 @@
   "trigger.pre_pr.error.description": "PR 描述缺少模板要求的段落：{sections}。请说明改了什么、为什么改、以及如何验证。",
   "trigger.pre_pr.error.checklist": "PR 描述里还有 {count} 项检查清单未勾选。请逐项勾选；不适用的请删掉该行。",
   "trigger.pre_pr.warn.issue": "这个 PR 没有关联 Issue。如果有对应 Issue，请引用它（`Closes #12`），以便追溯到这次改动的起因。",
+  "trigger.pre_release.detected": "正在按项目工作流规范检查本次发版。",
+  "trigger.pre_release.reason": "这次发版违反了项目工作流规范。\n{details}",
+  "trigger.pre_release.ask": "开发工作流插件发现这次发版有问题。\n\n{details}\n\n批准则照常发布，拒绝则先修复。",
+  "trigger.pre_release.error.version": "`{version}` 不是语义化版本号。请用 `MAJOR.MINOR.PATCH`，可带预发布后缀，如 `-rc.1`。",
+  "trigger.pre_release.error.version_mismatch": "tag 写的是 `{tag}`，但 package.json 里是 `{version}`。tag 与发布产物必须指向同一个版本号。",
+  "trigger.pre_release.error.prerelease_tag": "`{version}` 是预发布版本，不能发布到 `latest`。请用 `--tag next` 发布。",
+  "trigger.pre_release.error.changelog": "CHANGELOG 里没有 `## [Unreleased]` 段。Keep a Changelog 要求在顶部保留该段，发版正是从这一段切出的。",
+  "trigger.pre_release.error.changelog_category": "`### {section}` 不是 Keep a Changelog 的分类。请使用 Added、Changed、Deprecated、Removed、Fixed 或 Security。",
+  "trigger.pre_release.error.changelog_empty": "CHANGELOG 里没有 {version} 的条目。请写在 `[Unreleased]` 下，或在切版本时移入 `[{version}]` 段。",
   "skill.summary": "项目工作流规范已作为技能提供。在提交、建分支或改文档之前先读它。"
 }

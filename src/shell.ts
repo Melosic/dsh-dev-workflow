@@ -1,7 +1,7 @@
 // Reading shell command lines without running a shell.
 //
 // Every automatic check needs this: the pre-commit trigger asks "does this line
-// create a commit?", the pull request trigger asks "does this line open one?",
+// create a commit?", the release trigger asks "does this line tag or publish?",
 // and the git guard asks "does this line destroy work?". They must agree on
 // where one command ends and the next begins, so the lexing lives here rather
 // than in any of them.
