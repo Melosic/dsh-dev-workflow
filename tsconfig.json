@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    /* Language and environment.
+     * Node 20 supports ES2022 in full, so target/lib stay at ES2022 to match
+     * the `engines.node: ">=20"` declaration in package.json. Do not raise this
+     * to ES2023+ without also raising the declared Node floor. */
+    "target": "ES2022",
+    "lib": ["ES2022"],
+
+    /* Modules: the package is ESM-only (`"type": "module"`), so NodeNext is the
+     * only correct pairing. */
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    /* Emit */
+    "outDir": "lib",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    /* Type checking */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": false,
+
+    /* Interop */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "lib", "dist", "**/*.test.ts"]
+}

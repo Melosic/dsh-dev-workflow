@@ -1,0 +1,85 @@
+{
+  "name": "@melosic/dsh-dev-workflow",
+  "version": "0.1.0",
+  "description": "Development-workflow gatekeeper and orchestrator plugin for DSH: skill-injected conventions, commit/doc-sync checks, and git-guard.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "dev-workflow",
+    "conventional-commits",
+    "workflow"
+  ],
+  "license": "MIT",
+  "author": "Melosic",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.30.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Melosic/dsh-dev-workflow.git"
+  },
+  "homepage": "https://github.com/Melosic/dsh-dev-workflow#readme",
+  "bugs": {
+    "url": "https://github.com/Melosic/dsh-dev-workflow/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "lib/",
+    "assets/",
+    "locale/",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "node scripts/with-src.mjs tsc -p tsconfig.json",
+    "typecheck": "node scripts/with-src.mjs tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage --passWithNoTests"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@deepseek-ai/dsh": ">=0.2.0-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-skill": ">=0.2.0-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.1 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^20.19.43",
+    "eslint": "^9.39.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^4.1.11"
+  }
+}

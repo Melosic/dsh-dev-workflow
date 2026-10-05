@@ -1,0 +1,11 @@
+# DSH bundle patch for @melosic/dsh-dev-workflow.
+#
+# This file is referenced by the "dsh.bundle.patch" field in package.json and is
+# applied to the profile's Cordis entry list when the plugin is installed.
+#
+# The top-level structure is a YAML array of patch operations. `insert` appends
+# entries to the plugin list; the `name` field must be the *package name* of an
+# installed module, never a source path.
+- insert:
+    - id: dsh-dev-workflow
+      name: '@melosic/dsh-dev-workflow'

@@ -1,0 +1,24 @@
+# Normalize all text files to LF in the repository; check out with LF everywhere.
+# The project targets Node.js >= 20 on Windows, macOS, and Linux, and the
+# published package must be byte-identical regardless of the authoring OS.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF so they run in legacy shells.
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Explicitly binary — never let git touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+
+# Lockfile: keep it diffable and reviewable, but mark it generated.
+pnpm-lock.yaml text eol=lf -diff linguist-generated=true
+
+# Keep vendored/build artifacts out of GitHub language statistics.
+lib/** linguist-generated=true
