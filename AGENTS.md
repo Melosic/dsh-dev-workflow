@@ -53,6 +53,7 @@ pnpm test:watch     # Vitest 监听模式
 - 完整开发提示词：`.dev-docs/prompt.md`
 - 当前进度：`.dev-docs/PROGRESS.md`
 - API 核对结论：`.dev-docs/DSH-API-NOTES.md`
+- 文档索引：`docs/README.md`
 - 完整工作流规范：`skills/dsh-dev-workflow/SKILL.md`（英文）/ `skills/dsh-dev-workflow/SKILL.zh.md`（中文）
 - 架构说明：`docs/ARCHITECTURE.md`
 - 开发指引：`docs/DEVELOPMENT.md`
@@ -62,6 +63,7 @@ pnpm test:watch     # Vitest 监听模式
 - 触发策略：`docs/TRIGGERS.md`
 - Token 预算：`docs/TOKEN-BUDGET.md`
 - 安全策略：`docs/SECURITY.md`
+- 发布指引：`docs/PUBLISHING.md`
 - 贡献指引：`CONTRIBUTING.md`
 
 `.dev-docs/` 为本机私有目录，已被 `.gitignore` 忽略，克隆仓库后不一定存在。
