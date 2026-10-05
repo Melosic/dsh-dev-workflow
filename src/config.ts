@@ -142,6 +142,18 @@ export const Config = z.object({
         ]),
     })
     .default({}),
+  /** Detection of credentials in tool arguments, before they leave the process. */
+  secretGuard: z
+    .object({
+      enabled: z.boolean().default(true),
+      /**
+       * Off by default: a high-entropy string is a guess, and a guard that cries
+       * wolf on base64, hashes and long identifiers gets switched off entirely.
+       * The named patterns below it carry no such ambiguity.
+       */
+      genericHighEntropy: z.boolean().default(false),
+    })
+    .default({}),
 })
 
 /** Resolved plugin configuration: every default applied. */

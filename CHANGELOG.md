@@ -28,6 +28,13 @@
   `.npmrc`、`secrets/`；命中即 `deny`（不可配置），因为审批提示本身要展示那条路径，
   而展示路径正是这条规则要阻止的事。新增 `fileGuard{enabled, noRead}` 配置
   （`noRead` 是替换而非追加）与 `security.sensitive_file_blocked` 双语 key。
+- **secret-guard（凭据泄露守卫）**：扫描工具参数对象里的一切值（含数组与嵌套对象），
+  命中 AWS Access Key（`AKIA`）、GitHub token（`ghp_`/`gho_`/`ghs_`/`ghr_`）、
+  Slack token（`xox[baprs]-`）、私钥头四类具名模式即 `deny`。高档位不可配置：
+  凭据一旦发出就收不回来，不存在更低的档。`genericHighEntropy` 默认关闭
+  （高熵是猜测，误报会让守卫被整体关掉）。命中消息只报模式名，**绝不回显匹配到的内容**。
+  新增 `secretGuard{enabled, genericHighEntropy}` 配置与
+  `security.secret_detected`/`security.secret_pattern_matched` 双语 key。
 
 ### Changed
 

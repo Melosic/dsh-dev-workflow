@@ -16,6 +16,7 @@ import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createGitGuard } from './guard/git-guard.js'
 import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
+import { createSecretGuard } from './guard/secret-guard.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -185,6 +186,22 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
         ctx.on(
           'tools/pre-execute',
           createFileGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+          }),
+        ),
+      )
+    }
+
+    // The secret guard scans the whole argument object, not one named field: a
+    // credential is a credential wherever it was pasted.
+    if (config.secretGuard.enabled) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createSecretGuard({
             config: () => config,
             t: () => t,
             state,

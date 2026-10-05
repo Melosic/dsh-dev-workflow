@@ -80,6 +80,19 @@ describe('src/config.ts', () => {
     expect(config.fileGuard.noRead).toEqual(['*.vault'])
   })
 
+  it('defaults the secret guard to enabled with the guessy detector off', () => {
+    const config = Config({})
+
+    expect(config.secretGuard).toEqual({ enabled: true, genericHighEntropy: false })
+  })
+
+  it('turns the high-entropy detector on only when asked', () => {
+    const config = Config({ secretGuard: { genericHighEntropy: true } })
+
+    expect(config.secretGuard.genericHighEntropy).toBe(true)
+    expect(config.secretGuard.enabled).toBe(true)
+  })
+
   it('accepts all three policy values for a guard operation', () => {
     for (const action of ['deny', 'ask', 'allow'] as const) {
       expect(Config({ gitGuard: { rebase: action } }).gitGuard.rebase).toBe(action)
