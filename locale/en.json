@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "title": "Dev Workflow",
+    "description": "Development-workflow gatekeeper: skill-injected conventions, commit-message and doc-sync checks, and a git-guard for destructive git commands."
+  },
+  "command.toggle.description": "Turn the development-workflow gatekeeper on or off.",
+  "command.toggle.status.on": "dev-workflow is on. Conventions stay resident as a short summary; details are read on demand.",
+  "command.toggle.status.off": "dev-workflow is off. Nothing is injected and nothing is checked.",
+  "tool.check_commit_message.description": "Validate a commit message against Conventional Commits.",
+  "tool.check_commit_message.error.missing_type": "The commit message has no type prefix.",
+  "tool.check_commit_message.error.unknown_type": "Unknown commit type.",
+  "tool.check_commit_message.ok": "The commit message follows Conventional Commits.",
+  "tool.check_doc_sync.description": "Check whether documentation was updated together with the code it describes.",
+  "tool.check_doc_sync.warn.stale": "A documented file changed without its document being updated.",
+  "tool.check_doc_sync.ok": "Documentation and code are in sync.",
+  "error.not_a_git_repository": "This is not a git repository.",
+  "error.git_not_available": "git was not found on PATH.",
+  "security.guard.force_push": "A force push rewrites remote history and can discard other people's commits.",
+  "security.guard.hard_reset": "A hard reset discards uncommitted work permanently.",
+  "security.guard.clean_force": "git clean -f deletes untracked files permanently.",
+  "security.guard.branch_delete": "Deleting a branch can discard commits that exist nowhere else.",
+  "security.guard.rebase": "A rebase rewrites history.",
+  "security.guard.amend": "Amending a published commit rewrites shared history.",
+  "security.guard.checkout_discard": "checkout -- . discards all unstaged changes.",
+  "security.guard.no_verify": "--no-verify skips the hooks that protect this repository.",
+  "security.guard.suggest_force_with_lease": "Prefer --force-with-lease: it refuses to overwrite commits you have not seen.",
+  "trigger.pre_commit.detected": "Checking this commit against the project workflow rules.",
+  "skill.summary": "Project workflow conventions are available as a skill. Read it before committing, branching, or changing documentation."
+}
