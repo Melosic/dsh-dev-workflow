@@ -36,6 +36,8 @@
   （DeepSeek function-name 合同）。
 - 国际化字典目录由 `locales/` 修正为 DSH 实际约定的单数 `locale/`，文件名为短语言 id
   （`locale/en.json`、`locale/zh.json`）。
+- `ci.yml` 中关于 Node 版本矩阵的注释已修正：单版本是为控制审查节奏，而非私有仓库的 Actions
+  分钟配额（仓库已转为 public，标准 runner 免费）。
 
 ### Security
 
