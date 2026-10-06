@@ -431,6 +431,7 @@ export interface PanelDescription {
     readonly control: string
     readonly label: string
     readonly hint?: string
+    readonly note?: string
     readonly options?: readonly (string | { readonly value: string })[]
   }[]
   readonly advanced: readonly { readonly path: readonly string[]; readonly label: string }[]
@@ -537,7 +538,16 @@ export const nodeText = (node: RenderedNode): string => renderedText(node.childr
 export function renderSection(panel: LoadedPanel): RenderedNode {
   const dictionary = panel.dictionaries[0]?.dict as
     { readonly en?: Record<string, string> } | undefined
-  const t = (key: string): string => dictionary?.en?.[key] ?? key
+  // The official bound translator is `(key, params)` and substitutes `{name}`
+  // placeholders, so the stub has to accept both or interpolation silently
+  // becomes a no-op in tests.
+  const t = (key: string, params?: Record<string, unknown>): string => {
+    const template = dictionary?.en?.[key] ?? key
+    if (params === undefined) return template
+    return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+      name in params ? String(params[name]) : match,
+    )
+  }
   const component = panel.section.component as (props: Record<string, unknown>) => RenderedNode
   return component({
     ...panel.injected,

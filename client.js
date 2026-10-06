@@ -111,7 +111,7 @@ window.__ModuleLoader__.load({
       'group.audit': 'Audit log',
       'group.advanced': 'Advanced (read-only)',
       'field.mode': 'Plugin mode',
-      'field.locale': 'Message language',
+      'field.locale': 'Plugin text language',
       'field.ownTrigger': 'Run the pre-commit check',
       'field.commitEnabled': 'Check commit messages',
       'field.onFailure': 'On a hard problem',
@@ -140,7 +140,9 @@ window.__ModuleLoader__.load({
       'hint.mode':
         'Off withdraws every tool, skill, command and trigger this plugin registers, so it costs no tokens. The plugin itself stays loaded — enabling or disabling it is the plugin manager\u2019s job.',
       'hint.locale':
-        'The language of what this plugin reports — check results, skill text, approval prompts. The settings page itself follows the language of the DSH interface.',
+        'The language of this plugin\u2019s own text — check results, skill text, approval prompts. It does not decide what language the model writes commits or pull requests in.',
+      'hint.localeResolved':
+        'Auto follows the machine\u2019s own language \u2014 currently {locale} ({tag}).',
       'hint.onFailure':
         'A header that does not parse, a type outside the allowed set, and a `!` without a BREAKING CHANGE footer are hard problems. Length, a trailing period and a missing scope are always warnings.',
       'hint.requireScope':
@@ -196,7 +198,7 @@ window.__ModuleLoader__.load({
       'group.audit': '审计日志',
       'group.advanced': '高级（只读）',
       'field.mode': '插件模式',
-      'field.locale': '消息语言',
+      'field.locale': '插件文案语言',
       'field.ownTrigger': '运行 pre-commit 检查',
       'field.commitEnabled': '检查提交信息',
       'field.onFailure': '出现硬性问题时',
@@ -225,7 +227,8 @@ window.__ModuleLoader__.load({
       'hint.mode':
         '关闭后，本插件注册的工具、技能、命令和触发器全部撤销，不占常驻 token。插件本身仍然加载 —— 启用或停用是插件管理器的事。',
       'hint.locale':
-        '本插件自己产出的文案用什么语言 —— 检查结果、技能正文、审批提示。设置页本身跟随 DSH 界面的语言。',
+        '本插件自身文案的语言 —— 检查结果、技能正文、审批提示。它不决定模型用什么语言写提交信息或 PR。',
+      'hint.localeResolved': '「自动」跟随本机语言，当前为：{locale}（{tag}）。',
       'hint.onFailure':
         'header 无法解析、type 不在允许集合、`!` 缺少 BREAKING CHANGE footer 属于硬性问题。长度、句末句点和缺少 scope 始终只是警告。',
       'hint.requireScope': '关闭时，只有改动落在单个模块里才提示补 scope。',
@@ -327,6 +330,7 @@ window.__ModuleLoader__.load({
         control: 'segments',
         label: 'field.locale',
         hint: 'hint.locale',
+        note: 'hint.localeResolved',
         options: ['auto', 'en-US', 'zh-CN'],
       },
       {
@@ -482,6 +486,20 @@ window.__ModuleLoader__.load({
       return true
     }
     const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+    // `auto` means "follow this machine's own language", so the panel has to say
+    // which language that turned out to be. The Host half resolves it inside the
+    // node process (`src/i18n.ts`); the panel can only ask the browser, which
+    // runs on the same machine. Both read `Intl`, map a `zh` prefix to `zh-CN`
+    // and everything else to `en-US` — the same rule, so they agree.
+    const machineLocale = () => {
+      let tag = 'en-US'
+      try {
+        tag = Intl.DateTimeFormat().resolvedOptions().locale
+      } catch {
+        // An engine without `Intl` keeps the fallback above.
+      }
+      return { tag, locale: tag.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US' }
+    }
 
     /**
      * The save model of the official `SettingsForm`: staged edits, one Save, one
@@ -810,6 +828,9 @@ window.__ModuleLoader__.load({
       const invalid = form.invalidAt(spec.path)
       const label = t(spec.label)
       const disabled = !form.writable
+      // Only `auto` needs the explanation; an explicit choice already names the
+      // language it selects.
+      const machine = spec.note !== undefined && value === 'auto' ? machineLocale() : undefined
       const labelNode = h(
         'label',
         {
@@ -917,6 +938,13 @@ window.__ModuleLoader__.load({
           ? h('div', { className: 'dsw-dev-workflow-fieldRow' }, head, body)
           : h(React.Fragment, null, head, body),
         invalid ? h('p', { className: 'dsw-dev-workflow-invalid' }, t('invalid.number')) : null,
+        machine === undefined
+          ? null
+          : h(
+              'p',
+              { className: 'dsw-dev-workflow-hint', 'data-note': spec.note },
+              t(spec.note, { locale: t(`value.${machine.locale}`), tag: machine.tag }),
+            ),
         spec.hint === undefined
           ? null
           : h('p', { className: 'dsw-dev-workflow-hint' }, t(spec.hint)),

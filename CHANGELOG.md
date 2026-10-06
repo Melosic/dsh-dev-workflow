@@ -144,6 +144,17 @@
   发布认证需要 bypass-2FA 的 granular token、以及 GitHub Release 地址；
   并记下「发布成功后 packument 短时 404 是 CDN 负缓存，判断发布是否成功应看 PUT 状态码
   与 tarball shasum」。
+- 修正 `locale` 这一项的措辞：面板字段名由「消息语言」改为「插件文案语言」
+  （`client.js` 的 `field.locale` / `hint.locale` 两本字典同步），`docs/CONFIGURATION.md`
+  的表格行与 `locale: 'auto'` 一节也一并改写。原来的说法容易被读成
+  「这个开关决定模型用什么语言写提交信息、PR」——它管不到这件事：提交信息的语言规则
+  写在技能里（subject 一律英文，正文与页脚项目内自选一种），中英两版规则逐字相同；
+  这个开关只决定插件自身文案（检查结果、技能正文、审批提示）用哪种语言。
+- 面板在 `locale` 选中 `auto` 时直接标出它当前解析成哪个语言（新增 `hint.localeResolved`
+  键，双字典同步），例如「「自动」跟随本机语言，当前为：中文（zh-Hans-HK）。」——
+  `auto` 是默认值，不写出来用户无法知道自己实际看到的是哪种语言。宿主在 node 进程里
+  解析（`src/i18n.ts` 的 `resolveLocale()`），面板只能在浏览器里用同一条 `zh` 前缀规则
+  复刻；选中显式语言时不显示这一行，因为选项本身已经说明了。
 - 面板底部的两个按钮改为靠右对齐（`action.discard` 那行的 `justify-content: flex-end`）。
   此前这一行没有对齐声明，成功/失败提示的 `flex: 1` 会在提示出现时把按钮推到右侧、
   提示消失后又弹回左侧——同一个按钮在两次保存之间会左右跳。

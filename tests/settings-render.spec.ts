@@ -174,6 +174,30 @@ describe('client.js rendered section', () => {
     expect(saved(), 'reopening the page must not replay an old save').toBeUndefined()
   })
 
+  // `auto` is the default and it is not self-explanatory: the user cannot tell
+  // which language it picked. The panel therefore states it, and only while
+  // `auto` is selected — switching to an explicit language already says which.
+  it('says which language `auto` resolves to, and only for `auto`', async () => {
+    const { panel, scope } = await build()
+    const notes = (): RenderedNode[] =>
+      allNodes(fieldFor(panel, 'locale')).filter((node) => node.props['data-note'] !== undefined)
+    const texts = (): string => notes().map(nodeText).join(' ')
+
+    const [note] = notes()
+    expect(note, 'auto is the default and should be explained').toBeDefined()
+    expect(notes()).toHaveLength(1)
+    // The value is resolved on this machine, so assert the shape and the
+    // mapping rule rather than a hard-coded locale.
+    const tag = Intl.DateTimeFormat().resolvedOptions().locale
+    const resolved = tag.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
+    expect(texts()).toContain(panel.description.dictionaries.en[`value.${resolved}`])
+    expect(texts()).toContain(tag)
+    expect(texts()).not.toContain('{locale}')
+
+    await scope.mutate([{ op: 'set', path: ['locale'], value: 'en-US' }])
+    expect(notes(), 'an explicit choice needs no explanation').toHaveLength(0)
+  })
+
   it('labels every rendered control with a string both dictionaries define', async () => {
     const { panel } = await build()
     const locales = [panel.description.dictionaries.en, panel.description.dictionaries.zh]
@@ -182,6 +206,7 @@ describe('client.js rendered section', () => {
       for (const locale of locales) {
         expect(locale[field.label], `${field.path.join('.')} -> ${field.label}`).toBeDefined()
         if (field.hint !== undefined) expect(locale[field.hint]).toBeDefined()
+        if (field.note !== undefined) expect(locale[field.note]).toBeDefined()
       }
     }
     for (const entry of panel.description.advanced) {
