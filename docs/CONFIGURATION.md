@@ -205,6 +205,11 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 
 - **只作用于 `ask`。** `deny` 永不经过这条路——把某项设成 `deny` 之后不存在「批准过一次就放行」。
 - **拒绝不会被记成批准。** 只有 `allowed-once` 才写入记忆，其余三种都会在下一次重新提问。
+- **`rejected` 不等于「用户点了拒绝」。** 审批策略为 `never`（例如 `danger-full-access` 预设）
+  时，`dsh-user-approval` 的 `decide()` 会**在提问之前**直接返回 `rejected`
+  （`dsh-user-approval/lib/index.js:175 if (this.effectivePolicy(session) === "never") return "rejected"`），
+  根本没有人被问过。所以 `security.guard.approval_rejected` 只陈述结果（未获批准），
+  不写「你拒绝了」——那会把平台的自动拒绝说成用户的决定。
 - **没有审批通道时不自行提问。** 档里没挂审批服务、或这次调用没有 agent，守卫就把问题交回
   dispatcher（与开关关闭时逐字相同的行为），绝不把「问不出来」当成「同意了」。
 - **不吞并别的 gate。** 若另一个 listener 已经拒绝，或者已经要提问，git 守卫不会自己再问一次：

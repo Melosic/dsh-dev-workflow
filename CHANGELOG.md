@@ -162,6 +162,13 @@
   根本没有这个按钮（它在卸载时调 `onDiscard`），所以措辞由本插件定；`取消` 是
   DSH 自带界面里对同一动作的标准说法（`dsh-client-locale` 的 `cancel` 键），也与面板
   关闭面板即可丢弃草稿的行为一致。
+- 修正 `security.guard.approval_rejected` 的措辞：由「你拒绝了这次操作 / You rejected this
+  operation」改为陈述结果（「这次操作未获批准，因此保持被拒状态。」/「This operation was not
+  approved, so it stays refused.」）。审批策略为 `never` 时，`dsh-user-approval` 的 `decide()`
+  **在提问之前**就返回 `rejected`（该包 `lib/index.js:175`），没有任何人被问过，原文案等于
+  把平台的自动拒绝说成用户的决定——上游 `dsh-tools` 的 deny reason（`the user rejected
+  tool "${name}"`，该包 `lib/index.js:3468-3474`）正是同一个毛病，本插件不跟着犯。
+  该文案只在 `rememberApproved: true` 时可达，因此是潜在缺陷而非现网问题。
 
 ## [0.1.0] - 2026-10-05
 

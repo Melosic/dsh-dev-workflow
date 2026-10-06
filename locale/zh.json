@@ -59,7 +59,7 @@
   "security.guard.checkout_discard": "checkout -- . 会丢弃所有未暂存的改动。",
   "security.guard.no_verify": "--no-verify 会跳过保护本仓库的钩子。",
   "security.guard.suggest_force_with_lease": "建议改用 --force-with-lease：它会拒绝覆盖你尚未看到的提交。",
-  "security.guard.approval_rejected": "你拒绝了这次操作，因此它保持被拒状态。",
+  "security.guard.approval_rejected": "这次操作未获批准，因此保持被拒状态。",
   "security.guard.approval_cancelled": "这次操作的审批提问被取消，因此按拒绝处理。",
   "security.guard.approval_unavailable": "这次操作需要审批，但当前没有可用的审批通道，因此按拒绝处理。",
   "security.sensitive_file_blocked": "这次调用指名了敏感文件，已拒绝执行：{file}（命中规则 `{rule}`）。请从环境变量读取该值，或让用户只提供需要的那部分内容，而不是整个文件。",
