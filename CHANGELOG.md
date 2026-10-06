@@ -198,6 +198,18 @@
   安全相关的档位尤其需要这份清单——从 `ask` 改成 `allow` 之后忘改回来，`allow` 会一直
   生效；现在把档位选回 `ask` 并保存，profile 里那一项就被删掉了。`docs/ARCHITECTURE.md`
   的 `unset` 一句同步。
+- **更正 `docs/TOKEN-BUDGET.md` 的按需成本表。** 表里记的还是第三阶段刚写完时的
+  `SKILL.md` 10602 字符 / 212 行、`SKILL.zh.md` 5855 字符 / 173 行；技能在第四、五阶段
+  长了一倍，实际已是 **20367 字符 / 418 行**与 **10289 字符 / 350 行**。常驻那两行
+  （766 / 137 / 903 ≈ 226、522 / 50 / 572 ≈ 240）本次复测完全一致，只有按需部分过期；
+  汇总表的「规范全文」一档随之从 `~5900–10600` 改为 `~10300–20400` 字符。
+- `docs/TRIGGERS.md` 的「降级路径」补第三条：设置面板确实有一处**真实降级**。
+  `ctx.remote.$host` 只暴露 `{ home, isLoopback }`、包私有 `host.call` RPC 只有动态包
+  （vm-sandbox）路径才有（需要 `harness.handle`），所以面板在浏览器侧用同一条 `zh`
+  前缀规则重算 `auto` 的解析结果；`documentAvailable` 由 `$host.isLoopback === true`
+  决定；面板本身经 `ctx.inject(['settings'], …)` 可选，缺 `settings` 的档位只是没有
+  这个页面。前两条降级假设（`tools/pre-execute` 不存在、skill provider 不支持动态内容）
+  经核对**不需要降级**，结论不变。
 
 ## [0.1.0] - 2026-10-05
 
