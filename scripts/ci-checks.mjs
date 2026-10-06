@@ -20,6 +20,10 @@
 //    absent from a clone, so a reader on GitHub cannot resolve "已接受（第七阶段）".
 //    The two files that legitimately keep the numbering are exempt: CONTRIBUTING
 //    defines it, and CHANGELOG is a historical record.
+// 5. The published package must contain the files the host loads. `lib/` is a
+//    build output, absent from a fresh clone, so `prepack` builds first and then
+//    runs this script to prove the entry points exist and that `files` ships
+//    them. See the comment at the check itself for why it does not shell out.
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 

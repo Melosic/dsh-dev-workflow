@@ -250,9 +250,9 @@
   而示例文件按惯例不含真实凭据、且是仓库里最需要被读的文件之一。现在
   `example` / `sample` / `template` / `dist` / `defaults` 五个示例变体放行。
 - 打包不再可能发出缺文件的产品：`package.json` 增加 `prepack`（`pnpm build && pnpm
-  ci:checks`），`scripts/ci-checks.mjs` 增加发布入口存在性检查——`lib/index.js`
-  不存在即失败，`npm pack --dry-run --json` 的清单里缺 `lib/index.js`、`client.js`、
-  `cordis.patch.yml`、`locale/en.json` 或 `skills/dsh-dev-workflow/SKILL.md` 即失败；
+  ci:checks`），`scripts/ci-checks.mjs` 增加发布入口存在性检查——`lib/index.js`、
+  `client.js`、`locale/en.json`、`skills/dsh-dev-workflow/SKILL.md` 任一不存在、
+  或没被 `files` 白名单覆盖即失败（`cordis.patch.yml` 由既有的 patch 检查负责）；
   CI 里 `ci:checks` 排在 `build` 之后。
 
 ### Security
