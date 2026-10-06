@@ -16,6 +16,7 @@ import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createPrePrTrigger } from './triggers/pre-pr.js'
 import { createPreReleaseTrigger } from './triggers/pre-release.js'
 import { createGitGuard } from './guard/git-guard.js'
+import type { ApprovalPolicyReporter } from './approval-policy.js'
 import type { ApprovalService } from './guard/approval.js'
 import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
@@ -190,6 +191,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             git: runtime.git,
             log: (message) => ctx.logger.debug(message),
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
         ctx.on(
@@ -199,6 +201,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
         ctx.on(
@@ -208,6 +211,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
       )
@@ -252,6 +256,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             log: (message) => ctx.logger.debug(message),
             audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
       )
@@ -267,6 +272,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             log: (message) => ctx.logger.debug(message),
             audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
       )
@@ -282,6 +288,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             log: (message) => ctx.logger.debug(message),
             audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
       )

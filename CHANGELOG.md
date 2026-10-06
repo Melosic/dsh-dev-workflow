@@ -29,6 +29,11 @@
   - **不重复 DSH 的插件总开关**，也不改由 DSH 拥有的设置（审批策略、沙箱模式）。
   - 样式只用主题发布的 `--dsw-alias-*` token，类名统一 `dsw-dev-workflow-` 前缀，
     `<style>` 带 `data-plugin` / `data-plugin-css`，HMR 能按归属清理。
+  - **保存成功会在底部给一行提示**（`action.saved`），下一次编辑、取消或关闭设置面板时
+    消失。官方 `SettingsForm` 只报失败、不报成功，而这张表单有 27 个字段：保存成功后唯一的
+    变化只是按钮不再变灰，滚在顶部的人看不出发生过什么。提示属于「这一次打开」，所以不能只
+    记在插件的草稿实例上——设置面板关闭时会卸载这个 section，而草稿实例与插件同生命周期，
+    只记在那里会让提示在下次打开面板时重现。
 - **配置面补齐并全部标记为可变。** `src/config.ts` 的每个叶子都加了 `.volatile()`——这是
   面板能读到并写入的前提；新增九个字段：
   - `commitCheck`：`enabled`（默认 `true`）、`onFailure`（`'warn' | 'block'`，默认 `block`）、
@@ -139,6 +144,49 @@
   发布认证需要 bypass-2FA 的 granular token、以及 GitHub Release 地址；
   并记下「发布成功后 packument 短时 404 是 CDN 负缓存，判断发布是否成功应看 PUT 状态码
   与 tarball shasum」。
+- 修正 `locale` 这一项的措辞：面板字段名由「消息语言」改为「插件文案语言」
+  （`client.js` 的 `field.locale` / `hint.locale` 两本字典同步），`docs/CONFIGURATION.md`
+  的表格行与 `locale: 'auto'` 一节也一并改写。原来的说法容易被读成
+  「这个开关决定模型用什么语言写提交信息、PR」——它管不到这件事：提交信息的语言规则
+  写在技能里（subject 一律英文，正文与页脚项目内自选一种），中英两版规则逐字相同；
+  这个开关只决定插件自身文案（检查结果、技能正文、审批提示）用哪种语言。
+- 面板在 `locale` 选中 `auto` 时直接标出它当前解析成哪个语言（新增 `hint.localeResolved`
+  键，双字典同步），例如「「自动」跟随本机语言，当前为：中文（zh-Hans-HK）。」——
+  `auto` 是默认值，不写出来用户无法知道自己实际看到的是哪种语言。宿主在 node 进程里
+  解析（`src/i18n.ts` 的 `resolveLocale()`），面板只能在浏览器里用同一条 `zh` 前缀规则
+  复刻；选中显式语言时不显示这一行，因为选项本身已经说明了。
+- 面板底部的两个按钮改为靠右对齐（`action.discard` 那行的 `justify-content: flex-end`）。
+  此前这一行没有对齐声明，成功/失败提示的 `flex: 1` 会在提示出现时把按钮推到右侧、
+  提示消失后又弹回左侧——同一个按钮在两次保存之间会左右跳。
+- 底部丢弃草稿的按钮由「放弃 / Discard」改称「取消 / Cancel」。官方 `SettingsForm`
+  根本没有这个按钮（它在卸载时调 `onDiscard`），所以措辞由本插件定；`取消` 是
+  DSH 自带界面里对同一动作的标准说法（`dsh-client-locale` 的 `cancel` 键），也与面板
+  关闭面板即可丢弃草稿的行为一致。
+- 修正 `security.guard.approval_rejected` 的措辞：由「你拒绝了这次操作 / You rejected this
+  operation」改为陈述结果（「这次操作未获批准，因此保持被拒状态。」/「This operation was not
+  approved, so it stays refused.」）。审批策略为 `never` 时，`dsh-user-approval` 的 `decide()`
+  **在提问之前**就返回 `rejected`（该包 `lib/index.js:175`），没有任何人被问过，原文案等于
+  把平台的自动拒绝说成用户的决定——上游 `dsh-tools` 的 deny reason（`the user rejected
+  tool "${name}"`，该包 `lib/index.js:3468-3474`）正是同一个毛病，本插件不跟着犯。
+  该文案只在 `rememberApproved: true` 时可达，因此是潜在缺陷而非现网问题。
+- **权限预设为 `never` 时，插件自己拒绝并说明原因，不再返回一个不会有人回答的 `ask`。**
+  此前四道守卫与三个触发器一律返回 `ask`，而在 `never` 下 `dsh-user-approval` 的
+  `decide()` 在提问前就返回 `rejected`（`lib/index.js:175`），dispatcher 再把结果渲染成
+  「用户拒绝了工具」——用户什么都没看到，模型却被告知用户做了决定。现在这些 gate 先读
+  本会话的有效策略，是 `never` 就自己返回 `deny`，结果与之前相同（都是拒绝），但理由保留
+  守卫自己的判定并追加 `approval.disabled`（说明「没有人被问到」、两条放行路径，以及
+  「设为『允许』会一直生效直到改回『询问』」这一代价——面板会把它标成「已覆盖」）。
+  刻意**不**改成静默放行：守卫静默放行就不是
+  守卫。新增 `src/approval-policy.ts`（`unaskable()`，无本地依赖以免 `guard/shared ↔
+  guard/approval` 成环）；读不到策略或没有会话时一律维持原行为，避免把能用的提问变成拒绝。
+  新增字典键 `approval.disabled`（双字典同步，键数 86→87）。
+- `docs/CONFIGURATION.md` 补一节「「已覆盖」与「恢复默认」」，说明这对徽标/按钮判的是
+  **user 层有没有显式写这一项**，而不是值等不等于默认值（官方原文与 `stored(field)`
+  实现见 `dsh-client-ui-primitives/lib/index.js:7099-7102` / `:7370-7373`）：把
+  `subjectMaxLength` 从 `50` 改成 `72` 再改回 `50` 并保存，写入的仍是 `{op: 'set'}`，
+  徽标不消失；面板上唯一真正删掉这一项的是「恢复默认」按钮（`client.js:917` 发
+  `{op: 'unset'}`）。安全相关的档位尤其需要这份清单——从 `ask` 改成 `allow` 之后忘改
+  回来，`allow` 会一直生效。
 
 ## [0.1.0] - 2026-10-05
 

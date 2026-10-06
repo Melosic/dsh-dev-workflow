@@ -1,4 +1,6 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { ApprovalPolicyReporter } from '../approval-policy.js'
+import { unaskable } from '../approval-policy.js'
 import type { Config } from '../config.js'
 import { createTranslator } from '../i18n.js'
 import type { Translate, TranslationParams } from '../i18n.js'
@@ -106,6 +108,13 @@ export interface GuardOptions {
    * answer. Optional: the other three guards never ask themselves.
    */
   readonly approver?: GuardApprover
+  /**
+   * The approval seam, read only for the policy a question resolves under.
+   *
+   * Optional: without it every decision is returned as before, which is what a
+   * profile with no approval service composed already gets.
+   */
+  readonly approval?: () => ApprovalPolicyReporter | undefined
 }
 
 /** What a concrete guard adds to the shared options. */
@@ -206,6 +215,7 @@ export function createGuard(
     definition.audit?.(hit, exec)
 
     const t = definition.t()
+    const session = exec.agent?.session
     const downstream = await next()
     // An aborted call stays aborted, and a refusal by another gate is never
     // weakened into a question.
@@ -233,6 +243,6 @@ export function createGuard(
     // Otherwise the call was going to proceed. The guard's own question replaces
     // any other `ask`, so the reason shown names the operation that was actually
     // recognised; the approval it needs is the same either way.
-    return decide(hit, t)
+    return unaskable(decide(hit, t), t, definition.approval, session)
   }
 }

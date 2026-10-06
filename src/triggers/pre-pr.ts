@@ -257,6 +257,8 @@ export function createPrePrTrigger(
       outcome,
       t,
       assess: (translator) => evaluatePullRequest(input, options.config(), translator),
+      approval: options.approval,
+      session: agent.session,
     })
   }
 }

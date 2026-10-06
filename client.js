@@ -43,9 +43,12 @@ window.__ModuleLoader__.load({
 .dsw-dev-workflow-groupRow[aria-expanded='true'] .dsw-dev-workflow-groupChevron{transform:rotate(90deg)}
 .dsw-dev-workflow-groupTitle{font-size:13px;font-weight:500;line-height:1.5}
 .dsw-dev-workflow-groupBody{display:flex;flex-direction:column;padding:0 0 8px}
-.dsw-dev-workflow-field{display:flex;flex-direction:column;gap:6px;padding:10px 0}
-.dsw-dev-workflow-field+.dsw-dev-workflow-field{border-top:0.5px solid var(--dsw-alias-border-l1)}
+.dsw-dev-workflow-field{display:flex;flex-direction:column;gap:6px;padding:12px 0}
+.dsw-dev-workflow-field+.dsw-dev-workflow-field{border-top:0.5px solid var(--dsw-alias-border-l2)}
 .dsw-dev-workflow-fieldHead{display:flex;align-items:center;gap:8px}
+.dsw-dev-workflow-field[data-inline] .dsw-dev-workflow-fieldHead{flex:1;min-width:0}
+.dsw-dev-workflow-fieldRow{display:flex;align-items:flex-start;gap:12px}
+.dsw-dev-workflow-fieldRow .dsw-dev-workflow-fieldBody{flex:none;padding-top:1px}
 .dsw-dev-workflow-fieldLabel{flex:1;min-width:0;font-size:13px;font-weight:500;line-height:1.5}
 .dsw-dev-workflow-fieldBody{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .dsw-dev-workflow-hint{margin:0;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
@@ -59,10 +62,11 @@ window.__ModuleLoader__.load({
 .dsw-dev-workflow-switch[aria-checked='true'] .dsw-dev-workflow-switchThumb{transform:translateX(16px)}
 .dsw-dev-workflow-segments{position:relative;display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:4px;border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
 .dsw-dev-workflow-segmentIndicator{position:absolute;top:4px;left:4px;width:calc((100% - 8px - 2px * (var(--dsw-dev-workflow-segment-count) - 1)) / var(--dsw-dev-workflow-segment-count));height:calc(100% - 8px);border-radius:6px;background:var(--dsw-alias-bg-layer-1);transform:translateX(calc(var(--dsw-dev-workflow-segment-index) * (100% + 2px)));transition:transform 160ms ease;pointer-events:none}
-.dsw-dev-workflow-segment{height:28px;padding:0 16px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;font-weight:500;white-space:nowrap;cursor:pointer}
-.dsw-dev-workflow-segment:hover,.dsw-dev-workflow-segment[aria-selected='true']{color:var(--dsw-alias-label-primary)}
+.dsw-dev-workflow-segment{box-sizing:border-box;position:relative;z-index:1;height:28px;padding:0 16px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;font-weight:500;white-space:nowrap;cursor:pointer;transition:color 120ms ease}
+.dsw-dev-workflow-segment:hover{color:var(--dsw-alias-label-primary)}
+.dsw-dev-workflow-segment[aria-selected='true']{color:var(--dsw-alias-label-primary);font-weight:600}
 .dsw-dev-workflow-segment:disabled{opacity:0.4;cursor:default}
-.dsw-dev-workflow-checks{display:flex;flex-wrap:wrap;gap:4px 16px}
+.dsw-dev-workflow-checks{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px 16px}
 .dsw-dev-workflow-check{display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;cursor:pointer}
 .dsw-dev-workflow-check input{flex:none;width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-brand-primary)}
 .dsw-dev-workflow-number{box-sizing:border-box;width:96px;height:32px;padding:0 10px;border:0.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);font:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}
@@ -72,9 +76,10 @@ window.__ModuleLoader__.load({
 .dsw-dev-workflow-advancedRow{display:flex;gap:12px;font-size:12px;line-height:1.6}
 .dsw-dev-workflow-advancedKey{flex:none;width:180px;color:var(--dsw-alias-label-secondary)}
 .dsw-dev-workflow-advancedValue{flex:1;min-width:0;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;color:var(--dsw-alias-label-primary)}
-.dsw-dev-workflow-actions{display:flex;align-items:center;gap:8px;padding-top:12px}
+.dsw-dev-workflow-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:12px}
 .dsw-dev-workflow-note{flex:1;min-width:0;margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary)}
 .dsw-dev-workflow-note[data-tone='error']{color:var(--dsw-alias-state-error-primary)}
+.dsw-dev-workflow-note[data-tone='success']{color:var(--dsw-alias-state-success-primary)}
 .dsw-dev-workflow-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 12px;border:0.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:transparent;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);cursor:pointer}
 .dsw-dev-workflow-button:disabled{opacity:0.4;cursor:default}
 .dsw-dev-workflow-button[data-variant='primary']{border-color:transparent;background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-layer-1)}
@@ -106,7 +111,7 @@ window.__ModuleLoader__.load({
       'group.audit': 'Audit log',
       'group.advanced': 'Advanced (read-only)',
       'field.mode': 'Plugin mode',
-      'field.locale': 'Panel language',
+      'field.locale': 'Plugin text language',
       'field.ownTrigger': 'Run the pre-commit check',
       'field.commitEnabled': 'Check commit messages',
       'field.onFailure': 'On a hard problem',
@@ -134,6 +139,10 @@ window.__ModuleLoader__.load({
       'policy.noVerify': 'Skip hooks (--no-verify)',
       'hint.mode':
         'Off withdraws every tool, skill, command and trigger this plugin registers, so it costs no tokens. The plugin itself stays loaded — enabling or disabling it is the plugin manager\u2019s job.',
+      'hint.locale':
+        'The language of this plugin\u2019s own text — check results, skill text, approval prompts. It does not decide what language the model writes commits or pull requests in.',
+      'hint.localeResolved':
+        'Auto follows the machine\u2019s own language \u2014 currently {locale} ({tag}).',
       'hint.onFailure':
         'A header that does not parse, a type outside the allowed set, and a `!` without a BREAKING CHANGE footer are hard problems. Length, a trailing period and a missing scope are always warnings.',
       'hint.requireScope':
@@ -155,7 +164,8 @@ window.__ModuleLoader__.load({
       'invalid.number': 'Enter a whole number of 1 or more.',
       'action.save': 'Save',
       'action.saving': 'Saving\u2026',
-      'action.discard': 'Discard',
+      'action.saved': 'Saved. The change takes effect right away.',
+      'action.discard': 'Cancel',
       'action.reset': 'Reset',
       'action.overridden': 'Overridden',
       'action.failed': 'Could not save. The draft is kept.',
@@ -188,7 +198,7 @@ window.__ModuleLoader__.load({
       'group.audit': '审计日志',
       'group.advanced': '高级（只读）',
       'field.mode': '插件模式',
-      'field.locale': '面板语言',
+      'field.locale': '插件文案语言',
       'field.ownTrigger': '运行 pre-commit 检查',
       'field.commitEnabled': '检查提交信息',
       'field.onFailure': '出现硬性问题时',
@@ -216,6 +226,9 @@ window.__ModuleLoader__.load({
       'policy.noVerify': '跳过钩子（--no-verify）',
       'hint.mode':
         '关闭后，本插件注册的工具、技能、命令和触发器全部撤销，不占常驻 token。插件本身仍然加载 —— 启用或停用是插件管理器的事。',
+      'hint.locale':
+        '本插件自身文案的语言 —— 检查结果、技能正文、审批提示。它不决定模型用什么语言写提交信息或 PR。',
+      'hint.localeResolved': '「自动」跟随本机语言，当前为：{locale}（{tag}）。',
       'hint.onFailure':
         'header 无法解析、type 不在允许集合、`!` 缺少 BREAKING CHANGE footer 属于硬性问题。长度、句末句点和缺少 scope 始终只是警告。',
       'hint.requireScope': '关闭时，只有改动落在单个模块里才提示补 scope。',
@@ -236,7 +249,8 @@ window.__ModuleLoader__.load({
       'invalid.number': '请输入大于等于 1 的整数。',
       'action.save': '保存',
       'action.saving': '保存中…',
-      'action.discard': '放弃',
+      'action.saved': '已保存，改动立即生效。',
+      'action.discard': '取消',
       'action.reset': '恢复默认',
       'action.overridden': '已覆盖',
       'action.failed': '保存失败。草稿已保留。',
@@ -295,11 +309,17 @@ window.__ModuleLoader__.load({
       { key: 'audit', open: true },
       { key: 'advanced', open: false },
     ]
+    // Every entry names its `label` explicitly: a key derived from the last path
+    // segment collides across namespaces (`field.enabled` for six different
+    // switches), which is how untranslated placeholders reached the page. The
+    // schema test walks this table and fails if a label is not in both
+    // dictionaries.
     const FIELDS = [
       {
         group: 'workflow',
         path: ['mode'],
         control: 'switch',
+        label: 'field.mode',
         on: 'on',
         off: 'off',
         hint: 'hint.mode',
@@ -308,6 +328,9 @@ window.__ModuleLoader__.load({
         group: 'workflow',
         path: ['locale'],
         control: 'segments',
+        label: 'field.locale',
+        hint: 'hint.locale',
+        note: 'hint.localeResolved',
         options: ['auto', 'en-US', 'zh-CN'],
       },
       {
@@ -316,26 +339,63 @@ window.__ModuleLoader__.load({
         control: 'switch',
         label: 'field.ownTrigger',
       },
-      { group: 'commit', path: ['commitCheck', 'enabled'], control: 'switch' },
+      {
+        group: 'commit',
+        path: ['commitCheck', 'enabled'],
+        control: 'switch',
+        label: 'field.commitEnabled',
+      },
       {
         group: 'commit',
         path: ['commitCheck', 'onFailure'],
         control: 'segments',
+        label: 'field.onFailure',
         options: ['warn', 'block'],
         hint: 'hint.onFailure',
       },
-      { group: 'commit', path: ['commitCheck', 'types'], control: 'checks' },
+      {
+        group: 'commit',
+        path: ['commitCheck', 'types'],
+        control: 'checks',
+        label: 'field.types',
+      },
       {
         group: 'commit',
         path: ['commitCheck', 'requireScope'],
         control: 'switch',
+        label: 'field.requireScope',
         hint: 'hint.requireScope',
       },
-      { group: 'commit', path: ['commitCheck', 'subjectMaxLength'], control: 'number' },
-      { group: 'docs', path: ['docsCheck', 'enabled'], control: 'switch' },
-      { group: 'docs', path: ['rules', 'requireChangelogOnFeat'], control: 'switch' },
-      { group: 'docs', path: ['docsCheck', 'requireReadmeOnConfig'], control: 'switch' },
-      { group: 'git', path: ['gitGuard', 'enabled'], control: 'switch' },
+      {
+        group: 'commit',
+        path: ['commitCheck', 'subjectMaxLength'],
+        control: 'number',
+        label: 'field.subjectMaxLength',
+      },
+      {
+        group: 'docs',
+        path: ['docsCheck', 'enabled'],
+        control: 'switch',
+        label: 'field.docsEnabled',
+      },
+      {
+        group: 'docs',
+        path: ['rules', 'requireChangelogOnFeat'],
+        control: 'switch',
+        label: 'field.requireChangelog',
+      },
+      {
+        group: 'docs',
+        path: ['docsCheck', 'requireReadmeOnConfig'],
+        control: 'switch',
+        label: 'field.requireReadmeOnConfig',
+      },
+      {
+        group: 'git',
+        path: ['gitGuard', 'enabled'],
+        control: 'switch',
+        label: 'field.gitEnabled',
+      },
       ...GIT_POLICIES.map((policy) => ({
         group: 'git',
         path: ['gitGuard', policy],
@@ -347,24 +407,47 @@ window.__ModuleLoader__.load({
         group: 'git',
         path: ['gitGuard', 'rememberApproved'],
         control: 'switch',
+        label: 'field.rememberApproved',
         hint: 'hint.rememberApproved',
       },
-      { group: 'command', path: ['commandGuard', 'enabled'], control: 'switch' },
+      {
+        group: 'command',
+        path: ['commandGuard', 'enabled'],
+        control: 'switch',
+        label: 'field.commandEnabled',
+      },
       {
         group: 'command',
         path: ['commandGuard', 'dangerousShell'],
         control: 'segments',
+        label: 'field.dangerousShell',
         options: POLICY_OPTIONS,
       },
-      { group: 'files', path: ['fileGuard', 'enabled'], control: 'switch' },
-      { group: 'files', path: ['secretGuard', 'enabled'], control: 'switch' },
+      {
+        group: 'files',
+        path: ['fileGuard', 'enabled'],
+        control: 'switch',
+        label: 'field.fileEnabled',
+      },
+      {
+        group: 'files',
+        path: ['secretGuard', 'enabled'],
+        control: 'switch',
+        label: 'field.secretEnabled',
+      },
       {
         group: 'files',
         path: ['secretGuard', 'genericHighEntropy'],
         control: 'switch',
+        label: 'field.genericHighEntropy',
         hint: 'hint.genericHighEntropy',
       },
-      { group: 'audit', path: ['audit', 'enabled'], control: 'switch' },
+      {
+        group: 'audit',
+        path: ['audit', 'enabled'],
+        control: 'switch',
+        label: 'field.auditEnabled',
+      },
     ]
     // Read-only projection of the fields the profile file owns.
     const ADVANCED = [
@@ -403,12 +486,26 @@ window.__ModuleLoader__.load({
       return true
     }
     const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+    // `auto` means "follow this machine's own language", so the panel has to say
+    // which language that turned out to be. The Host half resolves it inside the
+    // node process (`src/i18n.ts`); the panel can only ask the browser, which
+    // runs on the same machine. Both read `Intl`, map a `zh` prefix to `zh-CN`
+    // and everything else to `en-US` — the same rule, so they agree.
+    const machineLocale = () => {
+      let tag = 'en-US'
+      try {
+        tag = Intl.DateTimeFormat().resolvedOptions().locale
+      } catch {
+        // An engine without `Intl` keeps the fallback above.
+      }
+      return { tag, locale: tag.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US' }
+    }
 
     /**
      * The save model of the official `SettingsForm`: staged edits, one Save, one
-     * Discard, and a draft that survives a rejected write. Reads and writes stay
-     * with the controller the `configForms` service handed us — this class adds
-     * no persistence of its own.
+     * Cancel that drops the draft, and a draft that survives a rejected write.
+     * Reads and writes stay with the controller the `configForms` service handed
+     * us — this class adds no persistence of its own.
      */
     class DraftForm {
       constructor(scope) {
@@ -418,6 +515,7 @@ window.__ModuleLoader__.load({
         this.baseline = undefined
         this.saving = false
         this.failed = false
+        this.saved = false
         this.snapshot = undefined
         this.off = scope.subscribe(() => {
           this.invalidate()
@@ -448,6 +546,7 @@ window.__ModuleLoader__.load({
           invalid: [...staged.values()].some((entry) => entry.invalid === true),
           saving: this.saving,
           failed: this.failed,
+          saved: this.saved,
           read: (path) => {
             const entry = staged.get(keyOf(path))
             if (entry === undefined) return readPath(value, path)
@@ -465,6 +564,9 @@ window.__ModuleLoader__.load({
         const key = keyOf(path)
         const validate = VALIDATORS[key]
         const invalid = validate !== undefined && !validate(value)
+        // Any new edit invalidates the "saved" note: what the page shows no
+        // longer matches what the profile holds.
+        this.saved = false
         if (!invalid && sameValue(readPath(this.scope.getSnapshot().value, path), value)) {
           if (this.staged.delete(key)) this.invalidate()
           return
@@ -476,6 +578,7 @@ window.__ModuleLoader__.load({
       /** Stage "back to the inherited value" for a field the file overrides. */
       clear(path) {
         this.baseline ??= this.scope.getSnapshot()
+        this.saved = false
         this.staged.set(keyOf(path), { path, clear: true })
         this.invalidate()
       }
@@ -484,6 +587,19 @@ window.__ModuleLoader__.load({
         this.staged.clear()
         this.baseline = undefined
         this.failed = false
+        this.saved = false
+        this.invalidate()
+      }
+      /**
+       * Drop the "saved" note. The flag has to live on this instance because the
+       * instance is the only channel the bound component reads, but the note
+       * belongs to one visit: the settings dialog unmounts the section when it
+       * closes, so a note kept here would be replayed the next time the user
+       * opens the page. The section therefore acknowledges it once per mount.
+       */
+      acknowledgeSaved() {
+        if (!this.saved) return
+        this.saved = false
         this.invalidate()
       }
       async save() {
@@ -517,10 +633,31 @@ window.__ModuleLoader__.load({
           // A retry after a rejected batch has to clear the failure, or the
           // panel would keep claiming the save failed.
           this.failed = false
+          // The official SettingsForm only ever reports failure, so a plain
+          // successful save leaves no visible trace: the button just stops
+          // being disabled, which on a form this long reads as "nothing
+          // happened". The note is this panel's deliberate addition.
+          this.saved = true
         } else {
           this.failed = true
+          this.saved = false
         }
         this.invalidate()
+      }
+      /**
+       * The actions a bound component calls, as plain props. The `useForm` hook
+       * only ever yields `getSnapshot()`, so an action left on this instance is
+       * unreachable from the markup — the official `SettingsFormModel` hands its
+       * actions out separately for exactly this reason.
+       */
+      actions() {
+        return {
+          edit: (path, value) => this.edit(path, value),
+          clear: (path) => this.clear(path),
+          discard: () => this.discard(),
+          save: () => this.save(),
+          acknowledgeSaved: () => this.acknowledgeSaved(),
+        }
       }
       dispose() {
         if (this.off !== undefined) this.off()
@@ -685,12 +822,15 @@ window.__ModuleLoader__.load({
       return String(value)
     }
 
-    function Field({ spec, form, t }) {
+    function Field({ spec, form, actions, t }) {
       const id = `dsw-dev-workflow-${keyOf(spec.path)}`
       const value = form.read(spec.path)
       const invalid = form.invalidAt(spec.path)
-      const label = t(spec.label ?? `field.${spec.path[spec.path.length - 1]}`)
+      const label = t(spec.label)
       const disabled = !form.writable
+      // Only `auto` needs the explanation; an explicit choice already names the
+      // language it selects.
+      const machine = spec.note !== undefined && value === 'auto' ? machineLocale() : undefined
       const labelNode = h(
         'label',
         {
@@ -709,7 +849,7 @@ window.__ModuleLoader__.load({
           checked: value === on,
           disabled,
           label,
-          onChange: (next) => form.edit(spec.path, next === true ? on : off),
+          onChange: (next) => actions.edit(spec.path, next === true ? on : off),
         })
       } else if (spec.control === 'segments') {
         const options = spec.options.map((option) =>
@@ -723,7 +863,7 @@ window.__ModuleLoader__.load({
           options,
           label,
           disabled,
-          onChange: (next) => form.edit(spec.path, next),
+          onChange: (next) => actions.edit(spec.path, next),
         })
       } else if (spec.control === 'number') {
         control = h(NumberInput, {
@@ -731,7 +871,7 @@ window.__ModuleLoader__.load({
           value,
           invalid,
           disabled,
-          onChange: (next) => form.edit(spec.path, next),
+          onChange: (next) => actions.edit(spec.path, next),
         })
       } else {
         const selected = Array.isArray(value) ? value : []
@@ -747,7 +887,7 @@ window.__ModuleLoader__.load({
                 checked: selected.includes(type),
                 disabled,
                 onChange: () =>
-                  form.edit(
+                  actions.edit(
                     spec.path,
                     selected.includes(type)
                       ? selected.filter((item) => item !== type)
@@ -759,32 +899,52 @@ window.__ModuleLoader__.load({
           ),
         )
       }
+      const head = h(
+        'div',
+        { className: 'dsw-dev-workflow-fieldHead' },
+        labelNode,
+        form.overridden(spec.path)
+          ? h(
+              React.Fragment,
+              null,
+              h('span', { className: 'dsw-dev-workflow-badge' }, t('action.overridden')),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dsw-dev-workflow-reset',
+                  disabled,
+                  onClick: () => actions.clear(spec.path),
+                },
+                t('action.reset'),
+              ),
+            )
+          : null,
+      )
+      const body = h('div', { className: 'dsw-dev-workflow-fieldBody' }, control)
+      // A switch reads as a row — its label on the left, the toggle on the
+      // right, which is the row shape every settings page uses. Controls the
+      // user reads before typing (text, segments, checkboxes) keep the label
+      // above them.
+      const inline = spec.control === 'switch'
       return h(
         'div',
-        { className: 'dsw-dev-workflow-field' },
-        h(
-          'div',
-          { className: 'dsw-dev-workflow-fieldHead' },
-          labelNode,
-          form.overridden(spec.path)
-            ? h(
-                React.Fragment,
-                null,
-                h('span', { className: 'dsw-dev-workflow-badge' }, t('action.overridden')),
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'dsw-dev-workflow-reset',
-                    onClick: () => form.clear(spec.path),
-                  },
-                  t('action.reset'),
-                ),
-              )
-            : null,
-        ),
-        h('div', { className: 'dsw-dev-workflow-fieldBody' }, control),
+        {
+          className: 'dsw-dev-workflow-field',
+          'data-path': keyOf(spec.path),
+          'data-inline': inline ? '' : undefined,
+        },
+        inline
+          ? h('div', { className: 'dsw-dev-workflow-fieldRow' }, head, body)
+          : h(React.Fragment, null, head, body),
         invalid ? h('p', { className: 'dsw-dev-workflow-invalid' }, t('invalid.number')) : null,
+        machine === undefined
+          ? null
+          : h(
+              'p',
+              { className: 'dsw-dev-workflow-hint', 'data-note': spec.note },
+              t(spec.note, { locale: t(`value.${machine.locale}`), tag: machine.tag }),
+            ),
         spec.hint === undefined
           ? null
           : h('p', { className: 'dsw-dev-workflow-hint' }, t(spec.hint)),
@@ -867,7 +1027,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function Section({ useForm, useDocument, t, openDocument, documentAvailable }) {
+    function Section({ useForm, useDocument, t, openDocument, documentAvailable, actions }) {
       const form = useForm((snapshot) => snapshot)
       const document = useDocument((snapshot) => snapshot)
       const [open, setOpen] = useState(() => {
@@ -875,6 +1035,15 @@ window.__ModuleLoader__.load({
         for (const group of GROUPS) initial[group.key] = group.open
         return initial
       })
+      // The note belongs to this visit: the dialog unmounts the section when it
+      // closes, and without this the flag on the long-lived form would replay
+      // the note every time the page is opened again.
+      useEffect(
+        () => () => {
+          actions.acknowledgeSaved()
+        },
+        [],
+      )
       if (form.status !== 'ready') {
         return h(
           'section',
@@ -910,7 +1079,7 @@ window.__ModuleLoader__.load({
             group.key === 'advanced'
               ? h(Advanced, { form, document, t, openDocument, documentAvailable })
               : FIELDS.filter((spec) => spec.group === group.key).map((spec) =>
-                  h(Field, { key: keyOf(spec.path), spec, form, t }),
+                  h(Field, { key: keyOf(spec.path), spec, form, actions, t }),
                 ),
           ),
         ),
@@ -920,8 +1089,15 @@ window.__ModuleLoader__.load({
           form.failed
             ? h(
                 'p',
-                { className: 'dsw-dev-workflow-note', 'data-tone': 'error' },
+                { className: 'dsw-dev-workflow-note', 'data-tone': 'error', role: 'status' },
                 t('action.failed'),
+              )
+            : null,
+          form.saved
+            ? h(
+                'p',
+                { className: 'dsw-dev-workflow-note', 'data-tone': 'success', role: 'status' },
+                t('action.saved'),
               )
             : null,
           h(
@@ -930,7 +1106,7 @@ window.__ModuleLoader__.load({
               type: 'button',
               className: 'dsw-dev-workflow-button',
               disabled: !form.dirty || form.saving,
-              onClick: () => form.discard(),
+              onClick: () => actions.discard(),
             },
             t('action.discard'),
           ),
@@ -941,9 +1117,7 @@ window.__ModuleLoader__.load({
               className: 'dsw-dev-workflow-button',
               'data-variant': 'primary',
               disabled: blocked,
-              onClick: () => {
-                form.save()
-              },
+              onClick: () => actions.save(),
             },
             form.saving ? t('action.saving') : t('action.save'),
           ),
@@ -970,8 +1144,13 @@ window.__ModuleLoader__.load({
       // The navigation entry appears only once the Host serves the namespace:
       // a card for a namespace that is not there could not read or write
       // anything. Also the official shape (`whileServed` + `slots.inject`).
+      // `hooks` carries observable sources only — the bound component receives
+      // `useForm`/`useDocument` selectors, which can read a snapshot but never
+      // reach the instance. The actions therefore ride the face as ordinary
+      // props, the way the official settings pages do it.
       const face = () => ({
         hooks: { form, document },
+        actions: form.actions(),
         openDocument: () => {
           void document.open()
         },
@@ -1012,6 +1191,7 @@ window.__ModuleLoader__.load({
       commitTypes: COMMIT_TYPES,
       gitPolicies: GIT_POLICIES,
       dictionaries: { en: EN, zh: ZH },
+      css: CSS,
     }
 
     return { apply, inject, panel }

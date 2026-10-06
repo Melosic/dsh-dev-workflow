@@ -18,7 +18,7 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `commitCheck` | 对象 | 见下 | 提交信息检查的开关、档位与类型清单 |
 | `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
-| `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 用户可见文案的语言 |
+| `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 本插件自身文案的语言（**不是**设置页的语言，也**不**决定模型怎么写提交信息） |
 | `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的提交前检查 |
 | `gitGuard` | 对象 | 见下 | 危险 git 操作的策略 |
 | `commandGuard` | 对象 | 见下 | 危险 shell 命令的策略 |
@@ -35,6 +35,16 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 但它不是「只能重启才能换」：面板改 `locale` 后，宿主把新值提交进运行中的配置，
 插件收到 `loader/volatile-update` 就重新解析一次，技能与提示语随之切换。
 要写死在文件里就显式写 `en-US` 或 `zh-CN`。
+
+面板在选中 `auto` 时会直接写出它当前解析成哪个语言（例如「当前为：中文（zh-Hans-HK）」）：
+宿主在 node 进程里解析，面板只能在浏览器里问同一台机器的 `Intl`，两边用的是同一条
+`zh` 前缀规则。这是面板自己的复刻，不是宿主回传的真值 —— 两者理论上可能不一致
+（同一台机器上实际不会）。
+
+这一项管的是**插件自身产出的文案**：检查结果、技能正文、审批提示。它管不到、也不该被理解成
+「让模型用哪种语言写提交信息」——提交信息的语言规则写在技能里（subject 一律英文，正文与页脚
+项目内自选一种），两种语言下的规则逐字相同。设置页本身的文案跟随 DSH 界面的语言（面板走客户端
+`locale` 服务，`client.js` 里注册了 `settings.devWorkflow` 这个命名空间），改这一项不会切换设置页的语言。
 
 ## `docs`
 
@@ -195,11 +205,38 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 
 - **只作用于 `ask`。** `deny` 永不经过这条路——把某项设成 `deny` 之后不存在「批准过一次就放行」。
 - **拒绝不会被记成批准。** 只有 `allowed-once` 才写入记忆，其余三种都会在下一次重新提问。
+- **`rejected` 不等于「用户点了拒绝」。** 审批策略为 `never`（例如 `danger-full-access` 预设）
+  时，`dsh-user-approval` 的 `decide()` 会**在提问之前**直接返回 `rejected`
+  （`dsh-user-approval/lib/index.js:175 if (this.effectivePolicy(session) === "never") return "rejected"`），
+  根本没有人被问过。所以 `security.guard.approval_rejected` 只陈述结果（未获批准），
+  不写「你拒绝了」——那会把平台的自动拒绝说成用户的决定。
 - **没有审批通道时不自行提问。** 档里没挂审批服务、或这次调用没有 agent，守卫就把问题交回
   dispatcher（与开关关闭时逐字相同的行为），绝不把「问不出来」当成「同意了」。
 - **不吞并别的 gate。** 若另一个 listener 已经拒绝，或者已经要提问，git 守卫不会自己再问一次：
   别的 gate 的答案不是它该记的。
 - **默认关闭。** `false` 时行为与没有这个开关时完全一致。
+
+### 权限策略为 `never` 时会发生什么
+
+`danger-full-access` 预设把审批策略设为 `never`。它**不是「全部批准」**：`dsh-user-approval`
+的 `decide()` 在询问任何审批方之前就返回 `rejected`（`dsh-user-approval/lib/index.js:175`），
+于是 `dsh-tools` 把这次拒绝渲染成 `the user rejected tool "..."`（该包 `lib/index.js:3468`）。
+用户什么都没看到，模型却被告知用户做了决定。
+
+所以本插件的每一道 gate（四道守卫 + 三个触发器）在返回 `ask` 之前先读本会话的有效策略
+（`effectivePolicy(session)`）。策略是 `never` 时，gate **自己**返回 `deny`：
+
+- 结果与之前完全相同——该操作都是被拒绝；
+- 理由保留 gate 自己的判定（是哪次 force push、哪个提交信息不合规），并追加
+  `approval.disabled`（双字典同步），说明**没有人被问到**，以及两条放行路径：切换到会
+  提问的权限预设，或把对应项设为「允许」而非「询问」。后者**会一直生效**直到改回
+  「询问」——正是「已覆盖」徽标标记的那种字段，忘了改回来就会长期静默放行，所以文案里
+  把这个代价一并写出，而不是只留给用户自己想到。
+
+刻意**不**改成静默放行：守卫静默放行就不是守卫（`src/guard/git-guard.ts:16-17`）。
+读不到策略（档里没挂审批服务、审批服务没实现这个方法）或这次调用没有会话时，行为
+与之前逐字相同——维持 `ask`，交给 dispatcher。**不知道就不猜**，否则会把一个能正常
+提问、能被批准的操作变成拒绝。实现见 `src/approval-policy.ts` 的 `unaskable()`。
 
 ## `commandGuard`
 
@@ -287,6 +324,36 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 （`configForms`），保存后宿主把新值写进当前 profile 的 `cordis.patch.yml`，并通过
 `loader/volatile-update` 提交给运行中的插件——**不需要重启**。面板里看到的就是文件里的值，
 反过来说，手改文件后重新加载同样会反映到面板。
+
+保存成功时底部会出现一行提示；它只说明「这一批值已经落到 profile 里了」，下一次编辑、取消或
+关闭设置面板时就会消失。官方 `SettingsForm` 只报告失败，但本表单有 27 个字段，只靠按钮从
+「可点」变回「不可点」来暗示成功，滚在顶部的人无从判断——所以这里补了一行明确的成功提示。
+提示绑定在「这一次打开面板」上：设置面板关闭时会卸载这个 section，而草稿实例与插件同生命周期，
+所以提示在这两者之间要显式清掉，否则下次打开面板会重放上次的保存提示。底部的两个按钮靠右对齐，
+与官方表单一致。
+
+### 「已覆盖」与「恢复默认」
+
+每个字段标题右侧可能带一个「已覆盖」徽标和一颗「恢复默认」按钮。理解这一对的关键是：
+**它标的是「这份 profile 有没有显式写这一项」，不是「值等不等于默认值」。** 官方实现把这条
+写得很直白（`dsh-client-ui-primitives/lib/index.js:7099-7102`）：
+
+> A field shows its effective value — the user layer over the composition layer over the
+> schema default — and whether the user layer carries it. **That presence, not a value
+> comparison, is what marks a field overridden: an override equal to the composition default
+> is still an override.**
+
+对应的判定是 `stored(field)`：只看 user 层有没有这个键（同文件 `:7370-7373`）。所以把
+`commitCheck.subjectMaxLength` 从默认 `50` 改成 `72` 再改回 `50` 并保存，写入的仍然是
+`{op: 'set', path: [...], value: 50}`，徽标**不会**消失——profile 里确实记着这一项，只是记的
+值和默认值恰好相同。面板上唯一会真正删掉这一项的是**「恢复默认」按钮**：它发的是
+`{op: 'unset', path: [...]}`（`client.js:917` 的 `actions.clear(spec.path)`），让该字段重新
+继承组合层的值，徽标随之消失。这条往返链路由 `tests/settings-roundtrip.spec.ts:147-162` 锁着。
+
+为什么值得知道：对安全相关的项（尤其 `gitGuard` 的八个档位）来说，「已覆盖」是一份**清单**。
+把它们从 `ask` 改成 `allow` 之后忘改回来，`allow` 会一直生效——徽标正是让你能找回这些字段的
+东西，`approval.disabled` 的文案里也把这一点写了出来（见
+[权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。
 
 ### 面板可以改的（27 项）
 
