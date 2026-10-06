@@ -11,6 +11,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- `docs/PUBLISHING.md` 新增「发布后 24 小时内：安装可能停在上一版」一节。应用内的插件管理器
+  走 DSH 自带的 pnpm 11，其 `minimumReleaseAge` 默认值为 1440 分钟，因此**新版本发布不到
+  24 小时时，不带版本号的安装会静默回退到上一版**——不报错、不提示、也不写
+  `minimumReleaseAgeExclude`。文档记录了现象、四种可用做法（指名版本 / 裸包名 exclude /
+  `minimumReleaseAge: 0` / 等满 24 小时）、三个会踩的坑（`@*` 与 `@>=0.2.0` 会被拒绝、
+  `minimumReleaseAgeStrict` 单独写无效、**手工删掉 exclude 行会让卸载也失败**），
+  以及截止线的算法（当前时间减 1440 分钟对比**发布时刻**）。
+  这条只影响应用内那条路：`dsh plugin --profile <profile> add …` 转发给 pnpm 10.30.3，
+  不受影响，README 的安装命令无需改动。
+
 ## [0.2.0] - 2026-10-06
 
 ### Added

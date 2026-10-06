@@ -296,6 +296,69 @@ gh release create v0.1.0 --title "v0.1.0" --notes-file .dev-docs/_release-notes.
 git push origin main --follow-tags
 ```
 
+## 发布后 24 小时内：安装可能停在上一版
+
+应用内的插件管理器走的是 DSH 自带的 **pnpm 11.7.0**，而 pnpm 11 把
+`minimumReleaseAge` 的默认值从 0 改成了 **1440 分钟（24 小时）**
+（[pnpm 文档](https://pnpm.io/settings/dependency-resolution#minimumreleaseage)）。
+新版本发布不到 24 小时时，**不带版本号**的安装会静默回退到上一版：
+不报错、不提示、也不写 `minimumReleaseAgeExclude`。
+
+实测（v0.2.0 发布约 2 小时后，在应用里装裸名）：
+
+```text
+dependencies:
++ @melosic/dsh-dev-workflow ^0.1.0
+Done in 16.9s using pnpm v11.7.0
+```
+
+**这条只发生在应用内的插件管理器这条路上。** `dsh plugin --profile <profile> add …`
+转发给 PATH 上的 pnpm 10.30.3，其 `minimumReleaseAge` 默认仍是 0，实测三次都装到最新版。
+README 里的安装命令不需要因此改动。
+
+### 可以怎么办
+
+| 做法 | 怎么写 | 代价 |
+| --- | --- | --- |
+| 安装时指名版本 | `add @melosic/dsh-dev-workflow@0.2.0` | 每次要记住版本号 |
+| 给这一个包开永久口子 | profile 的 `pnpm-workspace.yaml` 里写 `minimumReleaseAgeExclude: ['@melosic/dsh-dev-workflow']` | 只影响这一个包 |
+| 关掉整个 profile 的年龄门槛 | `minimumReleaseAge: 0` | 对该 profile 里**所有**包生效 |
+| 等满 24 小时再装 | — | 发布当天装不到 |
+
+指名版本或带范围（`@^0.2.0`、`@~0.2.0`）时，pnpm 会把该版本写进
+`minimumReleaseAgeExclude`；写进去之后，裸名安装也能解析到新版。
+
+前三种方式都实测过：装到 `0.2.0`，且随后的 `install --frozen-lockfile`
+（即应用里那道「Lockfile passes supply-chain policies」检查）照样通过。
+
+### 三个会踩的坑
+
+- **`@*` 与 `@>=0.2.0` 会被直接拒绝**：`ERR_PNPM_INVALID_MINIMUM_RELEASE_AGE_EXCLUDE …
+  Use exact versions only.` 这个名单只接受精确版本，或者不带版本的裸包名。
+- **`minimumReleaseAgeStrict: true` 单独写没有用**，仍然回退到上一版。它只是把「静默回退」
+  换成「报错并询问」，不会放行。
+- **不要手工去删那行 `minimumReleaseAgeExclude`。** 如果 profile 的 lockfile 里已经记了
+  新版本，删掉那行会让**连卸载都失败**：
+
+  ```text
+  ✗ Lockfile failed supply-chain policy check (1 entry in 249ms)
+    @melosic/dsh-dev-workflow@0.2.0 was published at … within the minimumReleaseAge cutoff
+  ```
+
+  要么保留那行，要么同时写 `minimumReleaseAge: 0`。
+
+### 时间怎么算
+
+截止线是「**当前时间 − 1440 分钟**」，与**发布时刻**比较，不是你安装的时刻。
+0.2.0 发布于 `2026-10-06T12:04:10.860Z`，门槛在 `2026-10-07T12:04:10Z` 解除。
+发布时间可查：
+
+```bash
+npm view @melosic/dsh-dev-workflow time --registry https://registry.npmjs.org
+```
+
+这条只对「当前最新版」成立：下一次发 `0.3.0`，门槛立刻对 `0.3.0` 生效。
+
 ## 撤回、废弃与回滚
 
 | 情况 | 做法 |
