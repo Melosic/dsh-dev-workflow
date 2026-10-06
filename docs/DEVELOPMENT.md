@@ -37,7 +37,7 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 | `src/checks.ts` | 一次变更的判定逻辑 | 触发器与 `/dev-workflow check` 共用，别只改一侧 |
 | `src/git.ts` | 通过可选服务 `subprocess` 跑 git | 每次使用前重新取服务，不要在插件存活期间缓存 |
 | `src/tools/` | 两个工具的 `defineTool` 定义 | 工具名只能含 `[A-Za-z0-9_-]`，且 ≤ 64 字符 |
-| `src/guard/` | 四道守卫的识别与判定 | 新规则默认必须是 `ask`；`file-guard` / `secret-guard` 固定 `deny` |
+| `src/guard/` | 五道守卫的识别与判定 | 新规则默认必须是 `ask`；`file-guard` / `secret-guard` 固定 `deny` |
 | `src/triggers/` | `tools/pre-execute` 监听器 | waterfall：必须先 `await next()` 再决定 |
 | `src/commands/` | `/dev-workflow` 子命令 | 用户可见文本一律走 `t()` |
 | `locale/` | 插件展示元数据（标题/描述） | 目录名必须是单数 `locale/`，文件名是短 id |
@@ -90,15 +90,23 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 `create<Name>Guard(options)`——后者把 `detect` 交给 `src/guard/shared.ts` 的
 `createGuard()`，接线、计数、审计与档位决策都由它统一提供。然后：
 
-1. `src/config.ts` 加一组 `<name>Guard`，`.default({})`，`enabled` 默认 `true`。
-2. `src/index.ts` 的 `activate()` 里 `if (config.<name>Guard.enabled) registrations.push(...)`，
-   放在提交前检查之后。**不要新增任何 export**——`tests/register.spec.ts` 断言导出恰好是
-   `Config` / `apply` / `createRuntime` / `inject` / `name` 五个。
-3. `locale/*.json` 加理由 key；若有档位，`ask` 的两份 `displayReason` 由 `createGuard()` 拼好。
-4. `tests/<name>-guard.spec.ts`，另加同步 `tests/register.spec.ts` 里的监听器与 effect 计数。
-5. `docs/SECURITY.md`（这道守卫保护什么、默认值为什么这样定）、`docs/CONFIGURATION.md`、
+1. `src/config.ts` 加一组 `<name>Guard`，`.default({})`，`enabled` 默认 `true`；
+   每个叶子都要 `.volatile()`（面板能读写的唯一前提）。
+2. `src/index.ts` 两处：`activate()` 里
+   `if (config.<name>Guard.enabled.get()) registrations.push(...)`，
+   以及 `registrationSignature()` 里加上 `config.<name>Guard.enabled.get()`。
+   **漏掉后者是这类改动最典型的 bug**：面板里切换这个开关会静默无效，直到重启才生效，
+   因为运行期比较的签名里没有这一位。**不要新增任何 export**——`tests/register.spec.ts`
+   断言导出恰好是 `Config` / `apply` / `createRuntime` / `inject` / `name` 五个。
+3. `client.js` 加一个面板分组（`GROUPS` 与每条的 `FIELDS[].group` 都要写），
+   并入 `tests/settings-schema.spec.ts` 的 `REQUIRED` 列表——面板提供的项必须**恰好**等于
+   这份清单，多一项少一项都会让该 spec 变红。
+4. `locale/*.json` 加理由 key；若有档位，`ask` 的两份 `displayReason` 由 `createGuard()` 拼好。
+5. `tests/<name>-guard.spec.ts`，另加同步 `tests/register.spec.ts` 与
+   `tests/settings-register.spec.ts` 里的监听器与 effect 计数。
+6. `docs/SECURITY.md`（这道守卫保护什么、默认值为什么这样定）、`docs/CONFIGURATION.md`、
    `docs/TRIGGERS.md`（哪一道监听器看什么）。
-6. `CHANGELOG.md` 的 `[Unreleased]`。
+7. `CHANGELOG.md` 的 `[Unreleased]`。
 
 新增**检查工具**或**触发器**同理，另外还要确认 `docs/TOOLS.md` / `docs/TRIGGERS.md`。
 新 key 加进字典后，`pnpm ci:checks` 会校验两份字典 key 对齐。

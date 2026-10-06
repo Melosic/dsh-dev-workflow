@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Dev Workflow",
-    "description": "Development-workflow gatekeeper: skill-injected conventions, commit-message and doc-sync checks, and a git-guard for destructive git commands."
+    "description": "Development-workflow gatekeeper: skill-injected conventions, commit-message and doc-sync checks, guards for destructive git commands, and a gate on the actions other people can see."
   },
   "command.toggle.description": "Turn the development-workflow gatekeeper on or off.",
   "command.toggle.hint": "on | off | status | check",
@@ -57,6 +57,10 @@
   "security.guard.amend": "Amending a published commit rewrites shared history.",
   "security.guard.checkout_discard": "checkout -- . discards all unstaged changes.",
   "security.guard.no_verify": "--no-verify skips the hooks that protect this repository.",
+  "security.guard.outward_push": "A push publishes this branch to the remote, where other people can see it.",
+  "security.guard.outward_tag": "A tag is a public marker on a commit; other people start building against it.",
+  "security.guard.outward_pull_request": "Opening a pull request asks other people to review this branch.",
+  "security.guard.outward_publish": "Publishing a version is visible to everyone who installs the package, and cannot be taken back.",
   "security.guard.suggest_force_with_lease": "Prefer --force-with-lease: it refuses to overwrite commits you have not seen.",
   "security.guard.approval_rejected": "This operation was not approved, so it stays refused.",
   "security.guard.approval_cancelled": "The approval question for this operation was cancelled, so it was refused.",

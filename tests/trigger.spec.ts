@@ -223,9 +223,9 @@ describe('src/triggers/pre-commit.ts', () => {
     const withoutTrigger = createHarness()
     createRuntime(withoutTrigger.ctx, Config({ enableOwnTrigger: false }))
     // `enableOwnTrigger: false` drops all three convention triggers — commit,
-    // pull request, and release — and keeps the four guards: git, command, file,
-    // secret.
-    expect(withoutTrigger.listeners).toHaveLength(4)
+    // pull request, and release — and keeps the five guards: git, outward,
+    // command, file, secret.
+    expect(withoutTrigger.listeners).toHaveLength(5)
     expect(await chain(withoutTrigger.listeners, 'git commit -m "Add the thing"')).toEqual({
       kind: 'allow',
     })

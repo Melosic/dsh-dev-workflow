@@ -46,8 +46,8 @@ Token 估算口径（脚本内的 `estimate()`）：非 CJK 字符按 4 字符/t
 
 | 文件 | 字符数 | 行数 |
 | --- | --- | --- |
-| `skills/dsh-dev-workflow/SKILL.md` | 20484 | 420 |
-| `skills/dsh-dev-workflow/SKILL.zh.md` | 10302 | 349 |
+| `skills/dsh-dev-workflow/SKILL.md` | 21900 | 439 |
+| `skills/dsh-dev-workflow/SKILL.zh.md` | 10800 | 361 |
 
 行数按 `Get-Content` 计（末行换行不算一行）；字符数按 UTF-8 解码后的字符个数（不是字节数）。
 复算方法见 `.dev-docs/_probe/tokens-3a.mjs`。
@@ -61,7 +61,7 @@ Token 估算口径（脚本内的 `estimate()`）：非 CJK 字符按 4 字符/t
 | --- | --- | --- |
 | 两个工具定义 | 每轮常驻 | ~520–770 字符 |
 | 技能目录行 | 每轮常驻 | ~50–140 字符 |
-| 规范全文 | 按需，每个会话至多一次 | ~10300–20500 字符 |
+| 规范全文 | 按需，每个会话至多一次 | ~10700–21900 字符 |
 | `mode: 'off'` 时 | 永不 | 0 |
 
 `mode: 'off'` 时插件不注册任何东西，常驻增量为**零**——这是这一档存在的理由，也是

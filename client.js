@@ -106,6 +106,7 @@ window.__ModuleLoader__.load({
       'group.commit': 'Commit convention',
       'group.docs': 'Documentation sync',
       'group.git': 'Git safety',
+      'group.outward': 'Outward-facing actions',
       'group.command': 'Command safety',
       'group.files': 'Files and secrets',
       'group.audit': 'Audit log',
@@ -122,6 +123,7 @@ window.__ModuleLoader__.load({
       'field.requireChangelog': 'A feat must update the changelog',
       'field.requireReadmeOnConfig': 'A configuration change must update the README',
       'field.gitEnabled': 'Git guard',
+      'field.outwardEnabled': 'Outward guard',
       'field.rememberApproved': 'Remember approved operations',
       'field.commandEnabled': 'Command guard',
       'field.dangerousShell': 'Destructive shell commands',
@@ -137,6 +139,10 @@ window.__ModuleLoader__.load({
       'policy.cleanForce': 'Clean untracked files',
       'policy.checkoutDiscard': 'Discard unstaged edits',
       'policy.noVerify': 'Skip hooks (--no-verify)',
+      'outward.push': 'Push to the remote',
+      'outward.tag': 'Create a tag',
+      'outward.pullRequest': 'Open a pull request',
+      'outward.publish': 'Publish a version',
       'hint.mode':
         'Off withdraws every tool, skill, command and trigger this plugin registers, so it costs no tokens. The plugin itself stays loaded — enabling or disabling it is the plugin manager\u2019s job.',
       'hint.locale':
@@ -151,6 +157,8 @@ window.__ModuleLoader__.load({
         'Also stops long random strings with no known prefix. This is the rule most likely to interrupt an ordinary call, so it is off by default.',
       'hint.rememberApproved':
         'Applies to git operations whose policy is Ask: one approval covers the same operation for the rest of the session. Deny is never affected.',
+      'hint.outward':
+        'Covers the actions other people can see: a push, a tag, a pull request, a publish. Nothing here is lost if it goes wrong on this machine — the question is whether you agreed to announce it.',
       'value.on': 'On',
       'value.off': 'Off',
       'value.auto': 'Auto',
@@ -193,6 +201,7 @@ window.__ModuleLoader__.load({
       'group.commit': '提交规范',
       'group.docs': '文档同步',
       'group.git': 'Git 安全',
+      'group.outward': '对外可见动作',
       'group.command': '命令安全',
       'group.files': '文件与密钥保护',
       'group.audit': '审计日志',
@@ -209,6 +218,7 @@ window.__ModuleLoader__.load({
       'field.requireChangelog': 'feat 必须更新 CHANGELOG',
       'field.requireReadmeOnConfig': '配置变更必须更新 README',
       'field.gitEnabled': 'Git 守卫',
+      'field.outwardEnabled': '对外动作守卫',
       'field.rememberApproved': '记住已批准的同类操作',
       'field.commandEnabled': '命令守卫',
       'field.dangerousShell': '危险 shell 命令',
@@ -224,6 +234,10 @@ window.__ModuleLoader__.load({
       'policy.cleanForce': '清理未跟踪文件',
       'policy.checkoutDiscard': '丢弃未暂存改动',
       'policy.noVerify': '跳过钩子（--no-verify）',
+      'outward.push': '推送到远端',
+      'outward.tag': '创建标签',
+      'outward.pullRequest': '创建 PR',
+      'outward.publish': '发布版本',
       'hint.mode':
         '关闭后，本插件注册的工具、技能、命令和触发器全部撤销，不占常驻 token。插件本身仍然加载 —— 启用或停用是插件管理器的事。',
       'hint.locale':
@@ -236,6 +250,8 @@ window.__ModuleLoader__.load({
         '没有已知前缀的长随机串也会被拦。这一项最容易打断普通调用，所以默认关闭。',
       'hint.rememberApproved':
         '仅对策略为「询问」的 git 操作生效：一次同意覆盖本会话内同一操作。策略为「拒绝」的操作永不受影响。',
+      'hint.outward':
+        '覆盖其他人看得见的动作：推送、打标签、创建 PR、发布。这些在本机做错了都还能回头 —— 要确认的是你有没有同意把它公开出去。',
       'value.on': '开启',
       'value.off': '关闭',
       'value.auto': '自动',
@@ -299,11 +315,13 @@ window.__ModuleLoader__.load({
       { value: 'ask', label: 'value.ask' },
       { value: 'allow', label: 'value.allow' },
     ]
+    const OUTWARD_POLICIES = ['push', 'tag', 'pullRequest', 'publish']
     const GROUPS = [
       { key: 'workflow', open: true },
       { key: 'commit', open: true },
       { key: 'docs', open: true },
       { key: 'git', open: true },
+      { key: 'outward', open: true },
       { key: 'command', open: true },
       { key: 'files', open: true },
       { key: 'audit', open: true },
@@ -410,6 +428,20 @@ window.__ModuleLoader__.load({
         label: 'field.rememberApproved',
         hint: 'hint.rememberApproved',
       },
+      {
+        group: 'outward',
+        path: ['outwardGuard', 'enabled'],
+        control: 'switch',
+        label: 'field.outwardEnabled',
+        hint: 'hint.outward',
+      },
+      ...OUTWARD_POLICIES.map((policy) => ({
+        group: 'outward',
+        path: ['outwardGuard', policy],
+        control: 'segments',
+        options: POLICY_OPTIONS,
+        label: `outward.${policy}`,
+      })),
       {
         group: 'command',
         path: ['commandGuard', 'enabled'],

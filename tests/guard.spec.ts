@@ -160,6 +160,15 @@ describe('src/guard/git-guard.ts', () => {
     expect(classify('git branch --delete --force topic')).toMatchObject({
       reason: 'security.guard.branch_delete',
     })
+    expect(classify('git push --delete origin topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git push origin -d topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git push origin :topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
     expect(classify('git checkout -- src/a.ts')).toMatchObject({
       reason: 'security.guard.checkout_discard',
     })

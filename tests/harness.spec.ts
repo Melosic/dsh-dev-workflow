@@ -47,7 +47,7 @@ describe('createHarness', () => {
     // records nothing is the failure this whole file is about.
     expect(harness.tools).toHaveLength(2)
     expect(harness.providers).toHaveLength(1)
-    expect(harness.listeners).toHaveLength(7)
+    expect(harness.listeners).toHaveLength(8)
   })
 
   it('records the settings presentation only when that service is present', () => {

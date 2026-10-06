@@ -19,8 +19,9 @@
   - **与文件配置同源。** 面板没有自己的存储：保存经宿主的设置控制器写入当前 profile 的
     `cordis.patch.yml`，再提交进运行中的配置引用，**不需要重启**；`locale` 也会随之
     重新解析。
-  - 27 项可在面板修改（开关与枚举，外加 `commitCheck.subjectMaxLength` 一个数字输入）；
-    8 个危险 git 操作的档位、四道守卫与审计的开关、提交与文档两组检查的规则都在其中。
+  - 32 项可在面板修改（开关与枚举，外加 `commitCheck.subjectMaxLength` 一个数字输入）；
+    8 个危险 git 操作的档位、4 个对外动作的档位、五道守卫与审计的开关、提交与文档两组
+    检查的规则都在其中。
   - 9 项（`codePaths`、`docs.docsDir`、`docs.adrDir`、`docs.changelog`、`docs.exclude`、
     `rules.branchPattern`、`rules.commitPattern`、`docs.mirrors`、`audit.path`）只读展示在
     默认折叠的**高级**区，旁边有按钮直接打开 profile 的 `cordis.patch.yml`；另有 2 项
@@ -30,7 +31,7 @@
   - 样式只用主题发布的 `--dsw-alias-*` token，类名统一 `dsw-dev-workflow-` 前缀，
     `<style>` 带 `data-plugin` / `data-plugin-css`，HMR 能按归属清理。
   - **保存成功会在底部给一行提示**（`action.saved`），下一次编辑、取消或关闭设置面板时
-    消失。官方 `SettingsForm` 只报失败、不报成功，而这张表单有 27 个字段：保存成功后唯一的
+    消失。官方 `SettingsForm` 只报失败、不报成功，而这张表单有 32 个字段：保存成功后唯一的
     变化只是按钮不再变灰，滚在顶部的人看不出发生过什么。提示属于「这一次打开」，所以不能只
     记在插件的草稿实例上——设置面板关闭时会卸载这个 section，而草稿实例与插件同生命周期，
     只记在那里会让提示在下次打开面板时重现。
@@ -104,6 +105,22 @@
     （每轮都要成立的稳定规则 vs 做事时才读的规范全文），含
     `@deepseek-ai/dsh-agent-instructions` 的加载链、候选名、65536 字节预算与「不 watch」约束。
 
+- **第五道守卫 `outward-guard`：拦下「本机没事、但别人立刻看得见」的动作。**
+  此前四道守卫守的都是「东西会丢」，而 agent 抢在用户点头之前就把分支推上去、把标签打上、
+  把 PR 开出来、把版本发出去，本机一样东西都没丢——用户却已经被对外宣称同意了。
+  新守卫填的正是这个缺口，四个策略键默认全为 `ask`（不是 `deny`：这是唯一一道本机不会造成
+  任何损失的守卫，要的是同意而不是禁止）。
+  - `src/guard/outward-guard.ts`：`outwardGuard.push` 认任意 `git push`（强推仍归
+    `gitGuard.forcePush`，两者同时命中时理由由更严者胜出）、`outwardGuard.tag` 认
+    `git tag <name>`（`-l` / `-d` / `-v` 这类读操作不算）、`outwardGuard.pullRequest` 认
+    `gh pr create`、`outwardGuard.publish` 认 `npm` / `pnpm publish`；`--dry-run` / `-n`
+    一律放过。
+  - 识别**复用触发器里的同一份判断**（`detectRelease()` 与 `detectPullRequest()`），
+    复制出第二份「什么算一次发版」正是会让门禁和检查对同一行命令各说各话的做法。
+  - 注册排在破坏性 git 之后、机器级破坏之前；面板新增「对外可见动作」分组。
+  - `tests/outward-guard.spec.ts` 覆盖四类动作、`--dry-run` 排除、开关关掉时全放过
+    与「上游拒绝不被降级成询问」。
+
 ### Changed
 
 - **DSH `peerDependencies` 改为只写下界 `>=0.2.0-rc.2`，去掉上界 `<0.3.0`。**
@@ -131,7 +148,7 @@
   以及 `unpublish` 的三个技术前提（72 小时窗口、只接受单个版本或整个项目、
   撤掉最后一个版本会被拦且 24 小时内发不回来）；并把 `ci:checks` 输出示例里的
   过期数字 `locale keys aligned (56 keys)` 更正为 81。
-- `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为四道守卫的完整说明，含各自的
+- `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为各道守卫的完整说明，含各自的
   默认值与理由；`docs/CONFIGURATION.md` 补四组新配置；`docs/TRIGGERS.md` 与
   `docs/ARCHITECTURE.md` 的监听器数量与次序更正为「约定 → git → 命令 → 文件 → 密钥」；
   `docs/DEVELOPMENT.md` 补一节「加一整道新守卫要动什么」。
@@ -250,7 +267,7 @@
   并真的覆盖远端。现在只有**不带** `--force` / `-f` / `+refspec` 时 lease 才免检。
 - **透明前缀使守卫看不见真实命令。** `programInvocations()` 原先只剥 `VAR=value` 与
   `env`，所以 `sudo git push --force`、`nohup rm -rf /`、`npx npm publish` 一律漏过。
-  现在 `src/shell.ts` 导出 `TRANSPARENT` 集合与 `skipWrappers()`，四道守卫共用一处修复。
+  现在 `src/shell.ts` 导出 `TRANSPARENT` 集合与 `skipWrappers()`，五道守卫共用一处修复。
 - **`${HOME}` 永远匹配不上。** `tokenize()` 把 `{` / `}` 当分隔符丢掉，`rm -rf ${HOME}`
   被拆成无从判断的碎片，`DANGEROUS_TARGETS` 里的 `'${HOME}'` 是死条目。现在 `${VAR}`
   保留为一个词；`isDangerousTarget()` 同时归一化尾随斜杠，`rm -rf $HOME/`、`rm -rf ~/`
@@ -263,6 +280,10 @@
 - **`.env.example` 被当成机密。** 命中 `.env` 的文件名前缀规则会连示例文件一起拒掉，
   而示例文件按惯例不含真实凭据、且是仓库里最需要被读的文件之一。现在
   `example` / `sample` / `template` / `dist` / `defaults` 五个示例变体放行。
+- **`git push --delete` 只是文档里的承诺。** `SKILL.md` 的危险表列了这一行，`pushHit()`
+  却只认力推，所以删远端分支既不问也不入审计。现在 `--delete` / `-d` / 空左侧 refspec
+  （`git push origin :topic`）都归 `gitGuard.branchDelete` 管——与本地 `git branch -D`
+  同一份损失、同一个策略键，而不是新加一个只有极端情况才用得到的开关。
 - 打包不再可能发出缺文件的产品：`package.json` 增加 `prepack`（`pnpm build && pnpm
   ci:checks`），`scripts/ci-checks.mjs` 增加发布入口存在性检查——`lib/index.js`、
   `client.js`、`locale/en.json`、`skills/dsh-dev-workflow/SKILL.md` 任一不存在、

@@ -24,7 +24,8 @@ read on demand — nothing below is resident context.
 - **Quality gates come first.** Typecheck, lint, format, and tests run before
   review, so a reviewer reads intent instead of noise.
 - **Secure by default, explicit confirmation.** Destructive operations default
-  to asking, never to allowing.
+  to asking, never to allowing. So do the actions other people can see — a commit
+  the user has not approved, a push, a tag, a pull request, a publish.
 - **Trigger on the action, not on a mode switch.** The workflow appears when the
   user is about to commit, branch, or release. Users forget to switch modes;
   actions do not lie.
@@ -157,8 +158,13 @@ including an administrator.
 
 ## Pull Requests and Quality Gates
 
-Before committing:
+Before committing, **show the user what will be committed and wait for their
+answer.** A commit is the first thing that becomes hard to take back: state the
+branch, the staged files, and the message, then let them agree, change, or drop
+it. It is their repository. The checklist below is what to verify before you ask,
+not permission to skip the asking.
 
+- [ ] The user has seen the exact changes and message, and agreed to them.
 - [ ] Your project's own checks pass locally: typecheck, lint, format check, and
       tests, run with whatever commands that project defines.
 - [ ] The staged changes answer one question (see *Atomic Commits*).
@@ -187,6 +193,14 @@ Run `/dev-workflow status --json` and check that the output parses.
 A pull request is mergeable only when CI is green, the branch is up to date with
 `main`, and every review conversation is resolved. Never merge by bypassing a
 failing check: fix the cause, or report the blocker.
+
+**Pushing, tagging, opening the pull request, and publishing each need their own
+answer from the user first.** These leave this machine under their name; they are
+not steps an assistant completes on its own initiative. Show the branch, the
+remote, the tag or the version, and the exact command, then wait. One approval
+covers that one action — consent to commit is not consent to push, and consent to
+push is not consent to publish. When the user has not answered, the state is "not
+yet done", not "done".
 
 ### Local Verification vs CI
 
@@ -396,6 +410,11 @@ unprompted:
 - An AI assistant must not run a destructive operation without explicit
   confirmation from the user for that specific action, and must name what will
   be lost.
+- **The same goes for every action other people can see.** A push, a tag, a pull
+  request, and a publish leave this machine under the user's name, and saying
+  "done" before they agreed is the mistake these four have in common. Show what
+  will leave, wait for the answer, and only then run it. A forced push is both:
+  show the remote commit that will be overwritten as well.
 - When a destructive command is requested, prefer the reversible form and say
   why.
 - Scan the staged diff for credential patterns before committing. If one turns

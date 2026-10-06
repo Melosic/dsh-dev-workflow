@@ -5,8 +5,8 @@
 A development workflow for coding agents, packaged as a
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) plugin: a written spec the
 agent reads on demand, tools and triggers that enforce the parts a machine can check, and guards for
-the actions that cannot be undone. It is a plugin, not a mode — it works on top of the modes you
-already use.
+the actions that cannot be undone — or should not be announced before you agree. It is a plugin, not
+a mode — it works on top of the modes you already use.
 
 ## Why
 
@@ -19,14 +19,15 @@ This plugin turns that spec into something the agent carries and the tooling enf
 workflow — branch model, commit format, atomic commits, PR quality gates, documentation sync,
 release and CHANGELOG rules — ships as a skill read on demand, so it is there exactly when it
 applies without costing every turn. What can be checked mechanically is checked for you; what
-cannot be undone is gated first. It speaks at those moments, not between them.
+cannot be undone is gated first, and so is what other people would see before you agreed to it.
+It speaks at those moments, not between them.
 
 ## Features
 
 - **Conventions as a skill, not a lecture.** The full spec is read on demand; what stays resident is a few hundred tokens.
 - **Two check tools.** `check_commit_message` for Conventional Commits, `check_doc_sync` for docs that moved with the code.
 - **Three triggers, quiet until they matter:** before a commit, before `gh pr create`, before `git tag` or a publish.
-- **Four guards, one shape.** Irrecoverable shell commands, destructive git operations, sensitive reads, credentials in arguments.
+- **Five guards, one shape.** Irrecoverable shell commands, destructive git operations, actions other people can see, sensitive reads, credentials in arguments.
 - **One switch, and it is an install switch.** `/dev-workflow status` reports mode, locale, last check and guard activity; `off` unregisters everything.
 - **A settings panel** in DeepSeek Harness Settings for every switch and enum, applied without a restart.
 

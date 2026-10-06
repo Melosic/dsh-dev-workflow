@@ -2,7 +2,7 @@
 
 本文件说明 dsh-dev-workflow 的自动介入路径：**它什么时候开口，靠什么开口，以及什么时候它其实开不了口。**
 
-对应的代码是 `src/triggers/`（三个约定触发器：提交前、PR 前、发版前）、`src/guard/`（四道守卫）与
+对应的代码是 `src/triggers/`（三个约定触发器：提交前、PR 前、发版前）、`src/guard/`（五道守卫）与
 `src/commands/dev-workflow.ts`（手动路径）。它们共用 `src/checks.ts` 与
 `src/tools/check-commit-message.ts` 的判定逻辑、`src/shell.ts` 的命令行解析，所以
 「自动检查」和 `/dev-workflow check` 给出的结论必然一致。
@@ -51,10 +51,11 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 取舍，插件给的是「要不要照常执行」的选择，而不是否决权。**只有配置里显式写了 `'deny'`
 的守卫策略才会真正拒绝**（见 [docs/SECURITY.md](SECURITY.md)）。
 
-七道门是独立的：`enableOwnTrigger` 管三个约定触发器，四道守卫各由自己的 `enabled` 管，
-其中一个出问题不影响其余。注册顺序是「约定（提交 → PR → 发版）→ 破坏性 git → 危险命令 →
-敏感文件 → 密钥」：更靠前的守卫先写审计记录，而各级决策仍按「更严者胜」汇总，
-顺序不影响最终结果。
+八道门是独立的：`enableOwnTrigger` 管三个约定触发器，五道守卫各由自己的 `enabled` 管，
+其中一个出问题不影响其余。注册顺序是「约定（提交 → PR → 发版）→ 破坏性 git → 对外动作 →
+危险命令 → 敏感文件 → 密钥」：更靠前的守卫先写审计记录，而各级决策仍按「更严者胜」汇总，
+顺序不影响最终结果。**对外动作排在破坏性 git 之后、机器级破坏之前**：它管的也是 git
+（外加 `gh` 与包管理器），但拦的是「别人会看见」，不是「本机会丢东西」。
 
 ## 什么算「一次提交」
 
@@ -169,6 +170,7 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 | `rebase` | `rebase` | `ask` |
 | `commit --amend` | `amend` | `ask` |
 | `branch -D` / `--delete --force` | `branchDelete` | `ask` |
+| `push --delete` / `-d <remote> <branch>` | `branchDelete` | `ask` |
 | `clean -f` / `-fd` | `cleanForce` | `ask` |
 | `checkout -- <path>` | `checkoutDiscard` | `ask` |
 | `--no-verify`（任何子命令） | `noVerify` | `ask` |
@@ -194,7 +196,31 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 一条命令行同时命中多项时，按 `deny > ask > allow` 取最严的一条——**绝不削弱上游更严的决定**。
 唯一的覆盖方向是「自己 `deny` 对上上游 `ask`」，因为拒绝一个已经在被质疑的调用不会让情况变坏。
 
-## 另外三道守卫
+## 守卫对外可见动作
+
+第二道守卫（`src/guard/outward-guard.ts`）管的是另一类错误：**在本机完全可回退，但一旦离开
+本机，其他人立刻就看得见。** 推送、打标签、创建 PR、发布都越过这条线；agent 抢在用户同意
+之前替你对外宣称「做完了」，正是缺这一道门时会发生的事。
+
+| 命令形态 | 策略键 | 默认 |
+| --- | --- | --- |
+| 任意 `git push`（不只强推） | `outwardGuard.push` | `ask` |
+| `git tag <name>`（建标签，不是读标签） | `outwardGuard.tag` | `ask` |
+| `gh pr create` | `outwardGuard.pullRequest` | `ask` |
+| `npm publish` / `pnpm publish` | `outwardGuard.publish` | `ask` |
+
+- **普通 `git push` 也拦。** 强推是另一个、更严重的问题，仍归 `gitGuard.forcePush`；
+  这里拦的是「把分支推到远端」本身。同一条 `git push --force` 会同时命中两道守卫，
+  最终理由由更严者胜出——强推的理由盖过「推送」的理由。
+- **两处识别复用触发器里的同一份判断。** 建标签与读标签之别、`gh pr create` 与 `gh pr list`
+  之别、以及 `--dry-run` / `-n` 不算发版，都走 `detectRelease()` 与 `detectPullRequest()`——
+  「什么算一次发版」只能有一个答案，否则门禁和检查会对同一行命令各说各话。
+- **`--dry-run` 演习一律放过。** 它不碰远端也不上传，没有需要用户同意的事。
+- **能力边界与触发器相同。** 只看命令行词法，所以 `sh -c "git push"` 里引号包着的整段脚本认不出。
+- **它是唯一一道拦「本机没事」的守卫，所以默认全是 `ask` 而非 `deny`。** 要的是同意，
+  不是阻拦：用户点头，命令原样放行。
+
+## 机器与文件的三道守卫
 
 后三道守卫看的是同一件事的三面：**这次调用会不会让东西永久地出去或消失。**
 
@@ -219,7 +245,7 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 `command-guard` 的识别细节（什么算危险目标、为什么 `rm -rf node_modules` 放行）见
 [docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
 
-**四道守卫共用 `src/guard/shared.ts` 的 `createGuard()`。** 它负责接线、命中计数、审计回调
+**五道守卫共用 `src/guard/shared.ts` 的 `createGuard()`。** 它负责接线、命中计数、审计回调
 与档位决策；每道守卫只提供一个 `detect(exec)`。因此「先 `await next()`、透传上游决定、
 `signal.aborted` 时返回 `cancel`、同级先入列者胜」这些规则只有一份实现。
 

@@ -79,21 +79,21 @@ describe('src/index.ts settings registration', () => {
     commit(config.mode, 'on')
     deliver(harness)
     expect(runtime.active).toBe(true)
-    expect(harness.listeners).toHaveLength(7)
+    expect(harness.listeners).toHaveLength(8)
   })
 
   it('rebuilds the registrations when a switch that gates one moves', () => {
     const harness = createHarness()
     const config = Config({})
     plugin.apply(harness.ctx, config)
-    expect(harness.listeners).toHaveLength(7)
+    expect(harness.listeners).toHaveLength(8)
 
     // The git guard is registered or not at activation time, so switching it off
     // has to drop the listener, not merely make it answer differently.
     commit(config.gitGuard.enabled, false)
     deliver(harness)
 
-    expect(harness.listeners).toHaveLength(6)
+    expect(harness.listeners).toHaveLength(7)
     expect(harness.tools).toHaveLength(2)
   })
 
@@ -104,18 +104,19 @@ describe('src/index.ts settings registration', () => {
     const switches: ReadonlyArray<
       [string, (config: ReturnType<typeof Config>) => unknown, number]
     > = [
-      ['enableOwnTrigger', (config) => config.enableOwnTrigger, 4],
-      ['gitGuard.enabled', (config) => config.gitGuard.enabled, 6],
-      ['commandGuard.enabled', (config) => config.commandGuard.enabled, 6],
-      ['fileGuard.enabled', (config) => config.fileGuard.enabled, 6],
-      ['secretGuard.enabled', (config) => config.secretGuard.enabled, 6],
+      ['enableOwnTrigger', (config) => config.enableOwnTrigger, 5],
+      ['gitGuard.enabled', (config) => config.gitGuard.enabled, 7],
+      ['outwardGuard.enabled', (config) => config.outwardGuard.enabled, 7],
+      ['commandGuard.enabled', (config) => config.commandGuard.enabled, 7],
+      ['fileGuard.enabled', (config) => config.fileGuard.enabled, 7],
+      ['secretGuard.enabled', (config) => config.secretGuard.enabled, 7],
     ]
 
     for (const [name, reference, off] of switches) {
       const harness = createHarness()
       const config = Config({})
       plugin.apply(harness.ctx, config)
-      expect(harness.listeners, name).toHaveLength(7)
+      expect(harness.listeners, name).toHaveLength(8)
 
       commit(reference(config) as never, false)
       deliver(harness)

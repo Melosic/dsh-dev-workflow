@@ -16,6 +16,7 @@ import { createPreCommitTrigger } from './triggers/pre-commit.js'
 import { createPrePrTrigger } from './triggers/pre-pr.js'
 import { createPreReleaseTrigger } from './triggers/pre-release.js'
 import { createGitGuard } from './guard/git-guard.js'
+import { createOutwardGuard } from './guard/outward-guard.js'
 import type { ApprovalPolicyReporter } from './approval-policy.js'
 import type { ApprovalService } from './guard/approval.js'
 import { createCommandGuard } from './guard/command-guard.js'
@@ -119,6 +120,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       config.mode.get(),
       config.enableOwnTrigger.get(),
       config.gitGuard.enabled.get(),
+      config.outwardGuard.enabled.get(),
       config.commandGuard.enabled.get(),
       config.fileGuard.enabled.get(),
       config.secretGuard.enabled.get(),
@@ -243,9 +245,28 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       )
     }
 
-    // The remaining guards run after the git one, from the widest blast radius to
-    // the narrowest: a machine, then a filesystem, then a single secret. Each is
-    // its own switch, so a profile can keep one without the others.
+    // The guards that leave this machine run next: nothing they cover is
+    // unrecoverable here, but each one is visible to other people the moment it
+    // lands, and consent is the thing being protected.
+    if (config.outwardGuard.enabled.get()) {
+      registrations.push(
+        ctx.on(
+          'tools/pre-execute',
+          createOutwardGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
+        ),
+      )
+    }
+
+    // The remaining guards run after those, from the widest blast radius to the
+    // narrowest: a machine, then a filesystem, then a single secret. Each is its
+    // own switch, so a profile can keep one without the others.
     if (config.commandGuard.enabled.get()) {
       registrations.push(
         ctx.on(

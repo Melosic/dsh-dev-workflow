@@ -1,8 +1,8 @@
 # 配置参考
 
 本文件是 `src/config.ts` 的对照说明。配置面由 Schemastery 声明，**每个字段都带默认值**，
-因此空配置解析出的就是文档里描述的基线：插件开着、危险 git 操作与危险 shell 命令一律 `ask`、
-没有任何操作被默认放行、四道守卫与审计记录全部启用。
+因此空配置解析出的就是文档里描述的基线：插件开着、危险 git 操作、对外可见动作与危险 shell
+命令一律 `ask`、没有任何操作被默认放行、五道守卫与审计记录全部启用。
 
 配置写在 DSH profile 里，`apply` 之前由宿主完成校验与填默认值——插件内部永远看不到「未填」的状态。
 它也可以在 DSH 设置里的**可视化面板**中修改，两条路写的是同一份配置源：面板保存后落进当前
@@ -21,6 +21,7 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 本插件自身文案的语言（**不是**设置页的语言，也**不**决定模型怎么写提交信息） |
 | `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的提交前检查 |
 | `gitGuard` | 对象 | 见下 | 危险 git 操作的策略 |
+| `outwardGuard` | 对象 | 见下 | 对外可见动作（推送、标签、PR、发布）的策略 |
 | `commandGuard` | 对象 | 见下 | 危险 shell 命令的策略 |
 | `fileGuard` | 对象 | 见下 | 不许读取的敏感路径 |
 | `secretGuard` | 对象 | 见下 | 凭据泄漏预防 |
@@ -152,7 +153,7 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `hardReset` | 动作 | `'ask'` | `git reset --hard` |
 | `rebase` | 动作 | `'ask'` | `git rebase`（会重写历史） |
 | `amend` | 动作 | `'ask'` | `git commit --amend` |
-| `branchDelete` | 动作 | `'ask'` | `git branch -D`、`--delete --force` |
+| `branchDelete` | 动作 | `'ask'` | `git branch -D`、`--delete --force`、`git push --delete` |
 | `cleanForce` | 动作 | `'ask'` | `git clean -f`（删未跟踪文件） |
 | `checkoutDiscard` | 动作 | `'ask'` | `git checkout -- <path>`（丢弃未暂存改动） |
 | `noVerify` | 动作 | `'ask'` | `--no-verify`（跳过 git 钩子） |
@@ -223,7 +224,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 于是 `dsh-tools` 把这次拒绝渲染成 `the user rejected tool "..."`（该包 `lib/index.js:3468`）。
 用户什么都没看到，模型却被告知用户做了决定。
 
-所以本插件的每一道 gate（四道守卫 + 三个触发器）在返回 `ask` 之前先读本会话的有效策略
+所以本插件的每一道 gate（五道守卫 + 三个触发器）在返回 `ask` 之前先读本会话的有效策略
 （`effectivePolicy(session)`）。策略是 `never` 时，gate **自己**返回 `deny`：
 
 - 结果与之前完全相同——该操作都是被拒绝；
@@ -237,6 +238,23 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 读不到策略（档里没挂审批服务、审批服务没实现这个方法）或这次调用没有会话时，行为
 与之前逐字相同——维持 `ask`，交给 dispatcher。**不知道就不猜**，否则会把一个能正常
 提问、能被批准的操作变成拒绝。实现见 `src/approval-policy.ts` 的 `unaskable()`。
+
+## `outwardGuard`
+
+前面几道守卫拦的是「东西会丢」。这一道拦的是**本机不会丢、但别人立刻看得见**的动作。
+默认 `ask`，识别细节与能力边界见 [docs/TRIGGERS.md](TRIGGERS.md) 的「守卫对外可见动作」。
+
+| 字段 | 类型 | 默认值 | 拦截什么 |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | 守卫总开关 |
+| `push` | 动作 | `'ask'` | 任意 `git push`（不含 `--dry-run`）；强推另由 `gitGuard.forcePush` 判定 |
+| `tag` | 动作 | `'ask'` | `git tag <name>` 建标签；`-l` / `-d` / `-v` 这类读操作不算 |
+| `pullRequest` | 动作 | `'ask'` | `gh pr create`；`gh pr list` / `view` 不算 |
+| `publish` | 动作 | `'ask'` | `npm publish` / `pnpm publish`；`--dry-run` / `-n` 不算 |
+
+四项默认都是 `ask` 而非 `deny`：这是唯一一道**本机不会造成任何损失**的守卫，要的是用户
+点头同意，而不是禁止这类操作。`git push --force` 同时命中本守卫与 `gitGuard.forcePush`，
+理由按「更严者胜」由强推那条给出。
 
 ## `commandGuard`
 
@@ -310,6 +328,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 只关掉提交信息检查 | `commitCheck.enabled: false` |
 | 只关掉文档同步检查 | `docsCheck.enabled: false` |
 | 只关掉危险 git 命令守卫 | `gitGuard.enabled: false` |
+| 只关掉对外动作守卫 | `outwardGuard.enabled: false` |
 | 只关掉危险 shell 命令守卫 | `commandGuard.enabled: false` |
 | 只关掉敏感文件守卫 | `fileGuard.enabled: false` 或 `noRead: []` |
 | 只关掉密钥守卫 | `secretGuard.enabled: false` |
@@ -328,7 +347,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 反过来说，手改文件后重新加载同样会反映到面板。
 
 保存成功时底部会出现一行提示；它只说明「这一批值已经落到 profile 里了」，下一次编辑、取消或
-关闭设置面板时就会消失。官方 `SettingsForm` 只报告失败，但本表单有 27 个字段，只靠按钮从
+关闭设置面板时就会消失。官方 `SettingsForm` 只报告失败，但本表单有 32 个字段，只靠按钮从
 「可点」变回「不可点」来暗示成功，滚在顶部的人无从判断——所以这里补了一行明确的成功提示。
 提示绑定在「这一次打开面板」上：设置面板关闭时会卸载这个 section，而草稿实例与插件同生命周期，
 所以提示在这两者之间要显式清掉，否则下次打开面板会重放上次的保存提示。底部的两个按钮靠右对齐，
@@ -359,13 +378,13 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 但恰好等于当前有效值（字段本来就是这个值，或别人刚写进来），草稿会被丢掉、不产生任何写操作
 ——这一点和改动前一致。
 
-为什么值得知道：对安全相关的项（尤其 `gitGuard` 的八个档位）来说，「已覆盖」是一份**清单**。
+为什么值得知道：对安全相关的项（尤其 `gitGuard` 的八个档位与 `outwardGuard` 的四个）来说，「已覆盖」是一份**清单**。
 把它们从 `ask` 改成 `allow` 之后忘改回来，`allow` 会一直生效——徽标正是让你能找回这些字段的
 东西，`approval.disabled` 的文案里也把这一点写了出来（见
 [权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。现在撤销也只要一步：
 把那个档位选回 `ask` 再保存，profile 里那一项就被删掉了。
 
-### 面板可以改的（27 项）
+### 面板可以改的（32 项）
 
 | 分组 | 项目 |
 | --- | --- |
@@ -373,6 +392,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 提交规范 | `commitCheck.enabled`、`onFailure`、`types`、`requireScope`、`subjectMaxLength` |
 | 文档同步 | `docsCheck.enabled`、`rules.requireChangelogOnFeat`、`docsCheck.requireReadmeOnConfig` |
 | Git 安全 | `gitGuard.enabled`、八个操作档位、`gitGuard.rememberApproved` |
+| 对外可见动作 | `outwardGuard.enabled`、`push`、`tag`、`pullRequest`、`publish` |
 | 命令安全 | `commandGuard.enabled`、`commandGuard.dangerousShell` |
 | 文件与密钥 | `fileGuard.enabled`、`secretGuard.enabled`、`secretGuard.genericHighEntropy` |
 | 审计日志 | `audit.enabled` |
