@@ -429,6 +429,8 @@ export interface PanelDescription {
     readonly group: string
     readonly path: readonly string[]
     readonly control: string
+    readonly label: string
+    readonly hint?: string
     readonly options?: readonly (string | { readonly value: string })[]
   }[]
   readonly advanced: readonly { readonly path: readonly string[]; readonly label: string }[]
@@ -438,6 +440,8 @@ export interface PanelDescription {
     readonly en: Record<string, string>
     readonly zh: Record<string, string>
   }
+  /** The stylesheet the browser half injects, as text. */
+  readonly css: string
 }
 
 /** The browser half's section registration, as the slot service received it. */
@@ -459,6 +463,13 @@ export interface LoadedPanel {
   readonly section: PanelSection
   readonly injected: {
     readonly hooks: { readonly form: unknown; readonly document: unknown }
+    readonly actions: {
+      readonly edit: (path: readonly string[], value: unknown) => void
+      readonly clear: (path: readonly string[]) => void
+      readonly discard: () => void
+      readonly save: () => Promise<void>
+      readonly acknowledgeSaved: () => void
+    }
     readonly openDocument: () => void
     readonly documentAvailable: boolean
   }
@@ -466,6 +477,93 @@ export interface LoadedPanel {
   readonly namespaces: string[]
   /** The dictionaries the panel registered, by namespace. */
   readonly dictionaries: { readonly ns: string; readonly dict: unknown }[]
+}
+
+/** One node of the tree the stubbed `createElement` builds. */
+export interface RenderedNode {
+  readonly type: unknown
+  readonly props: Record<string, unknown>
+  readonly children: unknown[]
+}
+
+/**
+ * The stubbed `createElement`. React never runs in this suite, so this resolves
+ * what a spec needs by hand: it builds a plain tree a spec can walk, and — like
+ * the renderer — calls a component function so the markup below it exists.
+ * Returning a real node (rather than `undefined`) is what lets a spec click a
+ * button the way the browser does.
+ */
+const stubElement = (type: unknown, props: unknown, ...children: unknown[]): RenderedNode => {
+  const resolved = (props ?? {}) as Record<string, unknown>
+  if (children.length === 1) resolved.children = children[0]
+  else if (children.length > 1) resolved.children = children
+  if (typeof type === 'function') {
+    return (type as (props: Record<string, unknown>) => RenderedNode)(resolved)
+  }
+  return { type, props: resolved, children }
+}
+
+/** Every node in a rendered tree, parents before children. */
+export function walkRendered(node: unknown, visit: (node: RenderedNode) => void): void {
+  if (Array.isArray(node)) {
+    for (const child of node) walkRendered(child, visit)
+    return
+  }
+  if (node === null || typeof node !== 'object' || !('type' in node)) return
+  const element = node as RenderedNode
+  visit(element)
+  for (const child of element.children) walkRendered(child, visit)
+}
+
+const renderedText = (node: unknown): string => {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(renderedText).join('')
+  if (node === null || typeof node !== 'object' || !('type' in node)) return ''
+  return (node as RenderedNode).children.map(renderedText).join('')
+}
+
+/** The text a rendered node shows, the way the browser would flatten it. */
+export const nodeText = (node: RenderedNode): string => renderedText(node.children)
+
+/**
+ * Render the registered section the way the slot host does — the bound
+ * `useForm`/`useDocument` selectors read the sources the panel injected, and
+ * every action arrives as an ordinary prop. A spec can then find a control by
+ * its text and fire its handler, which is the one thing a stub that discards
+ * elements (returning `undefined`) could never exercise.
+ * @param panel - a panel from {@link loadPanel}.
+ * @returns the rendered tree root.
+ */
+export function renderSection(panel: LoadedPanel): RenderedNode {
+  const dictionary = panel.dictionaries[0]?.dict as
+    { readonly en?: Record<string, string> } | undefined
+  const t = (key: string): string => dictionary?.en?.[key] ?? key
+  const component = panel.section.component as (props: Record<string, unknown>) => RenderedNode
+  return component({
+    ...panel.injected,
+    t,
+    useForm: (selector: (snapshot: unknown) => unknown) =>
+      selector((panel.injected.hooks.form as { getSnapshot(): unknown }).getSnapshot()),
+    useDocument: (selector: (snapshot: unknown) => unknown) =>
+      selector((panel.injected.hooks.document as { getSnapshot(): unknown }).getSnapshot()),
+  })
+}
+
+/**
+ * The effect cleanups the stubbed `useEffect` collected, oldest first. React
+ * runs an effect's cleanup when the component unmounts, and the dialog unmounts
+ * the section whenever it closes — a spec has to be able to replay that, or a
+ * bug that only shows up on a second visit is untestable here.
+ */
+const cleanups: (() => void)[] = []
+
+/**
+ * Run and drop every cleanup an effect registered, the way React does when the
+ * rendered subtree goes away. Call it between two `renderSection` calls to
+ * model "close the settings dialog, then open it again".
+ */
+export function unmountSection(): void {
+  for (const cleanup of cleanups.splice(0)) cleanup()
 }
 
 let registration:
@@ -508,11 +606,19 @@ export async function loadPanel(scope: FormScope): Promise<LoadedPanel> {
   const module = registration.factory((spec) =>
     spec === 'react'
       ? {
-          createElement: () => undefined,
+          createElement: stubElement,
           Fragment: 'Fragment',
           useRef: () => ({ current: undefined }),
-          useState: (initial: unknown) => [initial, () => undefined],
-          useEffect: () => undefined,
+          // `useState` is called with a lazy initializer for the open groups, so
+          // the stub resolves it the way React would.
+          useState: (initial: unknown) => [
+            typeof initial === 'function' ? (initial as () => unknown)() : initial,
+            () => undefined,
+          ],
+          useEffect: (effect: () => unknown) => {
+            const cleanup = effect()
+            if (typeof cleanup === 'function') cleanups.push(cleanup as () => void)
+          },
         }
       : undefined,
   )

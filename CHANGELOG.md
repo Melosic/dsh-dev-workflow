@@ -29,6 +29,11 @@
   - **不重复 DSH 的插件总开关**，也不改由 DSH 拥有的设置（审批策略、沙箱模式）。
   - 样式只用主题发布的 `--dsw-alias-*` token，类名统一 `dsw-dev-workflow-` 前缀，
     `<style>` 带 `data-plugin` / `data-plugin-css`，HMR 能按归属清理。
+  - **保存成功会在底部给一行提示**（`action.saved`），下一次编辑、取消或关闭设置面板时
+    消失。官方 `SettingsForm` 只报失败、不报成功，而这张表单有 27 个字段：保存成功后唯一的
+    变化只是按钮不再变灰，滚在顶部的人看不出发生过什么。提示属于「这一次打开」，所以不能只
+    记在插件的草稿实例上——设置面板关闭时会卸载这个 section，而草稿实例与插件同生命周期，
+    只记在那里会让提示在下次打开面板时重现。
 - **配置面补齐并全部标记为可变。** `src/config.ts` 的每个叶子都加了 `.volatile()`——这是
   面板能读到并写入的前提；新增九个字段：
   - `commitCheck`：`enabled`（默认 `true`）、`onFailure`（`'warn' | 'block'`，默认 `block`）、
@@ -139,6 +144,13 @@
   发布认证需要 bypass-2FA 的 granular token、以及 GitHub Release 地址；
   并记下「发布成功后 packument 短时 404 是 CDN 负缓存，判断发布是否成功应看 PUT 状态码
   与 tarball shasum」。
+- 面板底部的两个按钮改为靠右对齐（`action.discard` 那行的 `justify-content: flex-end`）。
+  此前这一行没有对齐声明，成功/失败提示的 `flex: 1` 会在提示出现时把按钮推到右侧、
+  提示消失后又弹回左侧——同一个按钮在两次保存之间会左右跳。
+- 底部丢弃草稿的按钮由「放弃 / Discard」改称「取消 / Cancel」。官方 `SettingsForm`
+  根本没有这个按钮（它在卸载时调 `onDiscard`），所以措辞由本插件定；`取消` 是
+  DSH 自带界面里对同一动作的标准说法（`dsh-client-locale` 的 `cancel` 键），也与面板
+  关闭面板即可丢弃草稿的行为一致。
 
 ## [0.1.0] - 2026-10-05
 
