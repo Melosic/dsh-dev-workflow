@@ -27,11 +27,14 @@ interface Form {
     readonly saving: boolean
     readonly failed: boolean
     read(path: readonly string[]): unknown
+    overridden(path: readonly string[]): boolean
   }
 }
 
-const build = async (): Promise<{ panel: LoadedPanel; scope: FormScope; form: Form }> => {
-  const scope = createFormScope(Config({}))
+const build = async (
+  options: { config?: Config; user?: unknown } = {},
+): Promise<{ panel: LoadedPanel; scope: FormScope; form: Form }> => {
+  const scope = createFormScope(options.config ?? Config({}), { user: options.user })
   const panel = await loadPanel(scope)
   return { panel, scope, form: panel.injected.hooks.form as Form }
 }
@@ -108,6 +111,39 @@ describe('client.js rendered section', () => {
 
     expect(form.getSnapshot().dirty).toBe(false)
     expect(form.getSnapshot().read(['commitCheck', 'enabled'])).toBe(true)
+  })
+
+  // A field the profile overrides carries a badge and a reset button. Typing
+  // the inherited value back is how the user says "stop overriding this", so the
+  // badge has to go at once — leaving it would claim an override whose control
+  // already shows the default, which is exactly what users complained about.
+  it('drops the overridden badge when the inherited value is chosen again', async () => {
+    const { panel, scope, form } = await build({
+      config: Config({ commitCheck: { subjectMaxLength: 72 } }),
+      user: { commitCheck: { subjectMaxLength: 72 } },
+    })
+    const field = (): RenderedNode => fieldFor(panel, 'commitCheck.subjectMaxLength')
+    const badge = (): RenderedNode | undefined =>
+      allNodes(field()).find((node) => node.props.className === 'dsw-dev-workflow-badge')
+
+    expect(form.getSnapshot().overridden(['commitCheck', 'subjectMaxLength'])).toBe(true)
+    expect(badge(), 'an overridden field shows the badge').toBeDefined()
+
+    const input = allNodes(field()).find(
+      (node) => node.props.className === 'dsw-dev-workflow-number',
+    )
+    expect(input, 'the number control should be rendered').toBeDefined()
+    ;(input?.props.onChange as (event: unknown) => void)({ target: { value: '50' } })
+
+    expect(form.getSnapshot().read(['commitCheck', 'subjectMaxLength'])).toBe(50)
+    expect(badge(), 'choosing the inherited value retires the badge').toBeUndefined()
+
+    const save = allNodes(renderSection(panel)).find(
+      (node) => node.props['data-variant'] === 'primary',
+    )
+    await (save?.props.onClick as () => Promise<void>)()
+
+    expect(scope.writes).toEqual([[{ op: 'unset', path: ['commitCheck', 'subjectMaxLength'] }]])
   })
 
   it('writes the staged batch to the host when Save is clicked', async () => {

@@ -550,13 +550,24 @@ window.__ModuleLoader__.load({
           read: (path) => {
             const entry = staged.get(keyOf(path))
             if (entry === undefined) return readPath(value, path)
-            return entry.clear === true ? undefined : entry.value
+            // A staged clear previews what the field will hold once the entry is
+            // gone — the inherited value — so the control keeps showing a real
+            // selection instead of blanking out.
+            if (entry.clear === true) return readPath(state.base, path)
+            return entry.value
           },
           invalidAt: (path) => {
             const entry = staged.get(keyOf(path))
             return entry !== undefined && entry.invalid === true
           },
-          overridden: (path) => hasPath(state.user, path),
+          // A staged clear is the draft of "the file no longer says this", so the
+          // badge and its reset button go with it — otherwise the control shows
+          // the inherited value while the field still claims an override.
+          overridden: (path) => {
+            const entry = staged.get(keyOf(path))
+            if (entry !== undefined && entry.clear === true) return false
+            return hasPath(state.user, path)
+          },
         }
       }
       /** Stage an edit, or drop the entry when it restates the stored value. */
@@ -567,11 +578,27 @@ window.__ModuleLoader__.load({
         // Any new edit invalidates the "saved" note: what the page shows no
         // longer matches what the profile holds.
         this.saved = false
-        if (!invalid && sameValue(readPath(this.scope.getSnapshot().value, path), value)) {
+        const state = this.scope.getSnapshot()
+        // Choosing the inherited value is how a user says "stop overriding this".
+        // The platform marks a field overridden by the user layer *carrying* the
+        // entry, not by its value, so writing the default back would leave the
+        // badge and a reset button that resets nothing. Clear the entry instead:
+        // same visible value, one fewer thing the profile says.
+        if (!invalid && sameValue(readPath(state.base, path), value)) {
+          if (!hasPath(state.user, path)) {
+            if (this.staged.delete(key)) this.invalidate()
+            return
+          }
+          this.baseline ??= state
+          this.staged.set(key, { path, clear: true })
+          this.invalidate()
+          return
+        }
+        if (!invalid && sameValue(readPath(state.value, path), value)) {
           if (this.staged.delete(key)) this.invalidate()
           return
         }
-        this.baseline ??= this.scope.getSnapshot()
+        this.baseline ??= state
         this.staged.set(key, { path, value, invalid })
         this.invalidate()
       }
