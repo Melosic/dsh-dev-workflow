@@ -28,11 +28,12 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 
 ### `locale: 'auto'` 的解析时机
 
-`auto` 在**插件加载时解析一次**（`src/i18n.ts` 的 `resolveLocale()`），判断依据是
-`Intl.DateTimeFormat().resolvedOptions().locale` 是否以 `zh` 开头。
+`auto` **在每次需要文案时解析**（`src/index.ts` 的 `refreshLocale()`，`t()` 与 `runtime.locale()`
+都会调用它），判断依据是 `Intl.DateTimeFormat().resolvedOptions().locale` 是否以 `zh` 开头。
+字典只在解析结果真的变化时才重建。
 
-解析一次而不是每次读取时解析，是为了让技能目录条目与技能正文始终是同一种语言。
-但它不是「只能重启才能换」：面板改 `locale` 后，宿主把新值提交进运行中的配置，
+这样技能目录条目与技能正文始终是同一种语言（两者都经过同一个 `refreshLocale()`），
+同时也不是「只能重启才能换」：面板改 `locale` 后，宿主把新值提交进运行中的配置，
 插件收到 `loader/volatile-update` 就重新解析一次，技能与提示语随之切换。
 要写死在文件里就显式写 `en-US` 或 `zh-CN`。
 
@@ -177,10 +178,9 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 
 ### 更严者胜
 
-一条命令行里可能同时命中多项，例如 `git push --no-verify --force origin main`。
-判定按 `deny > ask > allow` 取最严的一条；**同级时先入列者胜**，而操作本身排在修饰符
-（`--no-verify`）之前，所以上面这条报的是 force push，而不是 no-verify——理由栏要说明
-真正会丢工作的那个操作。
+一条命令行里可能同时命中多项，例如 `git push --no-verify --force origin main`。判定按
+`deny > ask > allow` 取最严的一条。逐条识别规则与「同级时先入列者胜」的细节见
+[docs/TRIGGERS.md](TRIGGERS.md) 的「守卫危险 git 命令」一节——这里不再复述一遍。
 
 ### `rememberApproved` 的记忆范围
 
@@ -264,9 +264,11 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 { "fileGuard": { "noRead": [".env", ".ssh/id_rsa", "*.pem", "*.key", "credentials", "*.p12", ".npmrc", "secrets/"] } }
 ```
 
-模式语法有三条规则：尾随 `/` 匹配该目录及其中一切；含 `/` 的模式在任意深度匹配
+模式语法有四条规则：尾随 `/` 匹配该目录及其中一切；含 `/` 的模式在任意深度匹配
 （`.ssh/id_rsa` 命中 `C:/Users/x/.ssh/id_rsa`）；否则匹配文件名，且首字符是 `.` 时同时覆盖
-其变体（`.env` 覆盖 `.env.local`）。**列表是替换而不是追加**——给了一组自定义值，内置清单
+其变体（`.env` 覆盖 `.env.local`）；但**示例变体除外**——`.env.example`、`.env.sample`、
+`.env.template`、`.env.dist`、`.env.defaults` 会被放行，因为它们按惯例不含真实凭据，
+而它们是仓库里最需要被读的文件之一。**列表是替换而不是追加**——给了一组自定义值，内置清单
 就不再生效，设空数组等于关掉这一道。
 
 这一道**没有档位字段**：它固定 `deny`，因为审批提示必须展示那条路径本身，而那正是规则要

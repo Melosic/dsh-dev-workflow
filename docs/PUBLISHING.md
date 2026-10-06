@@ -80,18 +80,21 @@ dsh plugin --profile <scratch> add @melosic/dsh-dev-workflow   # 装完能挂载
 pnpm pack --dry-run
 ```
 
-本仓库的实测输出（v0.1.0）为 tarball `melosic-dsh-dev-workflow-0.1.0.tgz`，内容恰好是：
+本仓库的实测输出（v0.1.0）为 tarball `melosic-dsh-dev-workflow-0.1.0.tgz`，其中至少有：
 
 ```
-CHANGELOG.md  cordis.patch.yml  LICENSE  README.md  README.zh.md  package.json
+CHANGELOG.md  cordis.patch.yml  client.js  LICENSE  README.md  README.zh.md  package.json
 lib/**（.js + .d.ts + .js.map）
 locale/en.json  locale/zh.json
 skills/dsh-dev-workflow/SKILL.md  skills/dsh-dev-workflow/SKILL.zh.md
 ```
 
-三点值得盯：
+完整清单以 `pnpm pack --dry-run` 的实际输出为准——上面这份会随 `files` 变化。
+
+四点值得盯：
 
 - **`cordis.patch.yml` 必须在里面**。它不在，包装上了也不会被挂载——而这只会发生在用户机器上。
+- **`client.js` 必须在里面**。它是设置面板的浏览器侧代码，由 `dsh.client` 声明而非 `files` 白名单兜底；漏掉它面板会空白，同样只在用户机器上暴露。
 - **`docs/` 不在里面**，这是刻意的：`files` 是白名单，深度文档随仓库发布，不随包发布。
 - **`tests/` 不在里面**，同理。
 - 目录名是单数 **`locale/`**，不是 `locales/`。DSH 宿主按
@@ -103,10 +106,15 @@ skills/dsh-dev-workflow/SKILL.md  skills/dsh-dev-workflow/SKILL.zh.md
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
 ```
 
-`ci:checks` 输出 `locale keys aligned (81 keys); bundle patch declared and shipped;
-skill headings aligned (28 sections).`——这三行就是全部三个结构守卫。
-（`81` 与 `28` 是当前值，脚本按实际内容算出，不硬编码；换句话说这两个数字会随内容变，
-不要拿这里出现的具体数字去断言 CI 是否通过。）
+`ci:checks` 输出 `locale keys aligned (86 keys); bundle patch declared and shipped;
+skill headings aligned (28 sections); published entry points present (4 checked);
+no numbered development phases cited.`——这就是全部五项结构守卫。（括号里的数字都是当前值，
+脚本按实际内容算出，不硬编码；换句话说这些数字会随内容变，不要拿这里出现的具体数字去断言
+CI 是否通过。）
+
+这五项不靠人记得跑：`pnpm publish` / `npm publish` 会先触发 `prepack`
+（`pnpm build && pnpm ci:checks`），所以**打包这一步必然在编译之后、且必然过一遍结构守卫**——
+`lib/` 是 gitignore 的构建产物，`files` 里第一项就是它，少了它发出去的包装上去直接不能用。
 
 ### 4. 审计
 
@@ -127,16 +135,25 @@ pnpm audit --registry=https://registry.npmjs.org
 
 ### 5. 规范一致性
 
-- 两个 locale 字典 key 一致：`pnpm ci:checks` 的第一项守卫。
-- SKILL 双语标题数量与顺序一致：第三项守卫。
+以下各项由 `pnpm ci:checks` 与 CI **机械保证**，本文不复述其判定细节：
+
+- `scripts/ci-checks.mjs` 的五项守卫：两个 locale 字典 key 一致；`cordis.patch.yml` 已声明
+  且在 `files` 里；SKILL 双语标题数量与顺序一致；发布入口文件存在于 `files` 白名单内
+  （配合 `prepack`）；任何随仓库发布的 `.md` 都不按编号引用开发分期。
 - 代码中无硬编码用户可见文本：`git grep -P '[\x{4e00}-\x{9fff}]' -- 'src/**/*.ts'` 应无输出；
   英文文案也一律走 `t()`，只在 `locale/*.json` 里出现。
-- `mode` 默认 `'on'`；`gitGuard` 每项默认 `'ask'`（**没有任何一项默认 `'allow'`**）。
-- `inject` 声明完整：`export const inject = ['tools', 'skills']`；`commands` 与 `subprocess`
-  通过 `ctx.get(...)` 可选读取，故不进 `inject`（理由见 [docs/ARCHITECTURE.md](ARCHITECTURE.md)）。
-- `AGENTS.md` 只含稳定规则，不含进度状态。
-- `git log` 全部提交符合 Conventional Commits。
-- `CHANGELOG.md` 的 `[Unreleased]` 段包含本次发布的全部变更。
+- `git log` 的**新提交**标题行全部符合 Conventional Commits：`.husky/commit-msg` 管提交那一刻，
+  CI 再对**本次 PR 新增的范围**跑一次 `commitlint`（`--from <base> --to <head>`），所以绕过
+  本地钩子或从网页合并进来的提交同样过不去。存量违规是 `c247d5d` 与 `fd8004f` 两条历史提交的
+  **正文**行（`body-max-line-length`，上游默认 error）；改写已发布的历史不可接受，所以范围是
+  豁免的，规则不是——新提交仍受同一门禁约束。
+- `mode` 默认 `'on'`；四类守卫的每项默认值都不是 `allow`——由 `tests/settings-schema.spec.ts`
+  对 schema 逐叶子断言，不靠人眼核对。
+- `CHANGELOG.md` 的 `[Unreleased]` 段包含本次发布的全部变更（人工核对，无守卫）。
+
+`inject` 声明完整（`export const inject = ['tools', 'skills']`；`commands` 与 `subprocess`
+通过 `ctx.get(...)` 可选读取，故不进 `inject`，理由见 [docs/ARCHITECTURE.md](ARCHITECTURE.md)）
+由 `tests/register.spec.ts` 断言，不在 `ci:checks` 里。
 
 ### 6. 名称可用性
 

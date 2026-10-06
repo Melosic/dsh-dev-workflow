@@ -117,14 +117,15 @@ export function detectPullRequest(command: string): PullRequestCommand | undefin
 }
 
 /**
- * Name the template sections that are missing or left empty.
+ * Split a description into its `##` sections.
  *
- * A heading with nothing under it is as absent as no heading at all: an
- * untouched template describes the change no better than an empty box.
+ * The template's checklist belongs to the section that carries it, and text
+ * outside any required section is not the template: a `- [ ]` line elsewhere
+ * (in a fenced example, say) is not a box the author forgot to tick.
  * @param body - the pull request description.
- * @returns the section names that carry no content, in template order.
+ * @returns the lines under each lowercased section name.
  */
-function missingSections(body: string): string[] {
+function sectionContent(body: string): Map<string, string[]> {
   const content = new Map<string, string[]>()
   let current: string | undefined
   for (const line of body.split('\n')) {
@@ -137,6 +138,19 @@ function missingSections(body: string): string[] {
     if (current === undefined) continue
     content.get(current)?.push(line)
   }
+  return content
+}
+
+/**
+ * Name the template sections that are missing or left empty.
+ *
+ * A heading with nothing under it is as absent as no heading at all: an
+ * untouched template describes the change no better than an empty box.
+ * @param body - the pull request description.
+ * @returns the section names that carry no content, in template order.
+ */
+function missingSections(body: string): string[] {
+  const content = sectionContent(body)
   return REQUIRED_SECTIONS.filter((section) => {
     const lines = content.get(section.toLowerCase())
     return lines === undefined || lines.join('\n').trim().length === 0
@@ -146,10 +160,17 @@ function missingSections(body: string): string[] {
 /**
  * Count the checkboxes in a description that are still unticked.
  * @param body - the pull request description.
- * @returns how many `- [ ]` lines it contains.
+ * @returns how many `- [ ]` lines the template sections contain.
  */
 function uncheckedBoxes(body: string): number {
-  return body.split('\n').filter((line) => /^\s*[-*]\s+\[ \]/.test(line)).length
+  const content = sectionContent(body)
+  let total = 0
+  for (const section of REQUIRED_SECTIONS) {
+    for (const line of content.get(section.toLowerCase()) ?? []) {
+      if (/^\s*[-*]\s+\[ \]/.test(line)) total += 1
+    }
+  }
+  return total
 }
 
 /**

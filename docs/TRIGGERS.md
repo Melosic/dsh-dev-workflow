@@ -114,12 +114,17 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 | --- | --- |
 | 标题 | 直接复用 `checkCommitMessage({ message: title })` 的结论。**squash merge 后 PR 标题就是 main 上的提交信息**，因此它必须满足与提交信息完全相同的规范——用同一份实现，结论不会漂移 |
 | 描述三段 | PR 模板要求的 `## What` / `## Why` / `## How to verify`，**缺段或段内为空都算缺失**——一个只有标题的空盒子并不比没有好 |
-| 检查清单 | 描述里遗留的 `- [ ]` 未勾选行逐项计数 |
+| 检查清单 | 在模板要求的那三段**之内**遗留的 `- [ ]` 未勾选行逐项计数（描述整体为空时这条不触发，只提示） |
 | 关联 Issue | 标题与描述里没有 `#<数字>` 时**只警告**：本地无法判断是否真的存在对应 Issue，不该因此阻塞 |
 
-`.github/` 下没有 PR 模板文件，所以「模板里有没有复选框」无法作为触发条件；
-实现选择的是「描述里**实际存在**的未勾选行」——模板缺席时这条规则自然不触发，
-模板存在而作者漏勾时正好命中。
+`.github/` 下没有 PR 模板文件，所以「模板里有没有复选框」无法作为触发条件。实现的做法是：
+先把描述按 `##` 切段，再**只在 `What` / `Why` / `How to verify` 三段之内**数未勾选行——这样
+`## Remaining work` 这类作者自加的段落不会被误算。两个已知取舍：
+
+- 描述整体为空（`--body` 没给）时这条规则**完全不跑**：没有描述时把「零个复选框」当成合规，
+  比凭空报一次错更不容易误伤。
+- 段名必须逐字是英文的 `What` / `Why` / `How to verify`（见 `skills/dsh-dev-workflow/SKILL.md`
+  的模板）；翻译段名会让这两条规则同时失效，所以模板里写明了要保留原文。
 
 ## 什么算「一次发版」
 
@@ -129,8 +134,14 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 - `git tag <name>`：跳过 `-a` / `-s` 等无值选项与 `-m` / `-F` / `-u` 等带值选项，
   取第一个非选项词为 tag 名；`-l` / `--list` / `-d` / `--delete` / `-v` / `--verify`
   是**读**操作，直接不算发版。
-- `npm publish` / `pnpm publish`：读 `--tag` / `--tag=`。**没有写 dist-tag 时记为 `latest`**，
-  因为 npm 确实会把预发布版本也发布到 `latest`——把默认值当成事实，预发布规则才拦得住它。
+- `npm publish` / `pnpm publish` / `npx npm publish`：读 `--tag` / `--tag=`。**没有写 dist-tag
+  时记为 `latest`**，因为 npm 确实会把预发布版本也发布到 `latest`——把默认值当成事实，
+  预发布规则才拦得住它。
+- **`--dry-run`（或短选项 `-n`）不算发版。** 它不上传任何东西，而 `docs/PUBLISHING.md`
+  自己就推荐用它核对打包结果——把一次演习拦下来并报「预发布版发到 latest」是纯误报。
+- 前面的 `npx` 属于被剥离的包装词（见 `src/shell.ts` 的 `TRANSPARENT`），所以
+  `npx npm publish` 认得出是发布；但 `sh -c "npm publish"` 里引号包着的整段脚本认不出，
+  那是动态解析的范畴。
 
 ## 发版检查什么
 
@@ -164,18 +175,24 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 
 识别规则里几处刻意的地方：
 
-- **`--force-with-lease` 直接放过。** 带这个选项（含 `--force-with-lease=main`）时不算
-  force push——它会在覆盖一个你尚未看到的提交时失败，正是我们想避免的事故。反过来，
-  裸 `--force` 的理由里会附带一行「建议改用 `--force-with-lease`」。
+- **`--force-with-lease` 只在它独自出现时放过。** 光带这个选项（含
+  `--force-with-lease=main`）不算 force push——它会在覆盖一个你尚未看到的提交时失败，正是
+  我们想避免的事故。但它**不短路**：`git push --force-with-lease --force` 仍是强推，因为
+  plain `--force` 压过 lease 并真的覆盖远端。只有不带 `--force` / `-f` / `+refspec` 时，
+  lease 才让这条命令通过。反过来，裸 `--force` 的理由里会附带一行「建议改用
+  `--force-with-lease`」。
 - **短选项按字母匹配。** `-fd` 含 `f`，`-D` 含 `D`；`--force` 这类长选项不参与短选项匹配。
 - **`reset --soft` / `clean -n` / `branch -d` / `checkout main` 都不拦。** 它们不丢工作。
 - **`--no-verify` 与操作同时出现时，操作胜出。** `git push --no-verify --force` 报的是
   force push：`--no-verify` 只是修饰符，真正会丢东西的是那个操作。同等级的策略下先入列者
   胜出，所以判定循环把 `--no-verify` 放在子命令判定之后。
 
+判定链与每项默认值的理由（为什么 `noVerify` 是 `ask` 而非 `deny` 等）见
+[docs/CONFIGURATION.md](CONFIGURATION.md) 的 `gitGuard` 表与
+[docs/SECURITY.md](SECURITY.md)。
+
 一条命令行同时命中多项时，按 `deny > ask > allow` 取最严的一条——**绝不削弱上游更严的决定**。
 唯一的覆盖方向是「自己 `deny` 对上上游 `ask`」，因为拒绝一个已经在被质疑的调用不会让情况变坏。
-细节与默认值的理由见 [docs/SECURITY.md](SECURITY.md)。
 
 ## 另外三道守卫
 

@@ -314,6 +314,9 @@ describe('src/checks.ts', () => {
 
   it('digests the same value to the same short hash', () => {
     expect(fingerprint('feat: a')).toBe(fingerprint('feat: a'))
+    // A fixed vector: the hash only has to be stable and distinguishing, but
+    // pinning one output catches a changed basis or prime.
+    expect(fingerprint('feat: a')).toBe('2615a516')
     expect(fingerprint('feat: a')).not.toBe(fingerprint('feat: b'))
     expect(fingerprint('')).toMatch(/^[0-9a-f]{8}$/)
   })

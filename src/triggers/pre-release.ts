@@ -6,6 +6,7 @@ import { fingerprint } from '../checks.js'
 import { commandOf, gitInvocations, programInvocations } from '../shell.js'
 import { askAbout, readText } from './shared.js'
 import type { TriggerOptions } from './shared.js'
+import { hasShortOption } from '../guard/shared.js'
 
 // The third automatic check: before the agent tags or publishes a release, judge
 // the release itself. Publishing is the one operation in this workflow that
@@ -117,6 +118,9 @@ export function detectRelease(command: string): ReleaseCommand | undefined {
   for (const { program, args } of programInvocations(command)) {
     if (!PACKAGE_MANAGERS.has(program)) continue
     if (args[0] !== 'publish') continue
+    // `--dry-run` (and its `-n` short form) is the rehearsal `docs/PUBLISHING.md`
+    // itself recommends: nothing is uploaded, so nothing is released.
+    if (args.includes('--dry-run') || hasShortOption(args, 'n')) break
     // npm defaults the dist-tag to `latest`, and does not except pre-releases
     // from that default. Recording the default is what makes the pre-release
     // rule below able to fire on a publish that stated nothing.

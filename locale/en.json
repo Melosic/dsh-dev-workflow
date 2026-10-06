@@ -4,7 +4,6 @@
     "description": "Development-workflow gatekeeper: skill-injected conventions, commit-message and doc-sync checks, and a git-guard for destructive git commands."
   },
   "command.toggle.description": "Turn the development-workflow gatekeeper on or off.",
-  "command.toggle.usage": "Usage: /dev-workflow on | off | status | check. With no argument it reports the current state.",
   "command.toggle.hint": "on | off | status | check",
   "command.toggle.unknown": "Unknown subcommand \"{input}\". Use on, off, status, or check.",
   "command.toggle.status.on": "dev-workflow is on. Conventions stay resident as a short summary; details are read on demand.",
@@ -75,7 +74,7 @@
   "trigger.pre_pr.detected": "Checking this pull request against the project workflow rules.",
   "trigger.pre_pr.reason": "This pull request breaks the project workflow rules.\n{details}",
   "trigger.pre_pr.ask": "The development-workflow plugin found problems with this pull request.\n\n{details}\n\nApprove to create it anyway, or reject to fix them first.",
-  "trigger.pre_pr.error.description": "The pull request description is missing a section the template asks for: {sections}. Say what changed, why, and how to verify it.",
+  "trigger.pre_pr.error.description": "The pull request description is missing a section the template asks for: {sections}. The section names `What`, `Why`, and `How to verify` must be kept verbatim (in English); the text under them may be in any language.",
   "trigger.pre_pr.error.checklist": "The pull request description leaves {count} checklist item(s) unticked. Tick each one, or delete the line if it does not apply.",
   "trigger.pre_pr.warn.issue": "The pull request names no issue. Reference one (`Closes #12`) when an issue exists, so the change can be traced back to its reason.",
   "trigger.pre_release.detected": "Checking this release against the project workflow rules.",

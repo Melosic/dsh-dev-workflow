@@ -238,14 +238,20 @@ guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上
 
 `src/shell.ts` 因此只做有限词法：
 
-1. `tokenize()` 处理单双引号、反斜杠转义，把 `&&` / `||` / `;` / `|` / 换行保留为独立 token。
+1. `tokenize()` 处理单双引号、反斜杠转义，把 `&&` / `||` / `;` / `|` / 换行保留为独立 token；
+   `${VAR}` 保留为一个词（花括号不再当分隔符丢掉），否则 `rm -rf ${HOME}` 会被拆成无从判断的碎片。
 2. `segments()` 按这些运算符切段，每段独立判断（`pnpm test && git commit -m "..."` 照样命中）。
-3. `programInvocations()` 跳过前导 `VAR=value` 与 `env`，取程序名 basename，返回该段的
-   `{ program, args }`——`git tag`、`npm publish`、`gh pr create` 都从这一步往下判。
-4. `gitInvocations()` 在它之上跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，取出子命令。
+3. `skipWrappers()` 剥掉前导的包装词与变量赋值——`TRANSPARENT` 集合里的 `sudo`、`doas`、
+   `env`、`nohup`、`command`、`exec`、`time`、`npx`，以及 `VAR=value` 形式的赋值。
+   因此 `sudo git push --force`、`npx npm publish` 与 `FOO=1 git commit` 都还原成真实程序。
+4. `programInvocations()` 取程序名 basename，返回该段的 `{ program, args }`——`git tag`、
+   `npm publish`、`gh pr create` 都从这一步往下判；四道守卫共用它，所以包装词只需在这里处理一次。
+5. `gitInvocations()` 在它之上跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，取出子命令。
 
-它的**刻意的能力边界**：引号里的 `git commit` 不算命令；提交信息含 `$(...)` 或反引号时放弃判定
-（插件看不到 git 最终收到的字面量）；`git commit -F -` 与 `gh pr create --body-file -` 放弃判定。
+它的**刻意的能力边界**：引号里的 `git commit` 不算命令（`sh -c "git push --force"` 同样认不出——
+包装**词**剥得掉，引号包着的整段脚本剥不掉，那需要真正的 shell 语义）；提交信息含 `$(...)`
+或反引号时放弃判定（插件看不到 git 最终收到的字面量）；`git commit -F -` 与
+`gh pr create --body-file -` 放弃判定。
 这些不是待修的缺陷，
 而是「宁可不开口，也不误报」的取舍，清单见 [docs/TRIGGERS.md](TRIGGERS.md#降级路径)。
 

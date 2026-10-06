@@ -35,9 +35,9 @@ export type GitGuardOptions = GuardOptions & {
  * @returns the hit, or `undefined` for an ordinary push.
  */
 function pushHit(args: readonly string[], config: Config): GuardHit | undefined {
-  // `--force-with-lease` is the form the guard steers people towards, so a push
-  // carrying it is not a hit.
-  if (args.some((word) => word.startsWith('--force-with-lease'))) return undefined
+  // `--force-with-lease` on its own needs no special case here: it matches none
+  // of the words below, so it stays an ordinary push. It must not short-circuit,
+  // because plain `--force` overrides the lease and clobbers the remote anyway.
   const forced =
     args.includes('--force') ||
     hasShortOption(args, 'f') ||

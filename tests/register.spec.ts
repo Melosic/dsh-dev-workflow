@@ -78,6 +78,22 @@ describe('src/index.ts', () => {
     expect(harness.effects).toHaveLength(5)
   })
 
+  it('binds every registration to an effect that removes it again', () => {
+    // The harness records what the plugin registers; this asserts the other half
+    // of the contract — each registration was handed to `ctx.effect`, so an
+    // unload or hot reload really takes it away instead of leaving it behind.
+    const harness = createHarness({ commands: true })
+    plugin.apply(harness.ctx, Config({}))
+    expect(harness.effects).toHaveLength(11)
+
+    for (const dispose of harness.effects) dispose()
+
+    expect(harness.tools).toHaveLength(0)
+    expect(harness.providers).toHaveLength(0)
+    expect(harness.listeners).toHaveLength(0)
+    expect(harness.commands).toHaveLength(0)
+  })
+
   it('declares both tools with a name the registry accepts', () => {
     const harness = createHarness()
     plugin.apply(harness.ctx, Config({}))

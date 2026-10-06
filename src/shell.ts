@@ -9,6 +9,49 @@
 /** Tokens that end one command and begin another. */
 const OPERATORS = new Set(['&&', '||', ';', '|', '\n'])
 
+/**
+ * Program names that only wrap the real command, so the command line still
+ * starts at what follows them: `sudo rm -rf /` starts at `rm`, and
+ * `sudo git push --force` is still a `git push`. Recognising them is what keeps
+ * a wrapper from hiding a command from every check that reads this stream.
+ */
+export const TRANSPARENT = new Set([
+  'sudo',
+  'doas',
+  'env',
+  'nohup',
+  'command',
+  'exec',
+  'time',
+  'npx',
+])
+
+/** A leading `VAR=value` assignment, as in `FOO=1 rm -rf /`. */
+export const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+/** The base name of a program word: `/usr/bin/git` becomes `git`. */
+export function baseName(word: string): string {
+  return word.replace(/\\/g, '/').split('/').pop() ?? word
+}
+
+/**
+ * Drop the wrappers and assignments in front of the real program.
+ * @param words - one command's words.
+ * @returns the index of the word the command really starts at.
+ */
+export function skipWrappers(words: readonly string[]): number {
+  let index = 0
+  while (index < words.length) {
+    const word = words[index] ?? ''
+    if (TRANSPARENT.has(baseName(word)) || ASSIGNMENT.test(word)) {
+      index += 1
+      continue
+    }
+    break
+  }
+  return index
+}
+
 /** Git options that take a separate value, so it is not mistaken for a command. */
 const GIT_VALUE_OPTIONS = new Set([
   '-C',
@@ -30,6 +73,7 @@ export function tokenize(command: string): string[] {
   let current = ''
   let started = false
   let quote: '"' | "'" | null = null
+  let expansion = false
 
   const flush = (): void => {
     if (!started) return
@@ -95,6 +139,17 @@ export function tokenize(command: string): string[] {
       tokens.push(char)
       continue
     }
+    // A `${...}` parameter expansion is one word, so its braces are part of it.
+    if (char === '{' && current.endsWith('$')) {
+      expansion = true
+      current += char
+      continue
+    }
+    if (char === '}' && expansion) {
+      expansion = false
+      current += char
+      continue
+    }
     // Subshell and group delimiters only matter for where a command starts.
     if (char === '(' || char === ')' || char === '{' || char === '}') {
       flush()
@@ -138,28 +193,20 @@ export interface ProgramInvocation {
 /**
  * Find each program a shell command line starts, one per segment.
  *
- * Leading `VAR=value` assignments and `env` are skipped, because neither is the
- * command itself. Options are left in place; only callers that know a specific
- * program can tell which of them take a value.
+ * Leading `VAR=value` assignments and the wrappers in {@link TRANSPARENT} are
+ * skipped, because none of them is the command itself. Options are left in
+ * place; only callers that know a specific program can tell which of them take
+ * a value.
  * @param command - a shell command line, as a tool would receive it.
  * @returns one entry per command, in order.
  */
 export function programInvocations(command: string): ProgramInvocation[] {
   const found: ProgramInvocation[] = []
-  for (const word of segments(tokenize(command))) {
-    let index = 0
-    while (index < word.length) {
-      const token = word[index] ?? ''
-      if (token === 'env' || /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
-        index += 1
-        continue
-      }
-      break
-    }
-    const program = word[index]
+  for (const words of segments(tokenize(command))) {
+    const index = skipWrappers(words)
+    const program = words[index]
     if (program === undefined) continue
-    const base = program.replace(/\\/g, '/').split('/').pop() ?? program
-    found.push({ program: base, args: word.slice(index + 1) })
+    found.push({ program: baseName(program), args: words.slice(index + 1) })
   }
   return found
 }

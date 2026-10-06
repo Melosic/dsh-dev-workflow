@@ -122,6 +122,15 @@ describe('src/guard/secret-guard.ts', () => {
     ).toBeDefined()
   })
 
+  it('holds the entropy floor where a token stops looking like prose', () => {
+    // The floor is the line between an opaque key and repeated text, so it has
+    // to stay between the two: 42 distinct characters sit above it (log2 42 ≈
+    // 5.4 bits), and a long run of one character sits at zero.
+    const distinct = '0123456789abcdefghijklmnopqrstuvwxyzABCD'
+    expect(findSecret(distinct, { genericHighEntropy: true })).toBe('high-entropy string')
+    expect(findSecret('a'.repeat(40), { genericHighEntropy: true })).toBeUndefined()
+  })
+
   it('scans arrays as well as objects', () => {
     expect(scanForSecret(['ok', GITHUB_PAT], { genericHighEntropy: false })).toBe('GitHub token')
     expect(scanForSecret([['ok', AWS_KEY]], { genericHighEntropy: false })).toBe('AWS access key')

@@ -200,9 +200,12 @@
   的 `unset` 一句同步。
 - **更正 `docs/TOKEN-BUDGET.md` 的按需成本表。** 表里记的还是第三阶段刚写完时的
   `SKILL.md` 10602 字符 / 212 行、`SKILL.zh.md` 5855 字符 / 173 行；技能在第四、五阶段
-  长了一倍，实际已是 **20367 字符 / 418 行**与 **10289 字符 / 350 行**。常驻那两行
+  长了一倍，**当前值见该表本身**（行数按
+  `Get-Content` 计，末行换行不算一行；字符数按 UTF-8 解码后的字符个数，不是字节数）。
+  常驻那两行
   （766 / 137 / 903 ≈ 226、522 / 50 / 572 ≈ 240）本次复测完全一致，只有按需部分过期；
-  汇总表的「规范全文」一档随之从 `~5900–10600` 改为 `~10300–20400` 字符。
+  汇总表的「规范全文」一档随之上调。顺带把
+  `docs/ADR/` 里写死的行列数删掉，改为指向本表——观测值只该有一个出处。
 - `docs/TRIGGERS.md` 的「降级路径」补第三条：设置面板确实有一处**真实降级**。
   `ctx.remote.$host` 只暴露 `{ home, isLoopback }`、包私有 `host.call` RPC 只有动态包
   （vm-sandbox）路径才有（需要 `harness.handle`），所以面板在浏览器侧用同一条 `zh`
@@ -210,6 +213,53 @@
   决定；面板本身经 `ctx.inject(['settings'], …)` 可选，缺 `settings` 的档位只是没有
   这个页面。前两条降级假设（`tools/pre-execute` 不存在、skill provider 不支持动态内容）
   经核对**不需要降级**，结论不变。
+- `docs/ARCHITECTURE.md` 的「不跑 shell 的命令行解析」同步实现：补上 `${VAR}` 的保留、
+  `skipWrappers()` 与 `TRANSPARENT` 集合（`sudo` / `doas` / `env` / `nohup` / `command` /
+  `exec` / `time` / `npx` 加 `VAR=value` 赋值），并写明 `sh -c "git push --force"` 属
+  认不出的已知边界。
+- `docs/SECURITY.md` 的审计章按实现重写（原先声称「只记形状」而代码落完整参数副本），
+  「不做什么」表与「日志里有什么」并入其中；「本插件不是安全边界」补上 `sh -c` /
+  `node -e` / `python -c` 三处已知绕过。
+- `CONTRIBUTING.md` 明确「分期到此为止」：后续工作不再编号，标注 ADR 时间写日期而不写
+  「第几阶段」；`AGENTS.md`、`ACKNOWLEDGEMENTS.md`、五份 ADR 与 `docs/ADR/template.md`
+  里的分期编号一并换成日期或事实描述。`scripts/ci-checks.mjs` 新增一条机械守卫：
+  仓库里任何非豁免的 `.md` 出现 `第N阶段` 即失败（`CONTRIBUTING.md` 定义分期、
+  `CHANGELOG.md` 是历史记录，两者豁免）。
+- 删除 `pnpm test:coverage` 脚本：它依赖未安装的 `@vitest/coverage-v8`，实跑必然
+  exit 1，CI 与任何文档都不需要它。`CONTRIBUTING.md` 的命令表同步删去该行。
+
+### Fixed
+
+- **`git push --force-with-lease` 会短路掉强推判定。** 只要参数里有
+  `--force-with-lease`（含 `=origin/main` 形式），`pushHit()` 就整表提前返回，于是
+  `git push --force --force-with-lease origin main` 放行——而 plain `--force` 压过 lease
+  并真的覆盖远端。现在只有**不带** `--force` / `-f` / `+refspec` 时 lease 才免检。
+- **透明前缀使守卫看不见真实命令。** `programInvocations()` 原先只剥 `VAR=value` 与
+  `env`，所以 `sudo git push --force`、`nohup rm -rf /`、`npx npm publish` 一律漏过。
+  现在 `src/shell.ts` 导出 `TRANSPARENT` 集合与 `skipWrappers()`，四道守卫共用一处修复。
+- **`${HOME}` 永远匹配不上。** `tokenize()` 把 `{` / `}` 当分隔符丢掉，`rm -rf ${HOME}`
+  被拆成无从判断的碎片，`DANGEROUS_TARGETS` 里的 `'${HOME}'` 是死条目。现在 `${VAR}`
+  保留为一个词；`isDangerousTarget()` 同时归一化尾随斜杠，`rm -rf $HOME/`、`rm -rf ~/`
+  与 `rm -rf /` 一样命中。
+- **发版守卫把演习当成发布。** `npm publish --dry-run`（及 `-n`）会上报一次「预发布版
+  发到 latest」的误报；现在 `detectRelease()` 对这两个选项短路。
+- **PR 检查表把模板之外的复选框也算进去。** `uncheckedBoxes()` 原先数整个描述里的
+  `- [ ]`，作者自加的 `## Remaining work` 段会被误判；现在只在模板要求的
+  `What` / `Why` / `How to verify` 三段之内数。
+- **`.env.example` 被当成机密。** 命中 `.env` 的文件名前缀规则会连示例文件一起拒掉，
+  而示例文件按惯例不含真实凭据、且是仓库里最需要被读的文件之一。现在
+  `example` / `sample` / `template` / `dist` / `defaults` 五个示例变体放行。
+- 打包不再可能发出缺文件的产品：`package.json` 增加 `prepack`（`pnpm build && pnpm
+  ci:checks`），`scripts/ci-checks.mjs` 增加发布入口存在性检查——`lib/index.js`
+  不存在即失败，`npm pack --dry-run --json` 的清单里缺 `lib/index.js`、`client.js`、
+  `cordis.patch.yml`、`locale/en.json` 或 `skills/dsh-dev-workflow/SKILL.md` 即失败；
+  CI 里 `ci:checks` 排在 `build` 之后。
+
+### Security
+
+- 补齐 `--force-with-lease` 与透明前缀两个绕过路径的回归测试：`tests/guard.spec.ts`
+  新增强推组合与 `sudo git push --force` 用例，`tests/command-guard.spec.ts` 新增
+  `rm -rf ~/`、`$HOME/`、`${HOME}` 与 `sudo rm -rf /`、`nohup doas rm -rf /` 用例。
 
 ## [0.1.0] - 2026-10-05
 

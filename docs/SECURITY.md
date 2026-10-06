@@ -85,7 +85,7 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 
 | 默认 `noRead` | 覆盖范围 |
 | --- | --- |
-| `.env` | 该文件本身及其变体（`.env.local`、`.env.production`） |
+| `.env` | 该文件本身及其变体（`.env.local`、`.env.production`）——但 `.env.example`、`.env.sample`、`.env.template`、`.env.dist`、`.env.defaults` **除外**：它们按惯例不含真实凭据，且是仓库里最需要被读的文件之一 |
 | `.ssh/id_rsa` | 任意深度：`/home/x/.ssh/id_rsa` 同样命中 |
 | `*.pem`、`*.key`、`*.p12` | 证书与私钥材料，按扩展名 |
 | `credentials` | 云 SDK 的默认凭据文件名 |
@@ -126,43 +126,35 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 
 ## 审计日志记什么
 
-`audit.enabled` 默认开，写入 `audit.path`（默认 `.dev-docs/audit-log.jsonl`，
-每行一个 JSON 对象；该目录已被 `.gitignore` 忽略）。它记录守卫决策的**形状**：
-时间、会话、工具名、命中的规则 key、应用了哪一档、工作目录，以及参数。
+`audit.enabled` 默认开，写入 `audit.path`（默认 `.dev-docs/audit-log.jsonl`，每行一个 JSON
+对象；该目录已被 `.gitignore` 忽略）。字段是时间、会话、工具名、命中的规则 key、应用了哪一档、
+工作目录 `cwd`，以及**该次调用的完整参数副本**——命令行与提交信息的全文都在里面，`cwd` 也落盘。
+这是刻意的：命中之后要能复现「当时到底跑了什么」。代价是这份日志的敏感度与它记录的调用同级，
+所以 `.gitignore` 与 `docs/PUBLISHING.md` 都把它当敏感文件看待。
 
-**参数的脱敏先于落盘，且是两道独立的处理：**
+**脱敏先于落盘，两道独立的处理**：命中的凭据（与开启高熵检测时的长随机串）替换为
+`[REDACTED]`；命中 `noRead` 的路径只保留**文件名**（目录本身也是信息，不必记）。
+`file-guard` 根本不打开文件，所以敏感文件的内容从不进入审计——`tests/audit.spec.ts` 对这几条
+逐条断言，包括「`file_path` 变成 `.env` 而 `/repo/inner` 不出现在整行里」。
 
-1. 命中的凭据（与开启高熵检测时长随机串）替换为 `[REDACTED]`；
-2. 命中 `noRead` 的路径只保留**文件名**——目录本身也是信息，不需要记。
+审计记录**不回进模型上下文**，写入是同步 `appendFileSync`（进程崩掉时还在内存里的行不算记录）；
+**写入失败只走 `ctx.logger.debug`，绝不因为写不出日志而失败一次工具调用**。
 
-`sensitive file 的内容从不写入`：file-guard 根本不读文件，审计也拿不到它的内容。
-测试 `tests/audit.spec.ts` 对这几条逐条断言，包括「`file_path` 变成 `.env` 而
-`/repo/inner` 不出现在整行里」。
-
-**审计记录不回进模型上下文。** 写入是同步 `appendFileSync`——进程崩掉时还缓冲在内存里的
-审计行不算记录；写入失败只走 `ctx.logger.debug`，绝不因为写不出日志而失败一次工具调用。
-与守卫日志同理：**记规则标识，不记命令行与提交信息全文**。
+**日志与审计的敏感度不同，别混淆。** 守卫命中时 `ctx.logger.debug` 记的是规则标识，
+形如 `[dsh-dev-workflow] git guard: security.guard.force_push`——不带命令行、不带提交信息全文
+（四个守卫的日志前缀分别是 `git guard`、`command guard`、`file guard`、`secret guard`）。
+不落盘的日志常常被重定向到文件或随 issue 提交，往里塞全文等于把「作者在做什么、改动里有哪个
+客户名」搬到另一个地方。**审计记录带上全文是它的例外，按上文脱敏之后才落盘。**
 
 ## 不做什么
 
 | 不做的事 | 原因 |
 | --- | --- |
-| 不读敏感文件 | file-guard 只比对路径字符串，不打开文件。`.env`、密钥文件的内容不在任何检查的输入里 |
+| 不读敏感文件 | file-guard 只比对路径字符串，不打开文件；`.env`、密钥文件的内容不在任何检查的输入里 |
 | 不执行 git 以外的程序 | 唯一的子进程是 `git`，经 `subprocess` 服务的 `resolveExecutable('git')` |
 | 不联网 | 插件没有任何网络调用 |
-| 不落盘会话状态 | 去重状态与命中计数只在内存（`src/state.ts`）；重启即清空。唯一落盘的是审计记录，且已脱敏 |
-| 审计之外不写日志到文件 | 守卫日志只经 `ctx.logger.debug`，且日志里是字典 key，不是命令行或提交信息全文 |
+| 不落盘会话状态 | 去重状态与命中计数只在内存（`src/state.ts`），重启即清空；唯一落盘的是脱敏后的审计记录 |
 | 不硬编码密钥 | 插件不持有任何凭据，也不需要；secret-guard 只识别形状，不校验有效性 |
-
-### 日志里有什么
-
-守卫命中时记一行：`[dsh-dev-workflow] git guard: security.guard.force_push`——
-**记的是规则标识，不是命令行全文**。提交信息同样不进日志。四个守卫都走这条路径，
-日志行里的名字分别是 `git guard`、`command guard`、`file guard`、`secret guard`。
-
-原因是不落盘的日志常常会被重定向到文件或随 issue 提交；把命令行与提交信息全文写进去，
-等于把「作者正在做什么、改动里有哪个客户名」这类信息搬到了另一个地方。
-规则标识足够定位问题，且不携带内容。
 
 ## 与宿主的分工
 
@@ -180,6 +172,12 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 相应地，**本插件不是安全边界**。它降低事故概率，不能阻止一个决意绕过的操作者
 （关掉插件、换终端、直接调 git 都能绕过）。把它当护栏，不要当门锁。
 
+还有一类绕过不需要离开会话：**在命令里再包一层解释器或包装程序**——`sh -c "git push
+--force"`、`node -e "require('fs').readFileSync('.env')"`、`python -c "…"`。守卫看的是
+**参数文本**，不做动态解析，所以它认不出解释器内部那句。`sudo` / `env` / `npx` 这类
+**裸包装词**已由 `src/shell.ts` 的 `TRANSPARENT` 剥离（`sudo git push --force` 照样命中），
+但引号里的整段脚本不在同一范畴：那需要真正的 shell 语义，属于已知边界。
+
 ## 依赖与供应链
 
 - **运行期零依赖**：`dependencies` 为空。全部能力来自宿主提供的服务与 Node 内建模块。
@@ -192,10 +190,11 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 
 ### 发布产物里有什么
 
-`package.json` 的 `files` 是**白名单**，发布出去的 tarball 只含：
+`package.json` 的 `files` 是**白名单**，发布出去的 tarball 至少包含以下几项（完整清单以
+`pnpm pack --dry-run` 或 `npm pack --dry-run` 的实际输出为准）：
 
 ```
-lib/  skills/  locale/  cordis.patch.yml  README.md  README.zh.md  CHANGELOG.md  LICENSE
+lib/  client.js  skills/  locale/  cordis.patch.yml  README.md  README.zh.md  CHANGELOG.md  LICENSE
 ```
 
 据此可以给出三条可验证的结论：

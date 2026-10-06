@@ -159,41 +159,43 @@ including an administrator.
 
 Before committing:
 
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and `pnpm test` pass
-      locally.
+- [ ] Your project's own checks pass locally: typecheck, lint, format check, and
+      tests, run with whatever commands that project defines.
 - [ ] The staged changes answer one question (see *Atomic Commits*).
 - [ ] The commit message follows Conventional Commits.
 - [ ] Documentation touched by the change is updated in the same commit or PR.
 - [ ] `CHANGELOG.md` carries an `[Unreleased]` entry for the change.
 
-Pull request description template:
+Pull request description template. The three section names must be kept verbatim
+(in English — the gate matches them literally); the text under them may be in any
+language:
 
 ```markdown
 ## What
 
+Add a `--json` flag to the status command.
+
 ## Why
 
+Scripts cannot parse the current prose output. Closes #7.
+
 ## How to verify
+
+Run `/dev-workflow status --json` and check that the output parses.
 ```
 
 A pull request is mergeable only when CI is green, the branch is up to date with
 `main`, and every review conversation is resolved. Never merge by bypassing a
 failing check: fix the cause, or report the blocker.
 
-When CI fails:
-
-- Fix the cause. Never edit the CI configuration to route around a failure.
-- Never skip the gate with `--no-verify` or an equivalent escape hatch.
-- If the CI setup itself is wrong, open an issue for it. Do not patch the
-  configuration ad hoc inside an unrelated pull request.
-
 ### Local Verification vs CI
 
 - The local checklist above is a recommendation, not a hard gate.
-- CI is the hard gate, and it cannot be bypassed.
-- A green local run does not guarantee a green CI run: the environments differ.
-- If a local check fails, do not commit.
-- If CI fails after you push, fix the cause rather than weakening the check.
+- CI is the hard gate, and it cannot be bypassed. When it fails, fix the cause —
+  never weaken the check, edit the CI configuration to route around it, or skip
+  it with `--no-verify`.
+- If the CI setup itself is wrong, open an issue for it rather than patching it
+  inside an unrelated pull request.
 
 ### Pull Request Size
 

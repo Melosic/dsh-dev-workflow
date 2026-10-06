@@ -10,7 +10,8 @@ dsh-dev-workflow 是一份薄薄的编排层。它的大部分价值来自别人
 本插件的 `dependencies` 为空，运行期不依赖任何第三方包。下面这些是**宿主提供**的能力，
 本包只通过 `peerDependencies` 声明兼容范围。
 
-三个包都来自同一个 monorepo：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)。
+表里 DeepSeek 域内的三个包（`@deepseek-ai/dsh`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-skill`）
+都来自同一个 monorepo：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)。
 Cordis 与 Schemastery 是上游项目、被该 monorepo vendor 进来的（各自保留原作者署名）。
 
 | 包 | 源目录 | 作者 | 许可证 | 本插件如何使用 |
@@ -21,12 +22,12 @@ Cordis 与 Schemastery 是上游项目、被该 monorepo vendor 进来的（各�
 | `@deepseek-ai/cordis` | `vendor/cordis` | Shigma \<shigma10826@gmail.com\> | MIT | 微内核框架：`apply(ctx, config)` 插件模型、`ctx.inject`、`ctx.effect`、事件系统 |
 | `@deepseek-ai/schemastery` | `vendor/schemastery` | Shigma \<shigma10826@gmail.com\> | MIT | `src/config.ts` 的配置面声明与默认值校验 |
 
-三者都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包用显式下界
+五个包都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包用显式下界
 `>=0.2.0-rc.2`，当前不写上界）。理由与取舍见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
 ## 作为实现范式被研读的官方包
 
-`.dev-docs/DSH-API-NOTES.md` 是第 0 阶段的 API 核对结论。它不是猜出来的——结论来自逐字阅读
+`.dev-docs/DSH-API-NOTES.md` 是动手写代码之前的 API 核对结论。它不是猜出来的——结论来自逐字阅读
 asar 内随宿主出货的官方包。这些包没有被引入依赖，但**本插件的每个关键写法都能在它们中间找到出处**：
 
 | 官方包 | 借走的东西 |
@@ -42,7 +43,7 @@ asar 内随宿主出货的官方包。这些包没有被引入依赖，但**本�
 ## 作为社区形态参照的项目
 
 `package.json` 的形态（`type: module`、`main` / `types` / `exports`、`dsh.bundle.patch`、`files` 白名单）
-在第 0 阶段通过比对社区已发布的插件确认过。**没有复制其中任何一行代码**，但它们证明了官方范式之外
+首次实现前通过比对社区已发布的插件确认过。**没有复制其中任何一行代码**，但它们证明了官方范式之外
 确实有第三方走过一遍。
 
 | 包 | 维护者 | 许可证 |
@@ -71,7 +72,7 @@ asar 内随宿主出货的官方包。这些包没有被引入依赖，但**本�
 | [TypeScript](https://www.typescriptlang.org/) | Apache-2.0 | 源码语言与类型检查 |
 | [ESLint](https://eslint.org/) / [typescript-eslint](https://typescript-eslint.io/) | MIT | 静态检查 |
 | [Prettier](https://prettier.io/) | MIT | 格式化 |
-| [Vitest](https://vitest.dev/) | MIT | 测试运行器（`tests/` 的 107 个用例） |
+| [Vitest](https://vitest.dev/) | MIT | 测试运行器（`tests/` 的 272 个用例） |
 | [Husky](https://typicode.github.io/husky/) | MIT | 本地 git 钩子 |
 | [lint-staged](https://github.com/lint-staged/lint-staged) | MIT | 只对暂存文件跑 lint 与 format |
 | [commitlint](https://commitlint.js.org/) | MIT | 提交信息校验（`@commitlint/config-conventional`） |

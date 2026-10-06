@@ -109,6 +109,12 @@ describe('src/triggers/pre-release.ts', () => {
     expect(detectRelease('npm publish')).toEqual({ publishTag: 'latest' })
     expect(detectRelease('npm publish --tag next')).toEqual({ publishTag: 'next' })
     expect(detectRelease('npm publish --tag=next')).toEqual({ publishTag: 'next' })
+    // `npx` only runs the package manager, so the publish is still one.
+    expect(detectRelease('npx npm publish --tag next')).toEqual({ publishTag: 'next' })
+    // A rehearsal uploads nothing, so it releases nothing.
+    expect(detectRelease('npm publish --dry-run')).toBeUndefined()
+    expect(detectRelease('npm publish -n --tag next')).toBeUndefined()
+    expect(detectRelease('git tag v0.2.0 && npm publish --dry-run')).toEqual({ tag: 'v0.2.0' })
     // One line can do both, and the checks need to see both to judge it.
     expect(detectRelease('git tag v0.2.0 && npm publish')).toEqual({
       tag: 'v0.2.0',

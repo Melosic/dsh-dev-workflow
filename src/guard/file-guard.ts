@@ -27,6 +27,13 @@ const ACTION: GuardAction = 'deny'
 const BLOCKED = 'security.sensitive_file_blocked'
 
 /**
+ * Suffixes of a dotfile that name a sample rather than the real thing.
+ * `.env.example` and `.env.sample` document the variables; they carry no
+ * secret, and blocking them only encourages the guard to be turned off.
+ */
+const SAMPLE_VARIANTS = new Set(['example', 'sample', 'template', 'dist', 'defaults'])
+
+/**
  * Argument fields that name a path, per tool. Keyed by tool name so that an
  * ordinary string argument — a commit message that happens to mention `.env` —
  * is never mistaken for a path.
@@ -99,8 +106,12 @@ export function matchesPattern(path: string, pattern: string): boolean {
   if (new RegExp(`^${escape(glob).replace(/\*/g, '[^/]*')}$`).test(base)) return true
 
   // `.env` also covers `.env.local` and `.env.production`: the secret is in the
-  // variants as much as in the file itself.
-  return glob.startsWith('.') && !glob.includes('*') && base.startsWith(`${glob}.`)
+  // variants as much as in the file itself. A documented sample is the one
+  // exception, because `.env.example` exists to be read — refusing it teaches
+  // the reader nothing and only gets the rule switched off.
+  if (!glob.startsWith('.') || glob.includes('*')) return false
+  if (!base.startsWith(`${glob}.`)) return false
+  return !SAMPLE_VARIANTS.has(base.slice(glob.length + 1))
 }
 
 /**

@@ -61,6 +61,10 @@ describe('src/guard/command-guard.ts', () => {
       'sudo rm -rf /',
       'rm --recursive --force /',
       'rm -rf ~',
+      'rm -rf ~/',
+      'rm -rf $HOME',
+      'rm -rf $HOME/',
+      'rm -rf ${HOME}',
       'rm -rf .',
       'rm -rf *',
     ]) {
@@ -91,6 +95,8 @@ describe('src/guard/command-guard.ts', () => {
   it('recognises a dangerous command after a separator or a wrapper', () => {
     expect(classify('cd /tmp && rm -rf /')?.reason).toBe('command.guard.dangerous_warning')
     expect(classify('FOO=1 rm -rf /')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('sudo rm -rf /')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('nohup doas rm -rf /')?.reason).toBe('command.guard.dangerous_warning')
   })
 
   it('passes an ordinary delete, including a recursive one', () => {

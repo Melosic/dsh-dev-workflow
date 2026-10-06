@@ -53,26 +53,10 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 测试文件放在 `tests/`，命名建议 `describe` 用被测模块路径（如 `src/tools/check-doc-sync.ts`）、
 `it` 用可观察的行为描述，见 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 的测试一节。
 
-| 文件 | 覆盖什么 |
-| --- | --- |
-| `tests/register.spec.ts` | cordis 契约：具名导出、`inject`、注册与注销的完整清单，工具定义形状 |
-| `tests/config.spec.ts` | 每个默认值，以及校验失败的报错文本 |
-| `tests/i18n.spec.ts` | 两份字典的 key 集合与占位符一致、`t()` 的分语言与回退行为 |
-| `tests/impl.spec.ts` | 两个判定函数与 `evaluate` 的边界：阻塞 vs 建议 |
-| `tests/guard.spec.ts` | 每条 git-guard 规则、三档策略、与上下游门禁的交互 |
-| `tests/command-guard.spec.ts` | 危险 shell 命令的识别与误报边界 |
-| `tests/file-guard.spec.ts` | 敏感路径匹配（目录语义、任意深度）、各工具读哪个字段 |
-| `tests/secret-guard.spec.ts` | 四种凭据模式、可选的高熵检测、脱敏不泄漏 |
-| `tests/audit.spec.ts` | 审计记录的字段、脱敏、路径与写失败 |
-| `tests/trigger.spec.ts` | 什么时候开口、什么时候沉默、去重与跨会话重报 |
-| `tests/trigger-pr.spec.ts` | `gh pr create` 的识别、标题/描述/清单规则 |
-| `tests/trigger-release.spec.ts` | `git tag` / `npm publish` 的识别与发版规则 |
-| `tests/skill-parity.spec.ts` | SKILL 两份语言的标题数量与顺序一致 |
-| `tests/harness.ts` | 公共脚手架：记录注册的假 ctx、假 git、`makeExec` |
-
-**`tests/harness.ts` 不是测试文件**，它不匹配 Vitest 的用例收集规则，只被上面几个 spec
+**`tests/harness.ts` 不是测试文件**，它不匹配 Vitest 的用例收集规则，只被各个 spec
 导入。加新 spec 时优先复用它，而不是再写一份假的 context——假 ctx 一旦出现两份，
-它们迟早会对不上真实注册契约。
+它们迟早会对不上真实注册契约。每个 `tests/*.spec.ts` 文件顶部有一行注释说明它覆盖什么，
+新增文件时照做；`tests/` 下当前有 19 个 spec。
 
 几个写测试时必须知道的约定：
 
@@ -85,8 +69,8 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
   一半」和「`feat` 没补 CHANGELOG」这类 `errors` 才会。断言这类行为时写清楚断言在哪一层。
 - **断言报错文本用 `t()` 而不是字面量。** 字典改动时测试会跟着动，而不是留下一条
   读不出意图的字符串比较。
-- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 80 个 key、扁平化后 81 个路径。
-  数 key 时想清楚数的是哪一层。
+- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 85 个 key、扁平化后 86 个叶子路径
+  （`tests/i18n.spec.ts` 两个数字都断言了）。数 key 时想清楚数的是哪一层。
 
 ## 加一条新规则要动什么
 

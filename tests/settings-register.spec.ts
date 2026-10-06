@@ -97,6 +97,32 @@ describe('src/index.ts settings registration', () => {
     expect(harness.tools).toHaveLength(2)
   })
 
+  it('rebuilds the registrations for every switch that gates one', () => {
+    // Each switch below decides whether something is registered at all, so it
+    // belongs in the signature the runtime compares. A switch left out of that
+    // list toggles in the panel and changes nothing until a restart.
+    const switches: ReadonlyArray<
+      [string, (config: ReturnType<typeof Config>) => unknown, number]
+    > = [
+      ['enableOwnTrigger', (config) => config.enableOwnTrigger, 4],
+      ['gitGuard.enabled', (config) => config.gitGuard.enabled, 6],
+      ['commandGuard.enabled', (config) => config.commandGuard.enabled, 6],
+      ['fileGuard.enabled', (config) => config.fileGuard.enabled, 6],
+      ['secretGuard.enabled', (config) => config.secretGuard.enabled, 6],
+    ]
+
+    for (const [name, reference, off] of switches) {
+      const harness = createHarness()
+      const config = Config({})
+      plugin.apply(harness.ctx, config)
+      expect(harness.listeners, name).toHaveLength(7)
+
+      commit(reference(config) as never, false)
+      deliver(harness)
+      expect(harness.listeners, name).toHaveLength(off)
+    }
+  })
+
   it('leaves the registrations alone when a setting read on demand moves', () => {
     const harness = createHarness()
     const config = Config({})
