@@ -334,26 +334,34 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 
 ### 「已覆盖」与「恢复默认」
 
-每个字段标题右侧可能带一个「已覆盖」徽标和一颗「恢复默认」按钮。理解这一对的关键是：
-**它标的是「这份 profile 有没有显式写这一项」，不是「值等不等于默认值」。** 官方实现把这条
-写得很直白（`dsh-client-ui-primitives/lib/index.js:7099-7102`）：
+每个字段标题右侧可能带一个「已覆盖」徽标和一颗「恢复默认」按钮。它们说的是同一件事：
+**这份 profile 里还留着这一项**。平台判定「已覆盖」看的是 user 层有没有这个键，而不是值等不
+等于默认值——官方实现把这条说得很直白（`dsh-client-ui-primitives/lib/index.js:7099-7102`）：
 
 > A field shows its effective value — the user layer over the composition layer over the
 > schema default — and whether the user layer carries it. **That presence, not a value
 > comparison, is what marks a field overridden: an override equal to the composition default
 > is still an override.**
 
-对应的判定是 `stored(field)`：只看 user 层有没有这个键（同文件 `:7370-7373`）。所以把
-`commitCheck.subjectMaxLength` 从默认 `50` 改成 `72` 再改回 `50` 并保存，写入的仍然是
-`{op: 'set', path: [...], value: 50}`，徽标**不会**消失——profile 里确实记着这一项，只是记的
-值和默认值恰好相同。面板上唯一会真正删掉这一项的是**「恢复默认」按钮**：它发的是
-`{op: 'unset', path: [...]}`（`client.js:917` 的 `actions.clear(spec.path)`），让该字段重新
-继承组合层的值，徽标随之消失。这条往返链路由 `tests/settings-roundtrip.spec.ts:147-162` 锁着。
+对应的判定是 `stored(field)`：只看 user 层有没有这个键（同文件 `:7370-7373`）。
+
+**面板在这一步上比官方更进一步。** 官方只有「恢复默认」按钮会删掉这项；本面板把「用户把字段
+选回继承值」也当成同一个意思——你选回默认值时，就是不想再覆盖它了，于是保存时发的是
+`{op: 'unset', path: [...]}`，而不是写一个恰好等于默认值的 `{op: 'set'}`。徽标当场消失，不留
+一颗「恢复默认」按钮去重置一个本来就等于默认值的字段。两条路都通向 unset：
+
+- 把控件选/填回默认值（例如把 `commitCheck.subjectMaxLength` 从 `72` 改回 `50`）；
+- 或者点「恢复默认」（`client.js` 的 `actions.clear(spec.path)`）。
+
+这里有一条边界要留意：**只有当新值恰好等于继承值时才会 unset。** 如果新值不等于继承值、
+但恰好等于当前有效值（字段本来就是这个值，或别人刚写进来），草稿会被丢掉、不产生任何写操作
+——这一点和改动前一致。
 
 为什么值得知道：对安全相关的项（尤其 `gitGuard` 的八个档位）来说，「已覆盖」是一份**清单**。
 把它们从 `ask` 改成 `allow` 之后忘改回来，`allow` 会一直生效——徽标正是让你能找回这些字段的
 东西，`approval.disabled` 的文案里也把这一点写了出来（见
-[权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。
+[权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。现在撤销也只要一步：
+把那个档位选回 `ask` 再保存，profile 里那一项就被删掉了。
 
 ### 面板可以改的（27 项）
 

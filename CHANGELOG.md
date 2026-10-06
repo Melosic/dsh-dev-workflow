@@ -180,13 +180,36 @@
   守卫。新增 `src/approval-policy.ts`（`unaskable()`，无本地依赖以免 `guard/shared ↔
   guard/approval` 成环）；读不到策略或没有会话时一律维持原行为，避免把能用的提问变成拒绝。
   新增字典键 `approval.disabled`（双字典同步，键数 86→87）。
+- **把某个字段选/填回默认值时，面板改为清掉 profile 里的那一项，而不是写一个和默认值相同的值。**
+  平台判定「已覆盖」看的是 user 层有没有这个键，不看值等不等于默认值（官方原文见
+  `dsh-client-ui-primitives/lib/index.js:7099-7102`），所以此前把 `subjectMaxLength` 从
+  `72` 改回默认的 `50` 并保存，写入的是 `{op: 'set', value: 50}`，徽标与「恢复默认」按钮
+  留在一颗重置了也没有变化的字段上——用户明确反馈这很碍眼。现在 `DraftForm.edit()`
+  先拿**继承层**（`state.base`，与 `value`/`user` 同一套嵌套形状，用同一组 path 寻址）比较：
+  新值等于继承值且 user 层确实写着这一项时，改暂存 `{clear: true}`，保存走
+  `{op: 'unset', path}`，徽标当场消失。两条边界未变：新值不等于继承值但等于当前有效值时
+  仍丢弃草稿、不产生写操作；`invalid` 的坏值仍优先（不会被当成「选回默认值」而静默清掉）。
+  面板侧的 `overridden()` 也把已暂存的 clear 视为「不再覆盖」，否则控件显示默认值、字段
+  却仍声称被覆盖——正是用户看到的那个矛盾。
 - `docs/CONFIGURATION.md` 补一节「「已覆盖」与「恢复默认」」，说明这对徽标/按钮判的是
   **user 层有没有显式写这一项**，而不是值等不等于默认值（官方原文与 `stored(field)`
-  实现见 `dsh-client-ui-primitives/lib/index.js:7099-7102` / `:7370-7373`）：把
-  `subjectMaxLength` 从 `50` 改成 `72` 再改回 `50` 并保存，写入的仍是 `{op: 'set'}`，
-  徽标不消失；面板上唯一真正删掉这一项的是「恢复默认」按钮（`client.js:917` 发
-  `{op: 'unset'}`）。安全相关的档位尤其需要这份清单——从 `ask` 改成 `allow` 之后忘改
-  回来，`allow` 会一直生效。
+  实现见 `dsh-client-ui-primitives/lib/index.js:7099-7102` / `:7370-7373`），并写明本面板
+  比官方多走一步——选回继承值即等同于「恢复默认」，两条路都发 `{op: 'unset'}`。
+  安全相关的档位尤其需要这份清单——从 `ask` 改成 `allow` 之后忘改回来，`allow` 会一直
+  生效；现在把档位选回 `ask` 并保存，profile 里那一项就被删掉了。`docs/ARCHITECTURE.md`
+  的 `unset` 一句同步。
+- **更正 `docs/TOKEN-BUDGET.md` 的按需成本表。** 表里记的还是第三阶段刚写完时的
+  `SKILL.md` 10602 字符 / 212 行、`SKILL.zh.md` 5855 字符 / 173 行；技能在第四、五阶段
+  长了一倍，实际已是 **20367 字符 / 418 行**与 **10289 字符 / 350 行**。常驻那两行
+  （766 / 137 / 903 ≈ 226、522 / 50 / 572 ≈ 240）本次复测完全一致，只有按需部分过期；
+  汇总表的「规范全文」一档随之从 `~5900–10600` 改为 `~10300–20400` 字符。
+- `docs/TRIGGERS.md` 的「降级路径」补第三条：设置面板确实有一处**真实降级**。
+  `ctx.remote.$host` 只暴露 `{ home, isLoopback }`、包私有 `host.call` RPC 只有动态包
+  （vm-sandbox）路径才有（需要 `harness.handle`），所以面板在浏览器侧用同一条 `zh`
+  前缀规则重算 `auto` 的解析结果；`documentAvailable` 由 `$host.isLoopback === true`
+  决定；面板本身经 `ctx.inject(['settings'], …)` 可选，缺 `settings` 的档位只是没有
+  这个页面。前两条降级假设（`tools/pre-execute` 不存在、skill provider 不支持动态内容）
+  经核对**不需要降级**，结论不变。
 
 ## [0.1.0] - 2026-10-05
 

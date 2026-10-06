@@ -150,7 +150,8 @@ ctx.configForms.whileServed([NAMESPACE], () =>
 读写全部交给 `configForms` 提供的控制器，面板**没有自己的存储**：`DraftForm` 只暂存草稿，
 `save()` 把改动拼成一批 `{ op: 'set' | 'unset', path, value }`，带上**读到的 revision** 调
 `scope.mutate(ops, revision)`；版本不符或写入被拒时草稿保留并显示失败，由宿主负责冲突检测、
-落盘和失败后的重载。`unset` 表示「回到继承值」，也就是面板上的「恢复默认」。
+落盘和失败后的重载。`unset` 表示「回到继承值」：面板上的「恢复默认」按钮发它，用户把控件选/填回继承值时也发它
+（选回默认值就是「不再覆盖这一项」）。
 
 命名空间字符串写错两半就永不配对，所以 `tests/settings-schema.spec.ts` 会拿
 `cordis.patch.yml` 里的 `id:` 逐字比对；另外两个 spec 分别覆盖 Host 注册 + volatile 写入

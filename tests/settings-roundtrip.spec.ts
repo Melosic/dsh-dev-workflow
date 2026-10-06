@@ -161,6 +161,28 @@ describe('client.js read/write roundtrip', () => {
     expect(form.getSnapshot().overridden(subjectMaxLength)).toBe(false)
   })
 
+  // The platform marks a field overridden by the user layer *carrying* the
+  // entry, not by its value, so writing the default back would have kept the
+  // badge and a reset button that resets nothing. Choosing the inherited value
+  // is how a user says "stop overriding this", so it has to unset the entry.
+  it('unsets an overridden field when the inherited value is chosen again', async () => {
+    const config = Config({ commitCheck: { subjectMaxLength: 72 } })
+    const { scope, form } = await build({
+      config,
+      user: { commitCheck: { subjectMaxLength: 72 } },
+    })
+
+    form.edit(subjectMaxLength, 50)
+
+    expect(form.getSnapshot().dirty).toBe(true)
+    expect(form.getSnapshot().overridden(subjectMaxLength)).toBe(false)
+    expect(form.getSnapshot().read(subjectMaxLength)).toBe(50)
+    await form.save()
+
+    expect(scope.writes).toEqual([[{ op: 'unset', path: ['commitCheck', 'subjectMaxLength'] }]])
+    expect(plain(config.commitCheck.subjectMaxLength)).toBe(50)
+  })
+
   it('rejects a draft written against a stale revision', async () => {
     const { config, scope, form } = await build()
 

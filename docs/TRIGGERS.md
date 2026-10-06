@@ -250,6 +250,15 @@ PR 与发版两个断点的核对结论见上文「为什么三个触发器都�
 事件目录里没有对应事件，但动作本身经过 `bash` / `pwsh`，所以在动作发生前就能拦下，
 **不构成降级条件**。
 
+第三条「DSH 不支持设置面板的某些能力」有一条**真实降级**。面板需要知道 `auto`
+解析成了哪种语言，但 `ctx.remote.$host` 只暴露 `{ home, isLoopback }`，没有 locale；
+包私有的 `host.call` RPC 需要 `harness.handle(method, fn)`，那只有动态包（vm-sandbox）
+路径才有，普通 npm bundle 拿不到。降级方案是浏览器侧用同一条 `zh` 前缀规则自己重算一遍：
+面板显示的是「解析结果」而不是宿主内部值，两者在同一条 `Intl` 规则下等价。
+`documentAvailable` 同理——它由 `$host.isLoopback === true` 决定，非回环环境不提供打开
+文件。面板整体是可选的：`ctx.inject(['settings'], …)`，没有 `settings` 服务的档位只是
+没有这个页面，不影响守卫与触发器。
+
 | 场景 | 行为 |
 | --- | --- |
 | agent 通过 `bash` / `pwsh` 工具执行 `git commit` | 检查并提示 |
