@@ -34,6 +34,14 @@ describe('src/guard/file-guard.ts', () => {
     expect(classify('.env.production')?.reason).toBe('security.sensitive_file_blocked')
   })
 
+  it('reads a documented sample instead, because it holds no secret', () => {
+    // `.gitignore` keeps `.env.example` trackable on purpose; refusing it would
+    // only teach the agent to stop using the guard.
+    expect(classify('.env.example')).toBeUndefined()
+    expect(classify('config/.env.sample')).toBeUndefined()
+    expect(classify('.env.local.example')?.params.rule).toBe('.env')
+  })
+
   it('refuses an ssh private key at any depth', () => {
     expect(classify('.ssh/id_rsa')?.reason).toBe('security.sensitive_file_blocked')
     expect(classify('C:/Users/x/.ssh/id_rsa')?.reason).toBe('security.sensitive_file_blocked')
@@ -71,12 +79,20 @@ describe('src/guard/file-guard.ts', () => {
   })
 
   it('reads the argument field each tool actually uses', () => {
-    expect(detectFile({ file_path: '/repo/.env' }, 'read', Config({}))).toBeDefined()
-    expect(detectFile({ file_path: '/repo/.env' }, 'edit', Config({}))).toBeDefined()
-    expect(detectFile({ file_path: '/repo/.env' }, 'write', Config({}))).toBeDefined()
-    expect(detectFile({ file_path: '/repo/.env' }, 'read_image', Config({}))).toBeDefined()
-    expect(detectFile({ path: '/repo/.env' }, 'grep', Config({}))).toBeDefined()
-    expect(detectFile({ pattern: '/repo/.env' }, 'glob', Config({}))).toBeDefined()
+    const paths: ReadonlyArray<[Record<string, string>, string]> = [
+      [{ file_path: '/repo/.env' }, 'read'],
+      [{ file_path: '/repo/.env' }, 'edit'],
+      [{ file_path: '/repo/.env' }, 'write'],
+      [{ file_path: '/repo/.env' }, 'read_image'],
+      [{ path: '/repo/.env' }, 'grep'],
+      [{ pattern: '/repo/.env' }, 'glob'],
+    ]
+    for (const [args, tool] of paths) {
+      expect(detectFile(args, tool, Config({})), tool).toMatchObject({
+        reason: 'security.sensitive_file_blocked',
+        params: { rule: '.env' },
+      })
+    }
   })
 
   it('does not mistake a prose mention for a path argument', () => {
@@ -86,9 +102,11 @@ describe('src/guard/file-guard.ts', () => {
   })
 
   it('refuses a shell command that prints a sensitive file', () => {
-    expect(detectFile({ command: 'cat .env' }, 'bash', Config({}))).toBeDefined()
-    expect(detectFile({ command: 'cat /repo/.ssh/id_rsa' }, 'bash', Config({}))).toBeDefined()
-    expect(detectFile({ command: 'grep AWS .env' }, 'bash', Config({}))).toBeDefined()
+    expect(detectFile({ command: 'cat .env' }, 'bash', Config({}))?.params.rule).toBe('.env')
+    expect(detectFile({ command: 'cat /repo/.ssh/id_rsa' }, 'bash', Config({}))?.params.rule).toBe(
+      '.ssh/id_rsa',
+    )
+    expect(detectFile({ command: 'grep AWS .env' }, 'bash', Config({}))?.params.rule).toBe('.env')
   })
 
   it('passes a shell command that only mentions the name', () => {
@@ -148,7 +166,7 @@ describe('src/guard/file-guard.ts', () => {
 
   it('honours a configured pattern list', () => {
     const config = Config({ fileGuard: { noRead: ['*.vault'] } })
-    expect(detectFile({ file_path: 'a.vault' }, 'read', config)).toBeDefined()
+    expect(detectFile({ file_path: 'a.vault' }, 'read', config)?.params.rule).toBe('*.vault')
     // The built-in list was replaced, not extended.
     expect(detectFile({ file_path: '.env' }, 'read', config)).toBeUndefined()
   })

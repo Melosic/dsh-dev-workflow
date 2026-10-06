@@ -1,10 +1,9 @@
 {
   "meta": {
     "title": "开发工作流",
-    "description": "开发工作流守门员：以技能注入规范，校验提交信息与文档同步，并守护危险的 git 命令。"
+    "description": "开发工作流守门员：以技能注入规范，校验提交信息与文档同步，守护危险的 git 命令，并对其他人看得见的动作把关。"
   },
   "command.toggle.description": "开启或关闭开发工作流守门员。",
-  "command.toggle.usage": "用法：/dev-workflow on | off | status | check。不带参数时报告当前状态。",
   "command.toggle.hint": "on | off | status | check",
   "command.toggle.unknown": "未知子命令 \"{input}\"。可用：on、off、status、check。",
   "command.toggle.status.on": "dev-workflow 已开启。规范以简短摘要常驻，细节按需读取。",
@@ -58,6 +57,10 @@
   "security.guard.amend": "对已发布的提交做 amend 会重写共享历史。",
   "security.guard.checkout_discard": "checkout -- . 会丢弃所有未暂存的改动。",
   "security.guard.no_verify": "--no-verify 会跳过保护本仓库的钩子。",
+  "security.guard.outward_push": "push 会把当前分支发布到远端，其他人能看到。",
+  "security.guard.outward_tag": "标签是打在提交上的公开标记，其他人会据此开始构建。",
+  "security.guard.outward_pull_request": "创建 PR 等于请其他人来审查当前分支。",
+  "security.guard.outward_publish": "发布版本对所有安装该包的人都可见，且无法撤回。",
   "security.guard.suggest_force_with_lease": "建议改用 --force-with-lease：它会拒绝覆盖你尚未看到的提交。",
   "security.guard.approval_rejected": "这次操作未获批准，因此保持被拒状态。",
   "security.guard.approval_cancelled": "这次操作的审批提问被取消，因此按拒绝处理。",
@@ -75,7 +78,7 @@
   "trigger.pre_pr.detected": "正在按项目工作流规范检查本次 PR。",
   "trigger.pre_pr.reason": "这个 PR 违反了项目工作流规范。\n{details}",
   "trigger.pre_pr.ask": "开发工作流插件发现这个 PR 有问题。\n\n{details}\n\n批准则照常创建，拒绝则先修复。",
-  "trigger.pre_pr.error.description": "PR 描述缺少模板要求的段落：{sections}。请说明改了什么、为什么改、以及如何验证。",
+  "trigger.pre_pr.error.description": "PR 描述缺少模板要求的段落：{sections}。段名 `What`、`Why`、`How to verify` 必须逐字保留（英文），段内内容可用任何语言。",
   "trigger.pre_pr.error.checklist": "PR 描述里还有 {count} 项检查清单未勾选。请逐项勾选；不适用的请删掉该行。",
   "trigger.pre_pr.warn.issue": "这个 PR 没有关联 Issue。如果有对应 Issue，请引用它（`Closes #12`），以便追溯到这次改动的起因。",
   "trigger.pre_release.detected": "正在按项目工作流规范检查本次发版。",

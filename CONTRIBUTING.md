@@ -33,7 +33,6 @@ pnpm install
 | `pnpm format:check` | Prettier 校验（CI 用） |
 | `pnpm test` | Vitest 单次运行 |
 | `pnpm test:watch` | Vitest 监听模式 |
-| `pnpm test:coverage` | 带覆盖率运行 |
 
 **⚠️ 关于 `target` 与 `engines.node`**
 
@@ -225,6 +224,10 @@ PR 审查时请把翻译质量当作真实审查内容，而不是走过场。
 - **第三阶段（插件核心代码）**：实现工具、触发器与 git-guard。
 - **第三阶段完成后**：补齐 `docs/ARCHITECTURE.md`、`docs/TOOLS.md`、`docs/CONFIGURATION.md`、
   `docs/I18N.md`、`docs/SECURITY.md`。
+
+分期到此为止：后续工作（测试、发布准备、设置面板等）不再编号，也不要用编号去引用
+某一份文档或某一条决定——那些分期只在本机、不随仓库发布。需要标注一份 ADR 的时间，
+写日期，不写「第几阶段」（见 `docs/ADR/template.md`）。
 
 ## 吃自己的狗粮（第四、第五阶段）
 

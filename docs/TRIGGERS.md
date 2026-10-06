@@ -2,7 +2,7 @@
 
 本文件说明 dsh-dev-workflow 的自动介入路径：**它什么时候开口，靠什么开口，以及什么时候它其实开不了口。**
 
-对应的代码是 `src/triggers/`（三个约定触发器：提交前、PR 前、发版前）、`src/guard/`（四道守卫）与
+对应的代码是 `src/triggers/`（三个约定触发器：提交前、PR 前、发版前）、`src/guard/`（五道守卫）与
 `src/commands/dev-workflow.ts`（手动路径）。它们共用 `src/checks.ts` 与
 `src/tools/check-commit-message.ts` 的判定逻辑、`src/shell.ts` 的命令行解析，所以
 「自动检查」和 `/dev-workflow check` 给出的结论必然一致。
@@ -51,10 +51,11 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 取舍，插件给的是「要不要照常执行」的选择，而不是否决权。**只有配置里显式写了 `'deny'`
 的守卫策略才会真正拒绝**（见 [docs/SECURITY.md](SECURITY.md)）。
 
-七道门是独立的：`enableOwnTrigger` 管三个约定触发器，四道守卫各由自己的 `enabled` 管，
-其中一个出问题不影响其余。注册顺序是「约定（提交 → PR → 发版）→ 破坏性 git → 危险命令 →
-敏感文件 → 密钥」：更靠前的守卫先写审计记录，而各级决策仍按「更严者胜」汇总，
-顺序不影响最终结果。
+八道门是独立的：`enableOwnTrigger` 管三个约定触发器，五道守卫各由自己的 `enabled` 管，
+其中一个出问题不影响其余。注册顺序是「约定（提交 → PR → 发版）→ 破坏性 git → 对外动作 →
+危险命令 → 敏感文件 → 密钥」：更靠前的守卫先写审计记录，而各级决策仍按「更严者胜」汇总，
+顺序不影响最终结果。**对外动作排在破坏性 git 之后、机器级破坏之前**：它管的也是 git
+（外加 `gh` 与包管理器），但拦的是「别人会看见」，不是「本机会丢东西」。
 
 ## 什么算「一次提交」
 
@@ -114,12 +115,17 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 | --- | --- |
 | 标题 | 直接复用 `checkCommitMessage({ message: title })` 的结论。**squash merge 后 PR 标题就是 main 上的提交信息**，因此它必须满足与提交信息完全相同的规范——用同一份实现，结论不会漂移 |
 | 描述三段 | PR 模板要求的 `## What` / `## Why` / `## How to verify`，**缺段或段内为空都算缺失**——一个只有标题的空盒子并不比没有好 |
-| 检查清单 | 描述里遗留的 `- [ ]` 未勾选行逐项计数 |
+| 检查清单 | 在模板要求的那三段**之内**遗留的 `- [ ]` 未勾选行逐项计数（描述整体为空时这条不触发，只提示） |
 | 关联 Issue | 标题与描述里没有 `#<数字>` 时**只警告**：本地无法判断是否真的存在对应 Issue，不该因此阻塞 |
 
-`.github/` 下没有 PR 模板文件，所以「模板里有没有复选框」无法作为触发条件；
-实现选择的是「描述里**实际存在**的未勾选行」——模板缺席时这条规则自然不触发，
-模板存在而作者漏勾时正好命中。
+`.github/` 下没有 PR 模板文件，所以「模板里有没有复选框」无法作为触发条件。实现的做法是：
+先把描述按 `##` 切段，再**只在 `What` / `Why` / `How to verify` 三段之内**数未勾选行——这样
+`## Remaining work` 这类作者自加的段落不会被误算。两个已知取舍：
+
+- 描述整体为空（`--body` 没给）时这条规则**完全不跑**：没有描述时把「零个复选框」当成合规，
+  比凭空报一次错更不容易误伤。
+- 段名必须逐字是英文的 `What` / `Why` / `How to verify`（见 `skills/dsh-dev-workflow/SKILL.md`
+  的模板）；翻译段名会让这两条规则同时失效，所以模板里写明了要保留原文。
 
 ## 什么算「一次发版」
 
@@ -129,8 +135,14 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 - `git tag <name>`：跳过 `-a` / `-s` 等无值选项与 `-m` / `-F` / `-u` 等带值选项，
   取第一个非选项词为 tag 名；`-l` / `--list` / `-d` / `--delete` / `-v` / `--verify`
   是**读**操作，直接不算发版。
-- `npm publish` / `pnpm publish`：读 `--tag` / `--tag=`。**没有写 dist-tag 时记为 `latest`**，
-  因为 npm 确实会把预发布版本也发布到 `latest`——把默认值当成事实，预发布规则才拦得住它。
+- `npm publish` / `pnpm publish` / `npx npm publish`：读 `--tag` / `--tag=`。**没有写 dist-tag
+  时记为 `latest`**，因为 npm 确实会把预发布版本也发布到 `latest`——把默认值当成事实，
+  预发布规则才拦得住它。
+- **`--dry-run`（或短选项 `-n`）不算发版。** 它不上传任何东西，而 `docs/PUBLISHING.md`
+  自己就推荐用它核对打包结果——把一次演习拦下来并报「预发布版发到 latest」是纯误报。
+- 前面的 `npx` 属于被剥离的包装词（见 `src/shell.ts` 的 `TRANSPARENT`），所以
+  `npx npm publish` 认得出是发布；但 `sh -c "npm publish"` 里引号包着的整段脚本认不出，
+  那是动态解析的范畴。
 
 ## 发版检查什么
 
@@ -158,26 +170,57 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 | `rebase` | `rebase` | `ask` |
 | `commit --amend` | `amend` | `ask` |
 | `branch -D` / `--delete --force` | `branchDelete` | `ask` |
+| `push --delete` / `-d <remote> <branch>` | `branchDelete` | `ask` |
 | `clean -f` / `-fd` | `cleanForce` | `ask` |
 | `checkout -- <path>` | `checkoutDiscard` | `ask` |
 | `--no-verify`（任何子命令） | `noVerify` | `ask` |
 
 识别规则里几处刻意的地方：
 
-- **`--force-with-lease` 直接放过。** 带这个选项（含 `--force-with-lease=main`）时不算
-  force push——它会在覆盖一个你尚未看到的提交时失败，正是我们想避免的事故。反过来，
-  裸 `--force` 的理由里会附带一行「建议改用 `--force-with-lease`」。
+- **`--force-with-lease` 只在它独自出现时放过。** 光带这个选项（含
+  `--force-with-lease=main`）不算 force push——它会在覆盖一个你尚未看到的提交时失败，正是
+  我们想避免的事故。但它**不短路**：`git push --force-with-lease --force` 仍是强推，因为
+  plain `--force` 压过 lease 并真的覆盖远端。只有不带 `--force` / `-f` / `+refspec` 时，
+  lease 才让这条命令通过。反过来，裸 `--force` 的理由里会附带一行「建议改用
+  `--force-with-lease`」。
 - **短选项按字母匹配。** `-fd` 含 `f`，`-D` 含 `D`；`--force` 这类长选项不参与短选项匹配。
 - **`reset --soft` / `clean -n` / `branch -d` / `checkout main` 都不拦。** 它们不丢工作。
 - **`--no-verify` 与操作同时出现时，操作胜出。** `git push --no-verify --force` 报的是
   force push：`--no-verify` 只是修饰符，真正会丢东西的是那个操作。同等级的策略下先入列者
   胜出，所以判定循环把 `--no-verify` 放在子命令判定之后。
 
+判定链与每项默认值的理由（为什么 `noVerify` 是 `ask` 而非 `deny` 等）见
+[docs/CONFIGURATION.md](CONFIGURATION.md) 的 `gitGuard` 表与
+[docs/SECURITY.md](SECURITY.md)。
+
 一条命令行同时命中多项时，按 `deny > ask > allow` 取最严的一条——**绝不削弱上游更严的决定**。
 唯一的覆盖方向是「自己 `deny` 对上上游 `ask`」，因为拒绝一个已经在被质疑的调用不会让情况变坏。
-细节与默认值的理由见 [docs/SECURITY.md](SECURITY.md)。
 
-## 另外三道守卫
+## 守卫对外可见动作
+
+第二道守卫（`src/guard/outward-guard.ts`）管的是另一类错误：**在本机完全可回退，但一旦离开
+本机，其他人立刻就看得见。** 推送、打标签、创建 PR、发布都越过这条线；agent 抢在用户同意
+之前替你对外宣称「做完了」，正是缺这一道门时会发生的事。
+
+| 命令形态 | 策略键 | 默认 |
+| --- | --- | --- |
+| 任意 `git push`（不只强推） | `outwardGuard.push` | `ask` |
+| `git tag <name>`（建标签，不是读标签） | `outwardGuard.tag` | `ask` |
+| `gh pr create` | `outwardGuard.pullRequest` | `ask` |
+| `npm publish` / `pnpm publish` | `outwardGuard.publish` | `ask` |
+
+- **普通 `git push` 也拦。** 强推是另一个、更严重的问题，仍归 `gitGuard.forcePush`；
+  这里拦的是「把分支推到远端」本身。同一条 `git push --force` 会同时命中两道守卫，
+  最终理由由更严者胜出——强推的理由盖过「推送」的理由。
+- **两处识别复用触发器里的同一份判断。** 建标签与读标签之别、`gh pr create` 与 `gh pr list`
+  之别、以及 `--dry-run` / `-n` 不算发版，都走 `detectRelease()` 与 `detectPullRequest()`——
+  「什么算一次发版」只能有一个答案，否则门禁和检查会对同一行命令各说各话。
+- **`--dry-run` 演习一律放过。** 它不碰远端也不上传，没有需要用户同意的事。
+- **能力边界与触发器相同。** 只看命令行词法，所以 `sh -c "git push"` 里引号包着的整段脚本认不出。
+- **它是唯一一道拦「本机没事」的守卫，所以默认全是 `ask` 而非 `deny`。** 要的是同意，
+  不是阻拦：用户点头，命令原样放行。
+
+## 机器与文件的三道守卫
 
 后三道守卫看的是同一件事的三面：**这次调用会不会让东西永久地出去或消失。**
 
@@ -202,7 +245,7 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 `command-guard` 的识别细节（什么算危险目标、为什么 `rm -rf node_modules` 放行）见
 [docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
 
-**四道守卫共用 `src/guard/shared.ts` 的 `createGuard()`。** 它负责接线、命中计数、审计回调
+**五道守卫共用 `src/guard/shared.ts` 的 `createGuard()`。** 它负责接线、命中计数、审计回调
 与档位决策；每道守卫只提供一个 `detect(exec)`。因此「先 `await next()`、透传上游决定、
 `signal.aborted` 时返回 `cancel`、同级先入列者胜」这些规则只有一份实现。
 

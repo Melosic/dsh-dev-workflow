@@ -60,8 +60,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --passWithNoTests",
     "ci:checks": "node scripts/ci-checks.mjs",
+    "prepack": "pnpm build && pnpm ci:checks",
     "prepare": "husky"
   },
   "dependencies": {},

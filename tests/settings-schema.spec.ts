@@ -54,6 +54,11 @@ const REQUIRED = [
   'gitGuard.checkoutDiscard',
   'gitGuard.noVerify',
   'gitGuard.rememberApproved',
+  'outwardGuard.enabled',
+  'outwardGuard.push',
+  'outwardGuard.tag',
+  'outwardGuard.pullRequest',
+  'outwardGuard.publish',
   'commandGuard.enabled',
   'commandGuard.dangerousShell',
   'fileGuard.enabled',
@@ -168,10 +173,25 @@ describe('client.js schema agreement', () => {
     }
   })
 
+  it('gives all four outward actions the same three policies', () => {
+    const outward = REQUIRED.filter((key) => key.startsWith('outwardGuard.')).filter(
+      (key) => key !== 'outwardGuard.enabled',
+    )
+    expect(outward).toHaveLength(4)
+
+    for (const key of outward) {
+      const field = description.fields.find((entry) => keyOf(entry.path) === key)
+      const values = (field?.options ?? []).map((option) =>
+        typeof option === 'string' ? option : option.value,
+      )
+      expect(values.toSorted()).toEqual(['allow', 'ask', 'deny'])
+    }
+  })
+
   it('opens the working groups and collapses the advanced one', () => {
     const collapsed = description.groups.filter((group) => group.open !== true)
 
-    expect(description.groups).toHaveLength(8)
+    expect(description.groups).toHaveLength(9)
     expect(collapsed.map((group) => group.key)).toEqual(['advanced'])
 
     // Read-only entries live in the collapsed group and nowhere else.

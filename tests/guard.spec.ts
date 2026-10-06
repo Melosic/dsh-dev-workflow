@@ -82,6 +82,31 @@ describe('src/guard/git-guard.ts', () => {
     expect(state.guardHits()).toEqual({})
   })
 
+  it('still sees a forced push when --force rides along with --force-with-lease', () => {
+    // `--force` overrides the lease, so the pair really does clobber the remote.
+    expect(classify('git push --force-with-lease --force origin main')).toMatchObject({
+      reason: 'security.guard.force_push',
+    })
+    expect(classify('git push --force --force-with-lease origin main')).toMatchObject({
+      reason: 'security.guard.force_push',
+    })
+    expect(classify('git push -f --force-with-lease origin main')).toMatchObject({
+      reason: 'security.guard.force_push',
+    })
+    expect(classify('git push --force-with-lease=origin/main origin +main')).toMatchObject({
+      reason: 'security.guard.force_push',
+    })
+  })
+
+  it('sees the git command through a wrapper in front of it', () => {
+    expect(classify('sudo git push --force origin main')).toMatchObject({
+      reason: 'security.guard.force_push',
+    })
+    expect(classify('FOO=1 sudo git reset --hard HEAD~1')).toMatchObject({
+      reason: 'security.guard.hard_reset',
+    })
+  })
+
   it('sees a forced push through a short option and a leading plus refspec', () => {
     expect(classify('git push -f origin main')).toMatchObject({
       reason: 'security.guard.force_push',
@@ -133,6 +158,15 @@ describe('src/guard/git-guard.ts', () => {
       reason: 'security.guard.branch_delete',
     })
     expect(classify('git branch --delete --force topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git push --delete origin topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git push origin -d topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git push origin :topic')).toMatchObject({
       reason: 'security.guard.branch_delete',
     })
     expect(classify('git checkout -- src/a.ts')).toMatchObject({

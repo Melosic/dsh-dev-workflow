@@ -158,7 +158,7 @@ describe('src/triggers/pre-pr.ts', () => {
 
   it('asks about a checklist left unticked', async () => {
     const { listener } = trigger()
-    const body = `${GOOD_BODY}\n\n## Checklist\n\n- [x] Tests pass\n- [ ] Documentation updated\n`
+    const body = `${GOOD_BODY}\n- [ ] Documentation updated\n`
     const decision = await fire(
       listener,
       `gh pr create --title "feat(cli): add a flag" --body ${quoted(body)}`,
@@ -167,6 +167,16 @@ describe('src/triggers/pre-pr.ts', () => {
     expect((decision as { reason: string }).reason).toContain(
       t('trigger.pre_pr.error.checklist', { count: 1 }),
     )
+  })
+
+  it('leaves checkboxes outside the template sections alone', async () => {
+    const { listener } = trigger()
+    const body = `${GOOD_BODY}\n\n## Remaining work\n\n- [ ] Follow-up pull request\n`
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(body)}`,
+    )
+    expect(decision.kind).toBe('allow')
   })
 
   it('notes a missing issue reference without blocking on it', () => {

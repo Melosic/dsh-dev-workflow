@@ -19,8 +19,9 @@
   - **与文件配置同源。** 面板没有自己的存储：保存经宿主的设置控制器写入当前 profile 的
     `cordis.patch.yml`，再提交进运行中的配置引用，**不需要重启**；`locale` 也会随之
     重新解析。
-  - 27 项可在面板修改（开关与枚举，外加 `commitCheck.subjectMaxLength` 一个数字输入）；
-    8 个危险 git 操作的档位、四道守卫与审计的开关、提交与文档两组检查的规则都在其中。
+  - 32 项可在面板修改（开关与枚举，外加 `commitCheck.subjectMaxLength` 一个数字输入）；
+    8 个危险 git 操作的档位、4 个对外动作的档位、五道守卫与审计的开关、提交与文档两组
+    检查的规则都在其中。
   - 9 项（`codePaths`、`docs.docsDir`、`docs.adrDir`、`docs.changelog`、`docs.exclude`、
     `rules.branchPattern`、`rules.commitPattern`、`docs.mirrors`、`audit.path`）只读展示在
     默认折叠的**高级**区，旁边有按钮直接打开 profile 的 `cordis.patch.yml`；另有 2 项
@@ -30,7 +31,7 @@
   - 样式只用主题发布的 `--dsw-alias-*` token，类名统一 `dsw-dev-workflow-` 前缀，
     `<style>` 带 `data-plugin` / `data-plugin-css`，HMR 能按归属清理。
   - **保存成功会在底部给一行提示**（`action.saved`），下一次编辑、取消或关闭设置面板时
-    消失。官方 `SettingsForm` 只报失败、不报成功，而这张表单有 27 个字段：保存成功后唯一的
+    消失。官方 `SettingsForm` 只报失败、不报成功，而这张表单有 32 个字段：保存成功后唯一的
     变化只是按钮不再变灰，滚在顶部的人看不出发生过什么。提示属于「这一次打开」，所以不能只
     记在插件的草稿实例上——设置面板关闭时会卸载这个 section，而草稿实例与插件同生命周期，
     只记在那里会让提示在下次打开面板时重现。
@@ -104,6 +105,22 @@
     （每轮都要成立的稳定规则 vs 做事时才读的规范全文），含
     `@deepseek-ai/dsh-agent-instructions` 的加载链、候选名、65536 字节预算与「不 watch」约束。
 
+- **第五道守卫 `outward-guard`：拦下「本机没事、但别人立刻看得见」的动作。**
+  此前四道守卫守的都是「东西会丢」，而 agent 抢在用户点头之前就把分支推上去、把标签打上、
+  把 PR 开出来、把版本发出去，本机一样东西都没丢——用户却已经被对外宣称同意了。
+  新守卫填的正是这个缺口，四个策略键默认全为 `ask`（不是 `deny`：这是唯一一道本机不会造成
+  任何损失的守卫，要的是同意而不是禁止）。
+  - `src/guard/outward-guard.ts`：`outwardGuard.push` 认任意 `git push`（强推仍归
+    `gitGuard.forcePush`，两者同时命中时理由由更严者胜出）、`outwardGuard.tag` 认
+    `git tag <name>`（`-l` / `-d` / `-v` 这类读操作不算）、`outwardGuard.pullRequest` 认
+    `gh pr create`、`outwardGuard.publish` 认 `npm` / `pnpm publish`；`--dry-run` / `-n`
+    一律放过。
+  - 识别**复用触发器里的同一份判断**（`detectRelease()` 与 `detectPullRequest()`），
+    复制出第二份「什么算一次发版」正是会让门禁和检查对同一行命令各说各话的做法。
+  - 注册排在破坏性 git 之后、机器级破坏之前；面板新增「对外可见动作」分组。
+  - `tests/outward-guard.spec.ts` 覆盖四类动作、`--dry-run` 排除、开关关掉时全放过
+    与「上游拒绝不被降级成询问」。
+
 ### Changed
 
 - **DSH `peerDependencies` 改为只写下界 `>=0.2.0-rc.2`，去掉上界 `<0.3.0`。**
@@ -131,7 +148,7 @@
   以及 `unpublish` 的三个技术前提（72 小时窗口、只接受单个版本或整个项目、
   撤掉最后一个版本会被拦且 24 小时内发不回来）；并把 `ci:checks` 输出示例里的
   过期数字 `locale keys aligned (56 keys)` 更正为 81。
-- `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为四道守卫的完整说明，含各自的
+- `docs/SECURITY.md` 从「v0.1.0 只做 git-guard」改写为各道守卫的完整说明，含各自的
   默认值与理由；`docs/CONFIGURATION.md` 补四组新配置；`docs/TRIGGERS.md` 与
   `docs/ARCHITECTURE.md` 的监听器数量与次序更正为「约定 → git → 命令 → 文件 → 密钥」；
   `docs/DEVELOPMENT.md` 补一节「加一整道新守卫要动什么」。
@@ -200,9 +217,12 @@
   的 `unset` 一句同步。
 - **更正 `docs/TOKEN-BUDGET.md` 的按需成本表。** 表里记的还是第三阶段刚写完时的
   `SKILL.md` 10602 字符 / 212 行、`SKILL.zh.md` 5855 字符 / 173 行；技能在第四、五阶段
-  长了一倍，实际已是 **20367 字符 / 418 行**与 **10289 字符 / 350 行**。常驻那两行
+  长了一倍，**当前值见该表本身**（行数按
+  `Get-Content` 计，末行换行不算一行；字符数按 UTF-8 解码后的字符个数，不是字节数）。
+  常驻那两行
   （766 / 137 / 903 ≈ 226、522 / 50 / 572 ≈ 240）本次复测完全一致，只有按需部分过期；
-  汇总表的「规范全文」一档随之从 `~5900–10600` 改为 `~10300–20400` 字符。
+  汇总表的「规范全文」一档随之上调。顺带把
+  `docs/ADR/` 里写死的行列数删掉，改为指向本表——观测值只该有一个出处。
 - `docs/TRIGGERS.md` 的「降级路径」补第三条：设置面板确实有一处**真实降级**。
   `ctx.remote.$host` 只暴露 `{ home, isLoopback }`、包私有 `host.call` RPC 只有动态包
   （vm-sandbox）路径才有（需要 `harness.handle`），所以面板在浏览器侧用同一条 `zh`
@@ -210,6 +230,71 @@
   决定；面板本身经 `ctx.inject(['settings'], …)` 可选，缺 `settings` 的档位只是没有
   这个页面。前两条降级假设（`tools/pre-execute` 不存在、skill provider 不支持动态内容）
   经核对**不需要降级**，结论不变。
+- `docs/ARCHITECTURE.md` 的「不跑 shell 的命令行解析」同步实现：补上 `${VAR}` 的保留、
+  `skipWrappers()` 与 `TRANSPARENT` 集合（`sudo` / `doas` / `env` / `nohup` / `command` /
+  `exec` / `time` / `npx` 加 `VAR=value` 赋值），并写明 `sh -c "git push --force"` 属
+  认不出的已知边界。
+- `docs/SECURITY.md` 的审计章按实现重写（原先声称「只记形状」而代码落完整参数副本），
+  「不做什么」表与「日志里有什么」并入其中；「本插件不是安全边界」补上 `sh -c` /
+  `node -e` / `python -c` 三处已知绕过。
+- `CONTRIBUTING.md` 明确「分期到此为止」：后续工作不再编号，标注 ADR 时间写日期而不写
+  「第几阶段」；`AGENTS.md`、`ACKNOWLEDGEMENTS.md`、五份 ADR 与 `docs/ADR/template.md`
+  里的分期编号一并换成日期或事实描述。`scripts/ci-checks.mjs` 新增一条机械守卫：
+  仓库里任何非豁免的 `.md` 出现 `第N阶段` 即失败（`CONTRIBUTING.md` 定义分期、
+  `CHANGELOG.md` 是历史记录，两者豁免）。
+- 删除 `pnpm test:coverage` 脚本：它依赖未安装的 `@vitest/coverage-v8`，实跑必然
+  exit 1，CI 与任何文档都不需要它。`CONTRIBUTING.md` 的命令表同步删去该行。
+- **双语 README 从「手册」改回「入口」**：首屏只回答四件事（这是什么、为什么值得用、
+  怎么跑起来、去哪看更多）。定位句不再只写「守门员插件」——那是守卫部分的身份，会让人以为
+  整个插件就是守卫；改为「面向编码 Agent 的一套开发工作流，以插件形式分发」，下面依次列出
+  规范、检查、守卫三层。新增 `Why` / `为什么需要它` 一节，讲的是规范本身的困境而不是守卫：
+  每个项目都有这套约定，写下来没人会在该用的那一刻去翻（Agent 尤其不会），不写下来就得每个
+  会话重说且会漂移；本插件要做的就是让 Agent 随身带着它、让工具执行能机械检查的部分——
+  README 只留结论，不复述 `docs/ADR/001-skill-first-approach.md` 与
+  `docs/ADR/004-action-triggered-not-manual-mode.md` 里的论证过程。Features 压到 6 条各一行，
+  功能细节留在 `docs/`（`docs/README.md` 已逐份登记，链接不丢）；「环境要求」表格去掉说明列
+  只留组件与版本，版本不匹配那段压成三句；Quick Start 补一步最小验证（`/dev-workflow status`
+  + 一个应当被拦下的动作）；文档索引收到 3 条，`LICENSE` 一行的去处由底部的许可证一节承担；
+  贡献指引压成一句。英文 118 → 85 行、中文 101 → 79 行，两边章节一一对应。
+- README 里的 `DSH` 一律写全称 `DeepSeek Harness`（首次出现带 `dsh`）；命令字面量
+  （`dsh --version`、`dsh plugin … add …`、`/dev-workflow`）保持不变。
+
+### Fixed
+
+- **`git push --force-with-lease` 会短路掉强推判定。** 只要参数里有
+  `--force-with-lease`（含 `=origin/main` 形式），`pushHit()` 就整表提前返回，于是
+  `git push --force --force-with-lease origin main` 放行——而 plain `--force` 压过 lease
+  并真的覆盖远端。现在只有**不带** `--force` / `-f` / `+refspec` 时 lease 才免检。
+- **透明前缀使守卫看不见真实命令。** `programInvocations()` 原先只剥 `VAR=value` 与
+  `env`，所以 `sudo git push --force`、`nohup rm -rf /`、`npx npm publish` 一律漏过。
+  现在 `src/shell.ts` 导出 `TRANSPARENT` 集合与 `skipWrappers()`，五道守卫共用一处修复。
+- **`${HOME}` 永远匹配不上。** `tokenize()` 把 `{` / `}` 当分隔符丢掉，`rm -rf ${HOME}`
+  被拆成无从判断的碎片，`DANGEROUS_TARGETS` 里的 `'${HOME}'` 是死条目。现在 `${VAR}`
+  保留为一个词；`isDangerousTarget()` 同时归一化尾随斜杠，`rm -rf $HOME/`、`rm -rf ~/`
+  与 `rm -rf /` 一样命中。
+- **发版守卫把演习当成发布。** `npm publish --dry-run`（及 `-n`）会上报一次「预发布版
+  发到 latest」的误报；现在 `detectRelease()` 对这两个选项短路。
+- **PR 检查表把模板之外的复选框也算进去。** `uncheckedBoxes()` 原先数整个描述里的
+  `- [ ]`，作者自加的 `## Remaining work` 段会被误判；现在只在模板要求的
+  `What` / `Why` / `How to verify` 三段之内数。
+- **`.env.example` 被当成机密。** 命中 `.env` 的文件名前缀规则会连示例文件一起拒掉，
+  而示例文件按惯例不含真实凭据、且是仓库里最需要被读的文件之一。现在
+  `example` / `sample` / `template` / `dist` / `defaults` 五个示例变体放行。
+- **`git push --delete` 只是文档里的承诺。** `SKILL.md` 的危险表列了这一行，`pushHit()`
+  却只认力推，所以删远端分支既不问也不入审计。现在 `--delete` / `-d` / 空左侧 refspec
+  （`git push origin :topic`）都归 `gitGuard.branchDelete` 管——与本地 `git branch -D`
+  同一份损失、同一个策略键，而不是新加一个只有极端情况才用得到的开关。
+- 打包不再可能发出缺文件的产品：`package.json` 增加 `prepack`（`pnpm build && pnpm
+  ci:checks`），`scripts/ci-checks.mjs` 增加发布入口存在性检查——`lib/index.js`、
+  `client.js`、`locale/en.json`、`skills/dsh-dev-workflow/SKILL.md` 任一不存在、
+  或没被 `files` 白名单覆盖即失败（`cordis.patch.yml` 由既有的 patch 检查负责）；
+  CI 里 `ci:checks` 排在 `build` 之后。
+
+### Security
+
+- 补齐 `--force-with-lease` 与透明前缀两个绕过路径的回归测试：`tests/guard.spec.ts`
+  新增强推组合与 `sudo git push --force` 用例，`tests/command-guard.spec.ts` 新增
+  `rm -rf ~/`、`$HOME/`、`${HOME}` 与 `sudo rm -rf /`、`nohup doas rm -rf /` 用例。
 
 ## [0.1.0] - 2026-10-05
 

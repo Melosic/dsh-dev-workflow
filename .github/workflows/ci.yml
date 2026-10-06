@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The commit-message check below diffs against the PR's base SHA, which
+          # a shallow clone does not contain.
+          fetch-depth: 0
 
       # The pnpm version comes from package.json `packageManager`; passing
       # `version` here as well makes the action fail with
@@ -35,6 +39,18 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      # `.husky/commit-msg` checks one message at commit time; this checks the
+      # ones a pull request adds, so a bad message cannot land through the web
+      # UI or a local hook that was never installed.
+      #
+      # Only the PR range is checked. Two commits merged before this gate existed
+      # exceed `body-max-line-length` (100, inherited from config-conventional),
+      # and rewriting shared history to make them pass is not an option — so the
+      # range is grandfathered, not the rule. See docs/PUBLISHING.md §5.
+      - name: Check commit messages
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
 
       - name: Check formatting
         run: pnpm format:check

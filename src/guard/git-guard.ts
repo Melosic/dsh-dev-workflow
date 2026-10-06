@@ -11,7 +11,7 @@ import type { GuardHit, GuardOptions } from './shared.js'
 // so it sees exactly the commands the agent is about to run. Nothing here parses
 // a shell: `src/shell.ts` already reduced the command line to `git <subcommand>`
 // words, and this file only classifies those words. The waterfall itself lives in
-// `./shared.ts`, together with the three guards that follow it.
+// `./shared.ts`, together with the four guards that follow it.
 //
 // The default for every operation is `ask`, never `allow`. A guard that silently
 // permits by default is not a guard.
@@ -35,20 +35,34 @@ export type GitGuardOptions = GuardOptions & {
  * @returns the hit, or `undefined` for an ordinary push.
  */
 function pushHit(args: readonly string[], config: Config): GuardHit | undefined {
-  // `--force-with-lease` is the form the guard steers people towards, so a push
-  // carrying it is not a hit.
-  if (args.some((word) => word.startsWith('--force-with-lease'))) return undefined
+  // `--force-with-lease` on its own needs no special case here: it matches none
+  // of the words below, so it stays an ordinary push. It must not short-circuit,
+  // because plain `--force` overrides the lease and clobbers the remote anyway.
   const forced =
     args.includes('--force') ||
     hasShortOption(args, 'f') ||
     // A leading `+` on a refspec means "overwrite this ref".
     args.some((word) => word.startsWith('+') && word.length > 1 && !word.startsWith('++'))
-  if (!forced) return undefined
-  return {
-    reason: 'security.guard.force_push',
-    action: config.gitGuard.forcePush.get(),
-    suggestion: 'security.guard.suggest_force_with_lease',
+  if (forced) {
+    return {
+      reason: 'security.guard.force_push',
+      action: config.gitGuard.forcePush.get(),
+      suggestion: 'security.guard.suggest_force_with_lease',
+    }
   }
+  // Deleting a remote branch discards it everywhere it has been fetched, which
+  // is the same loss `git branch -D` causes locally — so it answers to the same
+  // policy rather than to a new one. Three spellings delete: `--delete`, `-d`,
+  // and an empty left side on a refspec (`git push origin :topic`). A force
+  // delete is already caught above, where the stricter `forcePush` policy wins.
+  const deletes =
+    args.includes('--delete') ||
+    hasShortOption(args, 'd') ||
+    args.some((word) => word.startsWith(':') && word.length > 1)
+  if (deletes) {
+    return { reason: 'security.guard.branch_delete', action: config.gitGuard.branchDelete.get() }
+  }
+  return undefined
 }
 
 /**

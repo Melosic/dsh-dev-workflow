@@ -49,6 +49,28 @@ describe('src/config.ts', () => {
     }
   })
 
+  it('defaults every outward-facing action to ask', () => {
+    // Nothing here is unrecoverable on this machine, so there is no `deny`
+    // default to weigh against: the question is consent, and the answer is to
+    // ask. `enabled` is on so a fresh profile is covered without configuration.
+    const config = Config({})
+
+    expect(plain(config.outwardGuard)).toEqual({
+      enabled: true,
+      push: 'ask',
+      tag: 'ask',
+      pullRequest: 'ask',
+      publish: 'ask',
+    })
+  })
+
+  it('gives each outward field its own default instead of sharing one', () => {
+    const config = Config({ outwardGuard: { push: 'deny' } })
+
+    expect(plain(config.outwardGuard.push)).toBe('deny')
+    expect(plain(config.outwardGuard.publish)).toBe('ask')
+  })
+
   it('defaults every non-git guard to a safe, enabled baseline', () => {
     const config = Config({})
 

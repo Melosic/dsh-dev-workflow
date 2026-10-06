@@ -1,5 +1,5 @@
 import type { Config } from '../config.js'
-import { commandOf, segments, tokenize } from '../shell.js'
+import { baseName, commandOf, segments, skipWrappers, tokenize } from '../shell.js'
 import { createGuard, hasShortOption, strictest } from './shared.js'
 import type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 
@@ -25,19 +25,12 @@ const REFUSED = 'command.guard.denied'
 /** Dictionary key appended when the configured policy asks about the call. */
 const CONFIRM = 'command.guard.confirm_required'
 
-/** Program names that only wrap the real command: `sudo rm -rf /` starts at `rm`. */
-const TRANSPARENT = new Set(['sudo', 'doas', 'env', 'nohup', 'command', 'exec', 'time'])
-
-/** A leading `VAR=value` assignment, as in `FOO=1 rm -rf /`. */
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-
 /** Targets where a recursive forced delete removes a filesystem, not a directory. */
 const DANGEROUS_TARGETS = new Set([
   '/',
   '/*',
   '//',
   '~',
-  '~/',
   '$HOME',
   '${HOME}',
   '.',
@@ -68,31 +61,12 @@ const DEVICE_REDIRECT =
 const DD_DEVICE = /^(if|of)=\/dev\/(sd[a-z]|hd[a-z]|vd[a-z]|nvme\d+n\d+|mmcblk\d+|disk\d+|loop\d+)/
 
 /**
- * The last path component of a word, so a full path and a bare name compare alike.
- * @param word - one command word.
- * @returns the base name.
- */
-function basename(word: string): string {
-  return word.replace(/\\/g, '/').split('/').pop() ?? word
-}
-
-/**
  * Drop the wrappers in front of the real program.
  * @param segment - one command's words.
  * @returns the words starting at the program that does the work.
  */
 function commandWords(segment: readonly string[]): readonly string[] {
-  let index = 0
-  while (index < segment.length) {
-    const word = segment[index]
-    if (word === undefined) break
-    if (TRANSPARENT.has(basename(word)) || ASSIGNMENT.test(word)) {
-      index += 1
-      continue
-    }
-    break
-  }
-  return segment.slice(index)
+  return segment.slice(skipWrappers(segment))
 }
 
 /**
@@ -102,8 +76,12 @@ function commandWords(segment: readonly string[]): readonly string[] {
  */
 function isDangerousTarget(target: string): boolean {
   const value = target.replace(/\\/g, '/')
-  if (DANGEROUS_TARGETS.has(value)) return true
-  if (value.endsWith('/*') && DANGEROUS_TARGETS.has(value.slice(0, -1))) return true
+  // `rm -rf $HOME/` and `rm -rf ~/` name the same directories as the forms
+  // without the trailing slash, so normalise it before comparing. A bare `/`
+  // keeps its slash: it is the root itself.
+  const normalized = value === '/' ? value : value.replace(/\/+$/, '')
+  if (DANGEROUS_TARGETS.has(normalized)) return true
+  if (normalized.endsWith('/*') && DANGEROUS_TARGETS.has(normalized.slice(0, -1))) return true
   return SYSTEM_DIRECTORY.test(value)
 }
 
@@ -149,7 +127,7 @@ function hitsFor(segment: readonly string[], action: GuardAction): GuardHit[] {
   const words = commandWords(segment)
   const program = words[0]
   if (program === undefined) return []
-  const name = basename(program)
+  const name = baseName(program)
   const args = words.slice(1)
   const hits: GuardHit[] = []
 

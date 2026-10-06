@@ -180,6 +180,28 @@ export const Config = z.object({
       rememberApproved: z.boolean().default(false).volatile(),
     })
     .default({}),
+  /**
+   * Policies for actions other people can see: a push, a tag, a pull request, a
+   * publish. Unlike the guards below, nothing here is unrecoverable on this
+   * machine — the risk is announcing work the user has not agreed to yet, so the
+   * point is consent rather than obstruction.
+   */
+  outwardGuard: z
+    .object({
+      enabled: z.boolean().default(true).volatile(),
+      /**
+       * Any `git push`, not only a forced one. A forced push is a separate,
+       * stricter problem and stays with `gitGuard.forcePush`.
+       */
+      push: guardAction(),
+      /** `git tag <name>`, which creates the tag rather than reading tags. */
+      tag: guardAction(),
+      /** `gh pr create`, which asks other people to look at the branch. */
+      pullRequest: guardAction(),
+      /** `npm publish` / `pnpm publish`, which cannot be taken back. */
+      publish: guardAction(),
+    })
+    .default({}),
   /** Policies for shell commands that can destroy a machine rather than a commit. */
   commandGuard: z
     .object({

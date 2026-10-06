@@ -6,7 +6,7 @@ import { createTranslator } from '../i18n.js'
 import type { Translate, TranslationParams } from '../i18n.js'
 import type { WorkflowState } from '../state.js'
 
-// The guards are four classifiers over one gate. This file holds what they share:
+// The guards are five classifiers over one gate. This file holds what they share:
 // how a hit is ranked, rendered, and turned into a decision, plus the waterfall
 // order every one of them follows. A guard supplies nothing but `detect`.
 //
@@ -105,7 +105,7 @@ export interface GuardOptions {
   readonly audit?: (hit: GuardHit, exec: ToolExecution) => void
   /**
    * Asks the user on the guard's behalf, for a guard whose policy remembers the
-   * answer. Optional: the other three guards never ask themselves.
+   * answer. Optional: the other four guards never ask themselves.
    */
   readonly approver?: GuardApprover
   /**

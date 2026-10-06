@@ -41,8 +41,8 @@ describe('src/index.ts', () => {
       'check_doc_sync',
     ])
     expect(harness.providers).toHaveLength(1)
-    // Commit, pull request, and release triggers, then the git, command, file,
-    // and secret guards.
+    // Commit, pull request, and release triggers, then the git, outward, command,
+    // file, and secret guards.
     expect(harness.listeners.map((listener) => listener.name)).toEqual([
       'tools/pre-execute',
       'tools/pre-execute',
@@ -51,16 +51,17 @@ describe('src/index.ts', () => {
       'tools/pre-execute',
       'tools/pre-execute',
       'tools/pre-execute',
+      'tools/pre-execute',
     ])
-    // Two tools, one provider, seven listeners — one effect each.
-    expect(harness.effects).toHaveLength(10)
+    // Two tools, one provider, eight listeners — one effect each.
+    expect(harness.effects).toHaveLength(11)
   })
 
   it('skips the command when the profile has no command service', () => {
     const harness = createHarness({ commands: true })
     plugin.apply(harness.ctx, Config({}))
     expect(harness.commands.map((command) => command.name)).toEqual(['dev-workflow'])
-    expect(harness.effects).toHaveLength(11)
+    expect(harness.effects).toHaveLength(12)
   })
 
   it('registers only the guards that are enabled', () => {
@@ -73,9 +74,25 @@ describe('src/index.ts', () => {
         secretGuard: { enabled: false },
       }),
     )
-    // Two tools, one provider, and only the command and file guards.
-    expect(harness.listeners).toHaveLength(2)
-    expect(harness.effects).toHaveLength(5)
+    // Two tools, one provider, and only the outward, command and file guards.
+    expect(harness.listeners).toHaveLength(3)
+    expect(harness.effects).toHaveLength(6)
+  })
+
+  it('binds every registration to an effect that removes it again', () => {
+    // The harness records what the plugin registers; this asserts the other half
+    // of the contract — each registration was handed to `ctx.effect`, so an
+    // unload or hot reload really takes it away instead of leaving it behind.
+    const harness = createHarness({ commands: true })
+    plugin.apply(harness.ctx, Config({}))
+    expect(harness.effects).toHaveLength(12)
+
+    for (const dispose of harness.effects) dispose()
+
+    expect(harness.tools).toHaveLength(0)
+    expect(harness.providers).toHaveLength(0)
+    expect(harness.listeners).toHaveLength(0)
+    expect(harness.commands).toHaveLength(0)
   })
 
   it('declares both tools with a name the registry accepts', () => {
@@ -144,7 +161,7 @@ describe('createRuntime', () => {
 
     expect(runtime.active).toBe(true)
     expect(harness.tools).toHaveLength(2)
-    expect(harness.listeners).toHaveLength(7)
+    expect(harness.listeners).toHaveLength(8)
 
     runtime.setActive(false)
     expect(runtime.active).toBe(false)
@@ -171,7 +188,7 @@ describe('createRuntime', () => {
     const runtime = plugin.createRuntime(harness.ctx, Config({}))
 
     runtime.setActive(true)
-    expect(harness.effects).toHaveLength(10)
+    expect(harness.effects).toHaveLength(11)
     runtime.setActive(false)
     runtime.setActive(false)
     expect(runtime.active).toBe(false)

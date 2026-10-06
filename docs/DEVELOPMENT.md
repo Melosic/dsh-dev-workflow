@@ -37,7 +37,7 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 | `src/checks.ts` | 一次变更的判定逻辑 | 触发器与 `/dev-workflow check` 共用，别只改一侧 |
 | `src/git.ts` | 通过可选服务 `subprocess` 跑 git | 每次使用前重新取服务，不要在插件存活期间缓存 |
 | `src/tools/` | 两个工具的 `defineTool` 定义 | 工具名只能含 `[A-Za-z0-9_-]`，且 ≤ 64 字符 |
-| `src/guard/` | 四道守卫的识别与判定 | 新规则默认必须是 `ask`；`file-guard` / `secret-guard` 固定 `deny` |
+| `src/guard/` | 五道守卫的识别与判定 | 新规则默认必须是 `ask`；`file-guard` / `secret-guard` 固定 `deny` |
 | `src/triggers/` | `tools/pre-execute` 监听器 | waterfall：必须先 `await next()` 再决定 |
 | `src/commands/` | `/dev-workflow` 子命令 | 用户可见文本一律走 `t()` |
 | `locale/` | 插件展示元数据（标题/描述） | 目录名必须是单数 `locale/`，文件名是短 id |
@@ -53,26 +53,10 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 测试文件放在 `tests/`，命名建议 `describe` 用被测模块路径（如 `src/tools/check-doc-sync.ts`）、
 `it` 用可观察的行为描述，见 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 的测试一节。
 
-| 文件 | 覆盖什么 |
-| --- | --- |
-| `tests/register.spec.ts` | cordis 契约：具名导出、`inject`、注册与注销的完整清单，工具定义形状 |
-| `tests/config.spec.ts` | 每个默认值，以及校验失败的报错文本 |
-| `tests/i18n.spec.ts` | 两份字典的 key 集合与占位符一致、`t()` 的分语言与回退行为 |
-| `tests/impl.spec.ts` | 两个判定函数与 `evaluate` 的边界：阻塞 vs 建议 |
-| `tests/guard.spec.ts` | 每条 git-guard 规则、三档策略、与上下游门禁的交互 |
-| `tests/command-guard.spec.ts` | 危险 shell 命令的识别与误报边界 |
-| `tests/file-guard.spec.ts` | 敏感路径匹配（目录语义、任意深度）、各工具读哪个字段 |
-| `tests/secret-guard.spec.ts` | 四种凭据模式、可选的高熵检测、脱敏不泄漏 |
-| `tests/audit.spec.ts` | 审计记录的字段、脱敏、路径与写失败 |
-| `tests/trigger.spec.ts` | 什么时候开口、什么时候沉默、去重与跨会话重报 |
-| `tests/trigger-pr.spec.ts` | `gh pr create` 的识别、标题/描述/清单规则 |
-| `tests/trigger-release.spec.ts` | `git tag` / `npm publish` 的识别与发版规则 |
-| `tests/skill-parity.spec.ts` | SKILL 两份语言的标题数量与顺序一致 |
-| `tests/harness.ts` | 公共脚手架：记录注册的假 ctx、假 git、`makeExec` |
-
-**`tests/harness.ts` 不是测试文件**，它不匹配 Vitest 的用例收集规则，只被上面几个 spec
+**`tests/harness.ts` 不是测试文件**，它不匹配 Vitest 的用例收集规则，只被各个 spec
 导入。加新 spec 时优先复用它，而不是再写一份假的 context——假 ctx 一旦出现两份，
-它们迟早会对不上真实注册契约。
+它们迟早会对不上真实注册契约。每个 `tests/*.spec.ts` 文件顶部有一行注释说明它覆盖什么，
+新增文件时照做；`tests/` 下当前有 19 个 spec。
 
 几个写测试时必须知道的约定：
 
@@ -85,8 +69,8 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
   一半」和「`feat` 没补 CHANGELOG」这类 `errors` 才会。断言这类行为时写清楚断言在哪一层。
 - **断言报错文本用 `t()` 而不是字面量。** 字典改动时测试会跟着动，而不是留下一条
   读不出意图的字符串比较。
-- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 80 个 key、扁平化后 81 个路径。
-  数 key 时想清楚数的是哪一层。
+- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 85 个 key、扁平化后 86 个叶子路径
+  （`tests/i18n.spec.ts` 两个数字都断言了）。数 key 时想清楚数的是哪一层。
 
 ## 加一条新规则要动什么
 
@@ -106,15 +90,23 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 `create<Name>Guard(options)`——后者把 `detect` 交给 `src/guard/shared.ts` 的
 `createGuard()`，接线、计数、审计与档位决策都由它统一提供。然后：
 
-1. `src/config.ts` 加一组 `<name>Guard`，`.default({})`，`enabled` 默认 `true`。
-2. `src/index.ts` 的 `activate()` 里 `if (config.<name>Guard.enabled) registrations.push(...)`，
-   放在提交前检查之后。**不要新增任何 export**——`tests/register.spec.ts` 断言导出恰好是
-   `Config` / `apply` / `createRuntime` / `inject` / `name` 五个。
-3. `locale/*.json` 加理由 key；若有档位，`ask` 的两份 `displayReason` 由 `createGuard()` 拼好。
-4. `tests/<name>-guard.spec.ts`，另加同步 `tests/register.spec.ts` 里的监听器与 effect 计数。
-5. `docs/SECURITY.md`（这道守卫保护什么、默认值为什么这样定）、`docs/CONFIGURATION.md`、
+1. `src/config.ts` 加一组 `<name>Guard`，`.default({})`，`enabled` 默认 `true`；
+   每个叶子都要 `.volatile()`（面板能读写的唯一前提）。
+2. `src/index.ts` 两处：`activate()` 里
+   `if (config.<name>Guard.enabled.get()) registrations.push(...)`，
+   以及 `registrationSignature()` 里加上 `config.<name>Guard.enabled.get()`。
+   **漏掉后者是这类改动最典型的 bug**：面板里切换这个开关会静默无效，直到重启才生效，
+   因为运行期比较的签名里没有这一位。**不要新增任何 export**——`tests/register.spec.ts`
+   断言导出恰好是 `Config` / `apply` / `createRuntime` / `inject` / `name` 五个。
+3. `client.js` 加一个面板分组（`GROUPS` 与每条的 `FIELDS[].group` 都要写），
+   并入 `tests/settings-schema.spec.ts` 的 `REQUIRED` 列表——面板提供的项必须**恰好**等于
+   这份清单，多一项少一项都会让该 spec 变红。
+4. `locale/*.json` 加理由 key；若有档位，`ask` 的两份 `displayReason` 由 `createGuard()` 拼好。
+5. `tests/<name>-guard.spec.ts`，另加同步 `tests/register.spec.ts` 与
+   `tests/settings-register.spec.ts` 里的监听器与 effect 计数。
+6. `docs/SECURITY.md`（这道守卫保护什么、默认值为什么这样定）、`docs/CONFIGURATION.md`、
    `docs/TRIGGERS.md`（哪一道监听器看什么）。
-6. `CHANGELOG.md` 的 `[Unreleased]`。
+7. `CHANGELOG.md` 的 `[Unreleased]`。
 
 新增**检查工具**或**触发器**同理，另外还要确认 `docs/TOOLS.md` / `docs/TRIGGERS.md`。
 新 key 加进字典后，`pnpm ci:checks` 会校验两份字典 key 对齐。
