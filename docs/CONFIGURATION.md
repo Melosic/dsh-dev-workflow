@@ -332,6 +332,29 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 所以提示在这两者之间要显式清掉，否则下次打开面板会重放上次的保存提示。底部的两个按钮靠右对齐，
 与官方表单一致。
 
+### 「已覆盖」与「恢复默认」
+
+每个字段标题右侧可能带一个「已覆盖」徽标和一颗「恢复默认」按钮。理解这一对的关键是：
+**它标的是「这份 profile 有没有显式写这一项」，不是「值等不等于默认值」。** 官方实现把这条
+写得很直白（`dsh-client-ui-primitives/lib/index.js:7099-7102`）：
+
+> A field shows its effective value — the user layer over the composition layer over the
+> schema default — and whether the user layer carries it. **That presence, not a value
+> comparison, is what marks a field overridden: an override equal to the composition default
+> is still an override.**
+
+对应的判定是 `stored(field)`：只看 user 层有没有这个键（同文件 `:7370-7373`）。所以把
+`commitCheck.subjectMaxLength` 从默认 `50` 改成 `72` 再改回 `50` 并保存，写入的仍然是
+`{op: 'set', path: [...], value: 50}`，徽标**不会**消失——profile 里确实记着这一项，只是记的
+值和默认值恰好相同。面板上唯一会真正删掉这一项的是**「恢复默认」按钮**：它发的是
+`{op: 'unset', path: [...]}`（`client.js:917` 的 `actions.clear(spec.path)`），让该字段重新
+继承组合层的值，徽标随之消失。这条往返链路由 `tests/settings-roundtrip.spec.ts:147-162` 锁着。
+
+为什么值得知道：对安全相关的项（尤其 `gitGuard` 的八个档位）来说，「已覆盖」是一份**清单**。
+把它们从 `ask` 改成 `allow` 之后忘改回来，`allow` 会一直生效——徽标正是让你能找回这些字段的
+东西，`approval.disabled` 的文案里也把这一点写了出来（见
+[权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。
+
 ### 面板可以改的（27 项）
 
 | 分组 | 项目 |

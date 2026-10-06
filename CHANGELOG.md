@@ -180,6 +180,13 @@
   守卫。新增 `src/approval-policy.ts`（`unaskable()`，无本地依赖以免 `guard/shared ↔
   guard/approval` 成环）；读不到策略或没有会话时一律维持原行为，避免把能用的提问变成拒绝。
   新增字典键 `approval.disabled`（双字典同步，键数 86→87）。
+- `docs/CONFIGURATION.md` 补一节「「已覆盖」与「恢复默认」」，说明这对徽标/按钮判的是
+  **user 层有没有显式写这一项**，而不是值等不等于默认值（官方原文与 `stored(field)`
+  实现见 `dsh-client-ui-primitives/lib/index.js:7099-7102` / `:7370-7373`）：把
+  `subjectMaxLength` 从 `50` 改成 `72` 再改回 `50` 并保存，写入的仍是 `{op: 'set'}`，
+  徽标不消失；面板上唯一真正删掉这一项的是「恢复默认」按钮（`client.js:917` 发
+  `{op: 'unset'}`）。安全相关的档位尤其需要这份清单——从 `ask` 改成 `allow` 之后忘改
+  回来，`allow` 会一直生效。
 
 ## [0.1.0] - 2026-10-05
 
