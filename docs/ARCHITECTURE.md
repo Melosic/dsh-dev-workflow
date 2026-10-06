@@ -181,6 +181,8 @@ tools/pre-execute   ← Cordis waterfall，本插件最多挂七个监听器
         ├─ 监听器先 await next()：链上后面的门禁与内置行为先决定
         │
         └─ 上游 allow 时才自查，命中后返回 ask（guard 也返回 deny）
+            本会话审批策略为 never 时改为自己 deny 并说明原因
+            （src/approval-policy.ts 的 unaskable()，见 docs/CONFIGURATION.md）
 ```
 
 监听器挂在同一个事件上、互相独立，是刻意的：**三个守规范（提交信息与文档同步、
@@ -192,6 +194,10 @@ PR 标题与描述、发版步骤与 CHANGELOG），四个守工作成果（可�
   涉及命令行的监听器必须对「什么算 git」「什么算程序名」有同一个答案。
 - `src/triggers/shared.ts`：`detailsOf()` 的截断、`askAbout()` 的双语 `displayReason` 与
   文件读取，三个约定触发器共用；它们各自只提供识别函数与判定函数。
+- `src/approval-policy.ts`：`unaskable()`——本会话审批策略为 `never` 时把 `ask` 改成
+  自己给出的 `deny`。七个监听器都经过它，因为「问一个不会有人回答的问题」是它们共同的
+  失效方式；它刻意不 import 任何本地模块，否则 `guard/approval.ts → guard/shared.ts`
+  会与它成环。
 - `src/guard/shared.ts`：`createGuard()` 提供接线、计数与档位决策，四道守卫都只是给它一个
   `detect(exec)`。策略差异（谁是 `ask`、谁固定 `deny`）留在各自文件里。
 - `src/state.ts`：命中计数与「同一会话同一问题只提示一次」的记忆（四种 `CheckKind`）。

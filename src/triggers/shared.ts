@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
+import type { ApprovalPolicyReporter } from '../approval-policy.js'
+import { unaskable } from '../approval-policy.js'
 import type { Config } from '../config.js'
 import { createTranslator } from '../i18n.js'
 import type { Translate } from '../i18n.js'
@@ -25,6 +27,13 @@ export interface TriggerOptions {
   readonly state: WorkflowState
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
+  /**
+   * The approval seam, read only for the policy a finding resolves under.
+   *
+   * Optional: without it every decision is returned as before, which is what a
+   * profile with no approval service composed already gets.
+   */
+  readonly approval?: () => ApprovalPolicyReporter | undefined
 }
 
 /**
@@ -62,6 +71,10 @@ export interface AskOptions {
    * translator — findings included, not just the wrapper.
    */
   readonly assess: (t: Translate) => CheckResult
+  /** The approval seam, read only for the policy this question resolves under. */
+  readonly approval?: () => ApprovalPolicyReporter | undefined
+  /** The session the question would be asked in. */
+  readonly session?: unknown
 }
 
 /**
@@ -77,14 +90,21 @@ export function askAbout(options: AskOptions): PreToolDecision {
   const chinese = createTranslator('zh-CN')
   // The Chinese key is the literal `zh`: the client lower-cases a locale and
   // falls back to `en`, so `zh-CN` would never match.
-  return {
-    kind: 'ask',
-    reason: options.t(options.reasonKey, { details: detailsOf(options.outcome, options.t) }),
-    displayReason: {
-      en: english(options.askKey, { details: detailsOf(options.assess(english), english) }),
-      zh: chinese(options.askKey, { details: detailsOf(options.assess(chinese), chinese) }),
+  return unaskable(
+    {
+      kind: 'ask',
+      reason: options.t(options.reasonKey, {
+        details: detailsOf(options.outcome, options.t),
+      }),
+      displayReason: {
+        en: english(options.askKey, { details: detailsOf(options.assess(english), english) }),
+        zh: chinese(options.askKey, { details: detailsOf(options.assess(chinese), chinese) }),
+      },
     },
-  }
+    options.t,
+    options.approval,
+    options.session,
+  )
 }
 
 /**

@@ -169,6 +169,16 @@
   把平台的自动拒绝说成用户的决定——上游 `dsh-tools` 的 deny reason（`the user rejected
   tool "${name}"`，该包 `lib/index.js:3468-3474`）正是同一个毛病，本插件不跟着犯。
   该文案只在 `rememberApproved: true` 时可达，因此是潜在缺陷而非现网问题。
+- **权限预设为 `never` 时，插件自己拒绝并说明原因，不再返回一个不会有人回答的 `ask`。**
+  此前四道守卫与三个触发器一律返回 `ask`，而在 `never` 下 `dsh-user-approval` 的
+  `decide()` 在提问前就返回 `rejected`（`lib/index.js:175`），dispatcher 再把结果渲染成
+  「用户拒绝了工具」——用户什么都没看到，模型却被告知用户做了决定。现在这些 gate 先读
+  本会话的有效策略，是 `never` 就自己返回 `deny`，结果与之前相同（都是拒绝），但理由保留
+  守卫自己的判定并追加 `approval.disabled`（说明「没有人被问到」以及两条放行路径：切换到
+  会提问的权限预设，或把这一项设为「允许」）。刻意**不**改成静默放行：守卫静默放行就不是
+  守卫。新增 `src/approval-policy.ts`（`unaskable()`，无本地依赖以免 `guard/shared ↔
+  guard/approval` 成环）；读不到策略或没有会话时一律维持原行为，避免把能用的提问变成拒绝。
+  新增字典键 `approval.disabled`（双字典同步，键数 85→86）。
 
 ## [0.1.0] - 2026-10-05
 

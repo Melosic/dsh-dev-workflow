@@ -314,6 +314,8 @@ export function createPreReleaseTrigger(
       outcome,
       t,
       assess: (translator) => evaluateRelease(input, translator),
+      approval: options.approval,
+      session: agent.session,
     })
   }
 }

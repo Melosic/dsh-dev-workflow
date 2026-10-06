@@ -23,11 +23,13 @@ type Asked = ApprovalRequest
  * would have said.
  * @param answers - one outcome per question, in order.
  * @param sink - where to record questions, when a spec runs several calls.
+ * @param policy - the policy this session's asks resolve under, when it reports one.
  * @returns the seam and the questions it was asked.
  */
 function makeApproval(
   answers: ApprovalOutcome[],
   sink: Asked[] = [],
+  policy?: string,
 ): { approval: () => ApprovalService; asked: Asked[] } {
   const asked: Asked[] = sink
   return {
@@ -37,6 +39,7 @@ function makeApproval(
         asked.push(request)
         return answers.shift() ?? 'unavailable'
       },
+      ...(policy === undefined ? {} : { effectivePolicy: () => policy }),
     }),
   }
 }
@@ -59,11 +62,12 @@ async function run(
     downstream?: PreToolDecision
     withoutAgent?: boolean
     approval?: () => ApprovalService | undefined
+    policy?: string
     asked?: Asked[]
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
-  const seam = makeApproval(options.answers ?? [], options.asked)
+  const seam = makeApproval(options.answers ?? [], options.asked, options.policy)
   const asked = seam.asked
   const audit: string[] = []
   const guard = createGitGuard({
@@ -273,5 +277,35 @@ describe('src/guard/approval.ts', () => {
     // another gate's answer is not this guard's to remember.
     expect(asked.decision.kind).toBe('ask')
     expect(asked.asked).toEqual([])
+  })
+
+  it('refuses itself, and says why, when the session cannot be asked', async () => {
+    // `never` is the `danger-full-access` policy. Returning `ask` there means the
+    // dispatcher refuses on the user's behalf and tells the model the user said
+    // no, when nobody was ever prompted — so the guard refuses in its own words.
+    const denied = await run('git push --force origin main', { policy: 'never' })
+    const remembered = await run('git push --force origin main', {
+      remember: true,
+      policy: 'never',
+    })
+
+    for (const { decision, asked } of [denied, remembered]) {
+      expect(decision.kind).toBe('deny')
+      expect(decision.reason).toContain(t('security.guard.force_push'))
+      expect(decision.reason).toContain(t('approval.disabled'))
+      // The point of the fix: no question is sent into a policy that refuses it.
+      expect(asked).toEqual([])
+    }
+  })
+
+  it('still asks when the policy says a question will be answered', async () => {
+    const { decision, asked } = await run('git push --force origin main', { policy: 'ask' })
+    const silent = await run('git push --force origin main')
+
+    expect(decision.kind).toBe('ask')
+    expect(asked).toEqual([])
+    // A seam that does not report a policy is read as "cannot know", not as
+    // `never`: guessing there would break a working prompt.
+    expect(silent.decision.kind).toBe('ask')
   })
 })

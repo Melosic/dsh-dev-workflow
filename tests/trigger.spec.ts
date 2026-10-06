@@ -21,6 +21,7 @@ function trigger(
     config?: Record<string, unknown>
     files?: () => readonly string[]
     state?: ReturnType<typeof createWorkflowState>
+    policy?: string
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
@@ -32,6 +33,9 @@ function trigger(
     state,
     git: () => git,
     log: () => {},
+    ...(options.policy === undefined
+      ? {}
+      : { approval: () => ({ effectivePolicy: () => options.policy }) }),
   })
   return { listener, state, config: resolved }
 }
@@ -93,6 +97,19 @@ describe('src/triggers/pre-commit.ts', () => {
 
     expect(decision.kind).toBe('allow')
     expect(state.lastOutcome()).toMatchObject({ kind: 'commit', ok: true })
+  })
+
+  it('refuses a finding in its own words when the session cannot be asked', async () => {
+    // Under the `never` policy a returned `ask` is refused without a prompt and
+    // reported as the user's refusal, so the finding is refused here instead.
+    const { listener } = trigger({ policy: 'never' })
+    const decision = await fire(listener, 'git commit -m "Add the thing"')
+
+    expect(decision.kind).toBe('deny')
+    expect(decision.kind === 'deny' && decision.reason).toContain(
+      t('tool.check_commit_message.error.missing_type'),
+    )
+    expect(decision.kind === 'deny' && decision.reason).toContain(t('approval.disabled'))
   })
 
   it('stays out of the way while the agent is only coding', async () => {

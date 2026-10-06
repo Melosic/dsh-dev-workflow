@@ -70,14 +70,14 @@ describe('src/i18n.ts', () => {
     expect(sameSet(new Set(Object.keys(en)), new Set(Object.keys(zh)))).toBe(true)
     expect(new Set(Object.keys(en))).toEqual(new Set(Object.keys(zh)))
     expect([...new Set(Object.keys(en))].sort()).toEqual([...new Set(Object.keys(zh))].sort())
-    expect(new Set(Object.keys(en)).size).toBe(85)
+    expect(new Set(Object.keys(en)).size).toBe(86)
   })
 
   it('ships the same leaf paths in both dictionaries, nesting included', () => {
     // Top-level keys alone would not notice `meta.title` disappearing from one
     // side, because `meta` would still be there on both.
     expect(keyPaths(en).sort()).toEqual(keyPaths(zh).sort())
-    expect(keyPaths(en)).toHaveLength(86)
+    expect(keyPaths(en)).toHaveLength(87)
   })
 
   it('carries the same placeholders in both languages', () => {

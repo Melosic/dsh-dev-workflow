@@ -216,6 +216,26 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
   别的 gate 的答案不是它该记的。
 - **默认关闭。** `false` 时行为与没有这个开关时完全一致。
 
+### 权限策略为 `never` 时会发生什么
+
+`danger-full-access` 预设把审批策略设为 `never`。它**不是「全部批准」**：`dsh-user-approval`
+的 `decide()` 在询问任何审批方之前就返回 `rejected`（`dsh-user-approval/lib/index.js:175`），
+于是 `dsh-tools` 把这次拒绝渲染成 `the user rejected tool "..."`（该包 `lib/index.js:3468`）。
+用户什么都没看到，模型却被告知用户做了决定。
+
+所以本插件的每一道 gate（四道守卫 + 三个触发器）在返回 `ask` 之前先读本会话的有效策略
+（`effectivePolicy(session)`）。策略是 `never` 时，gate **自己**返回 `deny`：
+
+- 结果与之前完全相同——该操作都是被拒绝；
+- 理由保留 gate 自己的判定（是哪次 force push、哪个提交信息不合规），并追加
+  `approval.disabled`（双字典同步），说明**没有人被问到**，以及两条放行路径：
+  切换到会提问的权限预设，或把对应项设为「允许」而非「询问」。
+
+刻意**不**改成静默放行：守卫静默放行就不是守卫（`src/guard/git-guard.ts:16-17`）。
+读不到策略（档里没挂审批服务、审批服务没实现这个方法）或这次调用没有会话时，行为
+与之前逐字相同——维持 `ask`，交给 dispatcher。**不知道就不猜**，否则会把一个能正常
+提问、能被批准的操作变成拒绝。实现见 `src/approval-policy.ts` 的 `unaskable()`。
+
 ## `commandGuard`
 
 检测危险 shell 命令。命令文本从工具调用的 `command` 字段读取，**不绑定具体工具名**

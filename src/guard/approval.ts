@@ -1,4 +1,5 @@
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
+import { unaskable } from '../approval-policy.js'
 import { fingerprint } from '../checks.js'
 import type { WorkflowState } from '../state.js'
 import { decide } from './shared.js'
@@ -42,6 +43,13 @@ export interface ApprovalService {
    * @returns the resolved outcome; `allowed-once` is the only grant.
    */
   request(request: ApprovalRequest): Promise<ApprovalOutcome>
+  /**
+   * The policy this session's asks resolve under, when the service exposes it.
+   * Optional because a stand-in that only answers questions reports no policy.
+   * @param session - the session whose own log supplies the override.
+   * @returns `ask` or `never`, or `undefined` when the seam does not say.
+   */
+  effectivePolicy?(session: unknown): string | undefined
 }
 
 /** What the runtime contributes to a guard that remembers approvals. */
@@ -101,7 +109,10 @@ export function createGuardApprover(options: ApprovalOptions): GuardApprover {
       // off. Asking is never silently treated as approval.
       if (service === undefined || exec.agent === undefined) return decide(hit, t)
 
-      const question = decide(hit, t)
+      // Under the `never` policy the question is refused before any answerer is
+      // consulted (`dsh-user-approval/lib/index.js:175`), so asking would only
+      // buy a round trip and a refusal misattributed to the user.
+      const question = unaskable(decide(hit, t), t, () => service, exec.agent.session)
       if (question.kind !== 'ask') return question
 
       const outcome = await service.request({
