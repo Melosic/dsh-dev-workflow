@@ -227,6 +227,20 @@
   `CHANGELOG.md` 是历史记录，两者豁免）。
 - 删除 `pnpm test:coverage` 脚本：它依赖未安装的 `@vitest/coverage-v8`，实跑必然
   exit 1，CI 与任何文档都不需要它。`CONTRIBUTING.md` 的命令表同步删去该行。
+- **双语 README 从「手册」改回「入口」**：首屏只回答四件事（这是什么、为什么值得用、
+  怎么跑起来、去哪看更多）。定位句不再只写「守门员插件」——那是守卫部分的身份，会让人以为
+  整个插件就是守卫；改为「面向编码 Agent 的一套开发工作流，以插件形式分发」，下面依次列出
+  规范、检查、守卫三层。新增 `Why` / `为什么需要它` 一节，讲的是规范本身的困境而不是守卫：
+  每个项目都有这套约定，写下来没人会在该用的那一刻去翻（Agent 尤其不会），不写下来就得每个
+  会话重说且会漂移；本插件要做的就是让 Agent 随身带着它、让工具执行能机械检查的部分——
+  README 只留结论，不复述 `docs/ADR/001-skill-first-approach.md` 与
+  `docs/ADR/004-action-triggered-not-manual-mode.md` 里的论证过程。Features 压到 6 条各一行，
+  功能细节留在 `docs/`（`docs/README.md` 已逐份登记，链接不丢）；「环境要求」表格去掉说明列
+  只留组件与版本，版本不匹配那段压成三句；Quick Start 补一步最小验证（`/dev-workflow status`
+  + 一个应当被拦下的动作）；文档索引收到 3 条，`LICENSE` 一行的去处由底部的许可证一节承担；
+  贡献指引压成一句。英文 118 → 85 行、中文 101 → 79 行，两边章节一一对应。
+- README 里的 `DSH` 一律写全称 `DeepSeek Harness`（首次出现带 `dsh`）；命令字面量
+  （`dsh --version`、`dsh plugin … add …`、`/dev-workflow`）保持不变。
 
 ### Fixed
 
