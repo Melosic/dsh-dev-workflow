@@ -342,6 +342,32 @@ git push origin main --follow-tags
   带 `--force` 可以继续，但接下来 24 小时内同名同版本发不回来——
   0.x 阶段出现这种情况时，正确做法通常不是 `--force`，而是直接发一个更高的补丁版。
 
+## 本项目的 v0.2.0 发布记录
+
+留档，供下一次发布比对。
+
+| 步骤 | 结果 |
+| --- | --- |
+| 分支 | `release/0.2.0`（`main` 受保护，不能直接推） |
+| 提交 | `chore(release): 0.2.0`（`98152e0`） |
+| 合并 | PR [#22](https://github.com/Melosic/dsh-dev-workflow/pull/22) squash 合并，`main` = `8f93ce1` |
+| tag | `v0.2.0`（annotated，指向 `8f93ce1`） |
+| 版本号 | `0.1.0` → `0.2.0` |
+| 发布命令 | `npm publish --registry https://registry.npmjs.org`（`publishConfig.access: "public"` 已声明，无需 `--access`；正式版不加 `--tag`） |
+| 发布产物 | 111 个文件 / 139.7 kB tarball / 514.5 kB 解包；`shasum 96df6c1604b2ba4ea29579c34c7bfc088dee90c0`；`fileCount` 111 |
+| 验证 | `npm view @melosic/dsh-dev-workflow@0.2.0 version dist.shasum` = `0.2.0` / `96df6c16…`；`dist-tags.latest = 0.2.0` |
+| GitHub Release | <https://github.com/Melosic/dsh-dev-workflow/releases/tag/v0.2.0> |
+| 审计 | moderate 1（`fflate`，宿主 `dsh-skill-office` 链路）、high 1（`braces`，`lint-staged` devDependency）；两条均无可用修复版，运行期零依赖 |
+| 后续处置 | **`0.1.0` 已 `npm deprecate`**，信息指向 `0.2.0` |
+
+发布后 packument 立刻返回 404、`/0.2.0` 与 tarball 也已 404，而 `PUT` 是 202 —— 与 v0.1.0 一样是 CDN 的负缓存。
+判据同前：**看 PUT 的状态码**（本次 `PUT 202`），不要用发布后立刻执行的 `npm view` 下结论；带
+cache-buster 再查即可看到 `versions = 0.1.0, 0.2.0`。
+
+**为什么给 `0.1.0` 打 deprecated**：0.2.0 把 v0.2.0 预发布评审的 23 条发现全部修掉（含四道守卫的绕过），
+0.1.0 带着这些缺口，继续装它会在守卫「开着」的情况下被静默绕过。版本没有致命到需要 `unpublish`
+（能装、能跑），所以按本文档的规则标注而不是删版本——**绝不用删除版本来掩盖一次坏发布**。
+
 ## 本项目的 v0.1.0 发布记录
 
 留档，供下一次发布比对。
