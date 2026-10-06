@@ -42,28 +42,17 @@
 ## 快速开始
 
 ```bash
-# 克隆并安装
-git clone https://github.com/Melosic/dsh-dev-workflow.git
-cd dsh-dev-workflow
-pnpm install
-
-# 构建与校验
-pnpm build
-pnpm typecheck
-pnpm lint
-pnpm test
-```
-
-然后把插件安装到你的 DeepSeek Harness profile：
-
-```bash
 dsh plugin --profile <profile> add @melosic/dsh-dev-workflow
 ```
 
-若想从本地检出安装，把插件管理器指向本包目录即可。想确认插件真的在工作，在 DeepSeek Harness 里
-执行 `/dev-workflow status`：它会打印当前模式、语言、最近一次检查、守卫命中次数与审计日志状态。
-再试一个该被拦下的动作——比如在随便一个仓库里跑 `git clean -f`——它会先问你，而在关掉审批的
-会话里直接拒绝。
+请用 DSH 的安装器，而不是 `npm install`：profile 只会加载自己 `dsh.profile.bundles` 列表里
+点名的组合包，而安装器负责同时写依赖和这个条目。
+
+在 DeepSeek Harness 里执行 `/dev-workflow status` 确认它真的在工作——它会打印模式、语言、
+最近一次检查、守卫命中次数与审计日志状态。像 `git clean -f` 这类该被拦下的动作不会不问就跑：
+它会先问你，在关掉审批的会话里则直接拒绝。
+
+想开发插件本身，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 文档链接
 

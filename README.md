@@ -47,29 +47,17 @@ per-profile escape hatch.
 ## Quick Start
 
 ```bash
-# Clone and install
-git clone https://github.com/Melosic/dsh-dev-workflow.git
-cd dsh-dev-workflow
-pnpm install
-
-# Build and verify
-pnpm build
-pnpm typecheck
-pnpm lint
-pnpm test
-```
-
-Then install the plugin into a DeepSeek Harness profile:
-
-```bash
 dsh plugin --profile <profile> add @melosic/dsh-dev-workflow
 ```
 
-To install from a local checkout instead, point the plugin manager at this package directory. To
-confirm the plugin is live, run `/dev-workflow status` in DeepSeek Harness: it prints the mode, the
-locale, the last check, the guard counters and the audit-log status. A guarded action — `git clean -f`
-in a scratch repository, say — does not run unasked; it prompts for approval, or is denied outright
-when approvals are turned off.
+Use DSH's installer rather than `npm install`: a profile only loads the bundles named in its own
+`dsh.profile.bundles` list, and the installer is what writes both the dependency and that entry.
+
+Confirm it is live with `/dev-workflow status` in DeepSeek Harness — it prints the mode, locale, last
+check, guard counters and audit-log status. A guarded action such as `git clean -f` does not run
+unasked: it prompts for approval, or is denied outright when approvals are turned off.
+
+To develop the plugin itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation
 
