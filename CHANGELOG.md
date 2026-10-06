@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-06
+
 ### Added
 
 - **可视化设置面板。** 插件现在在 DSH 设置里有一张自己的卡片，由两半组成：浏览器半
@@ -428,5 +430,6 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.1.0...main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.2.0...main
+[0.2.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Melosic/dsh-dev-workflow/releases/tag/v0.1.0

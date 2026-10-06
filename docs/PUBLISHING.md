@@ -106,7 +106,7 @@ skills/dsh-dev-workflow/SKILL.md  skills/dsh-dev-workflow/SKILL.zh.md
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
 ```
 
-`ci:checks` 输出 `locale keys aligned (86 keys); bundle patch declared and shipped;
+`ci:checks` 输出 `locale keys aligned (90 keys); bundle patch declared and shipped;
 skill headings aligned (28 sections); published entry points present (4 checked);
 no numbered development phases cited.`——这就是全部五项结构守卫。（括号里的数字都是当前值，
 脚本按实际内容算出，不硬编码；换句话说这些数字会随内容变，不要拿这里出现的具体数字去断言
