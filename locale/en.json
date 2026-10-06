@@ -62,7 +62,7 @@
   "security.guard.approval_rejected": "This operation was not approved, so it stays refused.",
   "security.guard.approval_cancelled": "The approval question for this operation was cancelled, so it was refused.",
   "security.guard.approval_unavailable": "This operation needs approval, but no approval channel is available, so it was refused.",
-  "approval.disabled": "Nobody was asked: this session's approval policy is \"never\", so approval is refused without a prompt. To let this through, switch to a permission preset that asks, or set this operation to \"allow\" in the plugin's settings.",
+  "approval.disabled": "Nobody was asked: this session's approval policy is \"never\", so approval is refused without a prompt. To let this through, switch to a permission preset that asks, or set this operation to \"allow\" — which stands until you set it back to \"ask\". The settings panel marks such a field as overridden, so you can find it again.",
   "security.sensitive_file_blocked": "This call names a sensitive file, so it was not run: {file} (matched `{rule}`). Read the value from the environment, or ask the user to paste what is needed instead of the whole file.",
   "security.secret_detected": "This call carries what looks like a live credential, so it was not run. The value was not logged and is not repeated here.",
   "security.secret_pattern_matched": "Pattern matched: {pattern}. Rotate the credential if it has already been sent anywhere, and keep it in the environment or a secret store rather than in a prompt, a source file, or a command.",

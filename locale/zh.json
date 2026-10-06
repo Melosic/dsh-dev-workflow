@@ -62,7 +62,7 @@
   "security.guard.approval_rejected": "这次操作未获批准，因此保持被拒状态。",
   "security.guard.approval_cancelled": "这次操作的审批提问被取消，因此按拒绝处理。",
   "security.guard.approval_unavailable": "这次操作需要审批，但当前没有可用的审批通道，因此按拒绝处理。",
-  "approval.disabled": "没有人被问到：本会话的审批策略是「never」，审批会被直接拒绝、不弹提示。要放行，请切换到会提问的权限预设，或在插件设置里把这一项设为「允许」。",
+  "approval.disabled": "没有人被问到：本会话的审批策略是「never」，审批会被直接拒绝、不弹提示。要放行，请切换到会提问的权限预设，或把这一项设为「允许」——后者会一直生效，直到你改回「询问」。设置面板会把这类字段标为「已覆盖」，方便你找回来。",
   "security.sensitive_file_blocked": "这次调用指名了敏感文件，已拒绝执行：{file}（命中规则 `{rule}`）。请从环境变量读取该值，或让用户只提供需要的那部分内容，而不是整个文件。",
   "security.secret_detected": "这次调用疑似携带了真实凭据，已拒绝执行。该值未被记录，也不在此处重复。",
   "security.secret_pattern_matched": "命中模式：{pattern}。如果该凭据已经发送到任何地方，请立即轮换；并把它放在环境变量或密钥管理服务里，而不是提示词、源码或命令行中。",
