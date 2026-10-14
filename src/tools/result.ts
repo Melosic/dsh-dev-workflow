@@ -34,8 +34,10 @@ export function renderCheck(
   } else if (value.errors.length === 0 && value.warnings.length === 0) {
     lines.push(t(okKey))
   } else {
-    for (const warning of value.warnings) lines.push(`⚠ ${warning}`)
+    // Errors first, the same order an approval prompt uses: one finding renders
+    // one way in this plugin, whichever door it came through.
     for (const error of value.errors) lines.push(`✖ ${error}`)
+    for (const warning of value.warnings) lines.push(`⚠ ${warning}`)
   }
   return [{ type: 'text', text: lines.join('\n') }]
 }

@@ -111,13 +111,23 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
   // is what makes `off` more than a flag: the resident cost of this plugin is
   // exactly the registrations, so they have to go away.
   const releases: (() => void)[] = []
+  // The command's own registration, kept apart so `off` can withdraw everything
+  // else and still leave a way back. It is released on unload like the rest.
+  const commandReleases: (() => void)[] = []
 
   // What the live registrations were built from. Everything else a setting
   // controls is read at the moment a check or a guard runs, so it needs no
   // rebuilding; these switches decide whether something is registered at all.
+  //
+  // `locale` is here because a tool's `description` and a command's
+  // `description`/`hint` are strings evaluated once, when the registration is
+  // built — unlike a tool's parameters and render, which call `t()` per use. A
+  // panel locale change would otherwise leave every tool description in the
+  // language it was registered in, while the skill catalog line moved.
   const registrationSignature = (): string =>
     [
       config.mode.get(),
+      config.locale.get(),
       config.enableOwnTrigger.get(),
       config.gitGuard.enabled.get(),
       config.outwardGuard.enabled.get(),
@@ -126,8 +136,14 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       config.secretGuard.enabled.get(),
     ].join(':')
   let registered = ''
+  // The `mode` value in effect when `/dev-workflow off` withdrew the plugin, or
+  // `undefined` while it is running. Storing the value rather than a boolean is
+  // what makes "the configuration edited `mode`" distinguishable from "the
+  // configuration edited something else": a withdrawal is undone by the answer to
+  // its own question, not by every write the panel makes.
+  let manualOff: string | undefined
 
-  const bind = (dispose: () => void): void => {
+  const bind = (dispose: () => void, into: (() => void)[] = releases): void => {
     let released = false
     const once = (): void => {
       if (released) return
@@ -139,7 +155,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // Binding it as an effect is what makes an unload (or a hot reload) clean up;
     // the explicit call in `setActive(false)` unregisters at runtime, and the
     // `released` flag keeps the second call harmless.
-    releases.push(ctx.effect(() => once))
+    into.push(ctx.effect(() => once))
   }
 
   const activate = (): void => {
@@ -147,7 +163,11 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     const registrations: (() => void)[] = [
       ctx.tools.register(createCheckCommitMessageTool({ t: () => t, config: () => config })),
       ctx.tools.register(
-        createCheckDocSyncTool({ t: () => t, config: () => config, git: runtime.git }),
+        createCheckDocSyncTool({
+          t: () => t,
+          config: () => config,
+          git: (cwd) => runtime.git(cwd),
+        }),
       ),
       // A provider instance per registration would be wrong here: the registry
       // reads the locale on every `list()`/`get()`, so one provider serves
@@ -157,9 +177,19 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       ),
     ]
 
+    // `/dev-workflow` itself survives `off`, because it is the only way back: a
+    // command that removes its own registration leaves the user with no command
+    // to type. That is why it is bound apart from `releases` — `active` asks
+    // whether the working registrations are here, and a command that outlives
+    // `off` would otherwise answer yes to a question about the plugin being off.
+    //
+    // It is released here, though, before being registered again: a registration
+    // carries its `description` and `hint` as strings, so a rebuild after a locale
+    // change has to replace it or the tool list keeps the old language.
+    for (const release of commandReleases.splice(0).reverse()) release()
     const commands: unknown = ctx.get('commands')
     if (commands !== undefined && commands !== null) {
-      registrations.push(
+      bind(
         (commands as CommandRegistry).register(
           createDevWorkflowCommand({
             config,
@@ -167,10 +197,12 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             locale: () => runtime.locale(),
             active: () => runtime.active,
             setActive: (on) => runtime.setActive(on),
+            runtimeOff: () => manualOff !== undefined,
             state,
-            git: runtime.git,
+            git: (cwd) => runtime.git(cwd),
           }),
         ),
+        commandReleases,
       )
     }
 
@@ -191,7 +223,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             config: () => config,
             t: () => t,
             state,
-            git: runtime.git,
+            git: (cwd) => runtime.git(cwd),
             log: (message) => ctx.logger.debug(message),
             approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
@@ -258,7 +290,9 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             log: (message) => ctx.logger.debug(message),
             audit,
-            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+            // Same seam the git guard reads, and for the same reason: it is what
+            // lets `rememberApproved` apply to a push as well as to a commit.
+            approval: () => ctx.get('approval') as ApprovalService | undefined,
           }),
         ),
       )
@@ -318,6 +352,19 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     for (const dispose of registrations) bind(dispose)
   }
 
+  // Register or withdraw, without recording *why*. `setActive` is the decision
+  // the command makes; a rebuild after a settings write is not a decision, and
+  // routing it through the command's entry point is what made a configured off
+  // look like a manual one.
+  const apply = (on: boolean): void => {
+    if (on === runtime.active) return
+    if (on) activate()
+    else {
+      for (const release of releases.splice(0).reverse()) release()
+      registered = ''
+    }
+  }
+
   const runtime: Runtime = {
     get active() {
       return releases.length > 0
@@ -336,26 +383,40 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     },
     state,
     setActive: (on) => {
-      if (on === runtime.active) return
-      if (on) activate()
-      else {
-        for (const release of releases.splice(0).reverse()) release()
-        registered = ''
-      }
+      // The value `mode` held when the user withdrew the plugin. Storing the
+      // value rather than a boolean is what makes "the configuration edited
+      // `mode`" distinguishable from "the configuration edited something else".
+      manualOff = on ? undefined : config.mode.get()
+      apply(on)
     },
   }
 
   // The panel writes configuration, which the loader commits into the live
   // reference without reloading this plugin. Every read then sees the new value
   // by itself; only the registrations have to be rebuilt, and only when one of
-  // the switches they were built from actually moved. A manual
-  // `/dev-workflow off` is not undone unless the edit itself asks for a switch:
-  // the signature is unchanged by any other setting.
+  // the switches they were built from actually moved — or when `mode` itself
+  // moved, which is the one edit that does ask for a switch. A manual
+  // `/dev-workflow off` is not undone by anything else the panel writes; the
+  // comparison against `registered` is skipped while that flag is set, because
+  // `off` clears the signature and would otherwise match nothing.
   const resync = (): void => {
     refreshLocale()
-    if (registered === registrationSignature()) return
-    runtime.setActive(false)
-    if (config.mode.get() === 'on') runtime.setActive(true)
+    const signature = registrationSignature()
+    const mode = config.mode.get()
+    if (manualOff !== undefined) {
+      // A manual `off` is the user's own decision, and it survives every settings
+      // write that does not answer the same question. Only a `mode` that *moved*
+      // counts as an answer — checking `mode === 'on'` instead is the bug this
+      // replaces: every unrelated edit (a locale, a guard switch) restored the
+      // plugin the user had just turned off.
+      if (mode === manualOff) return
+      manualOff = undefined
+      if (mode === 'on') apply(true)
+      return
+    }
+    if (registered === signature) return
+    apply(false)
+    if (mode === 'on') apply(true)
   }
   // Declared on this context, not inside the `inject` below: the loader delivers
   // the event to listeners owned by this plugin's own fiber.

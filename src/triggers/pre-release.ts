@@ -1,10 +1,19 @@
 import { join } from 'node:path'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { CheckResult } from '../tools/result.js'
-import { fingerprint } from '../checks.js'
-import { commandOf, gitInvocations, programInvocations } from '../shell.js'
-import { askAbout, readText } from './shared.js'
+import { SEMVER_PATTERN } from '../config.js'
+import { fingerprint, summarize } from '../checks.js'
+import {
+  commandOf,
+  quoteCommandWords,
+  shellWordIsLiteral,
+  subcommandWords,
+  wordInvocations,
+} from '../shell.js'
+import type { CommandWord } from '../shell.js'
+import { readText, settleAbout } from './shared.js'
 import type { TriggerOptions } from './shared.js'
 import { hasShortOption } from '../guard/shared.js'
 
@@ -18,7 +27,16 @@ import { hasShortOption } from '../guard/shared.js'
 // `npm publish`).
 
 /** Package managers whose `publish` subcommand reaches the registry. */
-const PACKAGE_MANAGERS = new Set(['npm', 'npm.exe', 'pnpm', 'pnpm.exe'])
+const PACKAGE_MANAGERS = new Set([
+  'npm',
+  'npm.exe',
+  'pnpm',
+  'pnpm.exe',
+  'yarn',
+  'yarn.exe',
+  'bun',
+  'bun.exe',
+])
 
 /** `git tag` options that take a separate value, so it is not the tag name. */
 const TAG_VALUE_OPTIONS = new Set(['-m', '--message', '-F', '--file', '-u', '--local-user'])
@@ -27,7 +45,7 @@ const TAG_VALUE_OPTIONS = new Set(['-m', '--message', '-F', '--file', '-u', '--l
 const TAG_READ_ONLY = new Set(['-d', '--delete', '-l', '--list', '-v', '--verify'])
 
 /** Semantic version, pre-release and build metadata included. */
-const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
+const SEMVER = new RegExp(SEMVER_PATTERN)
 
 /** A version carrying a pre-release suffix, e.g. `0.2.0-rc.1`. */
 const PRERELEASE = /^\d+\.\d+\.\d+-/
@@ -35,15 +53,92 @@ const PRERELEASE = /^\d+\.\d+\.\d+-/
 /** The categories Keep a Changelog defines, lowercased. */
 const CATEGORIES = new Set(['added', 'changed', 'deprecated', 'removed', 'fixed', 'security'])
 
+/** Which release rules apply, and how a version is written. */
+export interface ReleaseRules {
+  /** The version a tag or manifest must match, as a full-match pattern. */
+  readonly version: RegExp
+  /** Whether the version is checked at all. */
+  readonly versioned: boolean
+  /** Require the changelog to carry the release. */
+  readonly changelog: boolean
+  /** Restrict `###` headings to {@link CATEGORIES}. */
+  readonly changelogCategories: boolean
+  /** Block a pre-release published to `latest`. */
+  readonly prereleaseTag: boolean
+}
+
+/** The rules a caller that states none gets: everything on, semantic versions. */
+export const DEFAULT_RELEASE_RULES: ReleaseRules = {
+  version: SEMVER,
+  versioned: true,
+  changelog: true,
+  changelogCategories: true,
+  prereleaseTag: true,
+}
+
+/**
+ * Read the release rules out of the plugin's configuration.
+ *
+ * A pattern the user typed that the regular-expression engine rejects falls
+ * back to the default rather than throwing inside a gate: a broken setting must
+ * not turn every `git tag` into an error the author cannot see.
+ * @param config - resolved plugin configuration.
+ * @returns the rules the release check applies.
+ */
+export function releaseRules(config: Config): ReleaseRules {
+  // A file-only setting, so it arrives as the plain string the schema resolved
+  // rather than as a live reference the panel can change.
+  const source = config.releaseCheck.versionPattern
+  let version = SEMVER
+  try {
+    version = new RegExp(source)
+  } catch {
+    version = SEMVER
+  }
+  return {
+    version,
+    // Switching the rule off accepts every version rather than deleting the
+    // pattern: `semver: false` says "this repository versions some other way",
+    // and the check then has nothing to compare against.
+    versioned: config.releaseCheck.semver.get(),
+    changelog: config.releaseCheck.changelog.get(),
+    changelogCategories: config.releaseCheck.changelogCategories.get(),
+    prereleaseTag: config.releaseCheck.prereleaseTag.get(),
+  }
+}
+
 /** What one release command line does. Omit a field when the line does not. */
 export interface ReleaseCommand {
   /** The tag name, when the line creates one. */
   readonly tag?: string
   /**
+   * Whether the tag name was literal text. `git tag "v$(cat VERSION)"` is the
+   * spelling that made this necessary: the name the check would read is not the
+   * name git will create, so the version rules must stand down and say so.
+   */
+  readonly tagLiteral?: boolean
+  /**
    * The dist-tag, when the line publishes. A publish that states none is
    * recorded as the `latest` npm would default to.
    */
   readonly publishTag?: string
+  /**
+   * The release kind a `npm version <kind>` bumps to, when the line does that.
+   *
+   * `npm version` is the one command that writes the manifest, commits and tags
+   * in a single step, so it is the shortest path to an unreviewed release — and
+   * it is neither a `git tag` nor a publish, which is why it used to pass with
+   * no check at all.
+   */
+  readonly versionBump?: string
+  /**
+   * The workspace directory a `pnpm --filter <name> publish` targets, relative
+   * to the session's directory, when the line names one.
+   *
+   * The version being published is the one in *that* manifest; reading the root
+   * `package.json` would compare the tag against an unrelated version.
+   */
+  readonly filter?: string
 }
 
 /** What one release inspection covers. Omit a field to skip its rules. */
@@ -52,6 +147,8 @@ export interface ReleaseInput {
   readonly version?: string
   /** The tag name as written, `v` prefix included. */
   readonly tag?: string
+  /** Whether the tag name is literal text; omitted means it is. */
+  readonly tagLiteral?: boolean
   /** The version recorded in `package.json`, when it could be read. */
   readonly packageVersion?: string
   /** The changelog, when it could be read. */
@@ -62,19 +159,21 @@ export interface ReleaseInput {
 
 /**
  * Read the tag name a `git tag` invocation creates.
- * @param args - the words after `tag`.
- * @returns the name, or `undefined` when the invocation only reads tags.
+ * @param args - the words after `tag`, each saying how it was written.
+ * @returns the name and its provenance, or `undefined` when the invocation only
+ *   reads tags.
  */
-function tagName(args: readonly string[]): string | undefined {
+function tagWord(args: readonly CommandWord[]): CommandWord | undefined {
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index] ?? ''
+    const word = args[index]
+    const token = word?.value ?? ''
     if (TAG_READ_ONLY.has(token)) return undefined
     if (TAG_VALUE_OPTIONS.has(token)) {
       index += 1
       continue
     }
     if (token.startsWith('-')) continue
-    return token
+    return word
   }
   return undefined
 }
@@ -94,44 +193,99 @@ function publishTagOf(args: readonly string[]): string | undefined {
 }
 
 /**
+ * Read the workspace a publish targets, when the line states one.
+ *
+ * `pnpm --filter <name> publish` and `pnpm publish --filter <name>` both reach
+ * one workspace package; the name may be a path (`./packages/core`), and it is
+ * read as one so the manifest that is compared with the tag is that package's.
+ * @param args - the words of the publish invocation, `publish` included.
+ * @returns the filter value, or `undefined` when the line names none.
+ */
+function filterOf(args: readonly string[]): string | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index] ?? ''
+    if (token === '--filter' || token === '-F') return args[index + 1]
+    if (token.startsWith('--filter=')) return token.slice('--filter='.length)
+  }
+  return undefined
+}
+
+/**
+ * Read the release kind a `npm version <kind>` states.
+ * @param args - the words after `version`.
+ * @returns the kind, or `undefined` when the line only reads the version.
+ */
+function versionBumpOf(args: readonly string[]): string | undefined {
+  const kind = args.find((word) => !word.startsWith('-'))
+  return kind === undefined ? undefined : kind
+}
+
+/**
  * Recognise the release actions in one shell command.
  *
  * A single line may do both (`git tag v1.0.0 && npm publish`), so the two are
  * collected together rather than the first one winning: the checks that follow
  * need to see the tag *and* the dist-tag to judge the release as a whole.
+ *
+ * What is deliberately *not* recognised is listed in `docs/TRIGGERS.md` under
+ * "what we cannot see": `nx release`, `lerna publish` and `changesets` drive the
+ * same registry writes through their own tooling, and guessing at their output
+ * would be worse than saying plainly that they are not covered.
  * @param command - a shell command line, as a tool would receive it.
  * @returns what the line does, or `undefined` when it releases nothing.
  */
 export function detectRelease(command: string): ReleaseCommand | undefined {
   let tag: string | undefined
+  let tagLiteral = true
   let publishTag: string | undefined
+  let versionBump: string | undefined
+  let filter: string | undefined
 
-  for (const { subcommand, args } of gitInvocations(command)) {
-    if (subcommand !== 'tag') continue
-    const name = tagName(args)
-    if (name !== undefined) {
-      tag = name
+  const words = quoteCommandWords(command)
+  const git = wordInvocations(words)
+
+  for (const { program, args } of git) {
+    if (program !== 'git' && program !== 'git.exe') continue
+    const subcommand = subcommandWords(args)
+    if (subcommand === undefined || subcommand.subcommand !== 'tag') continue
+    const named = tagWord(subcommand.args)
+    if (named !== undefined) {
+      tag = named.value
+      tagLiteral = shellWordIsLiteral(named)
       break
     }
   }
 
-  for (const { program, args } of programInvocations(command)) {
+  for (const { program, args } of git) {
+    if (program === 'git' || program === 'git.exe') continue
     if (!PACKAGE_MANAGERS.has(program)) continue
-    if (args[0] !== 'publish') continue
+    const wordsAfter = args.map((word) => word.value)
+
+    if (wordsAfter[0] === 'version') {
+      versionBump = versionBumpOf(wordsAfter.slice(1))
+      continue
+    }
+
+    if (wordsAfter[0] !== 'publish') continue
     // `--dry-run` (and its `-n` short form) is the rehearsal `docs/PUBLISHING.md`
     // itself recommends: nothing is uploaded, so nothing is released.
-    if (args.includes('--dry-run') || hasShortOption(args, 'n')) break
+    if (wordsAfter.includes('--dry-run') || hasShortOption(wordsAfter, 'n')) break
     // npm defaults the dist-tag to `latest`, and does not except pre-releases
     // from that default. Recording the default is what makes the pre-release
     // rule below able to fire on a publish that stated nothing.
-    publishTag = publishTagOf(args.slice(1)) ?? 'latest'
+    publishTag = publishTagOf(wordsAfter.slice(1)) ?? 'latest'
+    filter = filterOf(wordsAfter)
     break
   }
 
-  if (tag === undefined && publishTag === undefined) return undefined
+  if (tag === undefined && publishTag === undefined && versionBump === undefined) return undefined
   return {
-    ...(tag === undefined ? {} : { tag }),
+    // Only an unreadable tag is worth saying: a literal one is the normal case,
+    // and a field that is always present would make every caller assert it.
+    ...(tag === undefined ? {} : tagLiteral ? { tag } : { tag, tagLiteral: false }),
     ...(publishTag === undefined ? {} : { publishTag }),
+    ...(versionBump === undefined ? {} : { versionBump }),
+    ...(filter === undefined ? {} : { filter }),
   }
 }
 
@@ -165,6 +319,21 @@ function sections(changelog: string): Map<string, string> {
   }
   flush()
   return found
+}
+
+/**
+ * Find the changelog section that records one version.
+ *
+ * Projects write the heading with or without the tag's `v`, and the version
+ * this check holds has already had it stripped — so both spellings are looked
+ * up. Without the second form a repository that writes `## v1.0.0 - <date>`
+ * would be told on every tag that its release is undocumented.
+ * @param released - the changelog's sections, by lowercased heading.
+ * @param version - the version to find, `v` prefix already removed.
+ * @returns the section body, or `undefined` when the version is not recorded.
+ */
+function sectionFor(released: Map<string, string>, version: string): string | undefined {
+  return released.get(version.toLowerCase()) ?? released.get(`v${version}`.toLowerCase())
 }
 
 /**
@@ -206,13 +375,18 @@ async function readPackageVersion(path: string): Promise<string | undefined> {
  * tag is created, "nothing here" means both are empty, not just the first.
  * @param input - what is known about the release.
  * @param t - translator for every returned line.
+ * @param rules - which rules apply, and how a version is written.
  * @returns blocking problems and advisory observations.
  */
-export function evaluateRelease(input: ReleaseInput, t: Translate): CheckResult {
+export function evaluateRelease(
+  input: ReleaseInput,
+  t: Translate,
+  rules: ReleaseRules = DEFAULT_RELEASE_RULES,
+): CheckResult {
   const errors: string[] = []
 
   const version = input.version?.replace(/^v/, '')
-  if (version !== undefined && !SEMVER.test(version)) {
+  if (version !== undefined && rules.versioned && !rules.version.test(version)) {
     errors.push(t('trigger.pre_release.error.version', { version }))
   }
 
@@ -232,22 +406,29 @@ export function evaluateRelease(input: ReleaseInput, t: Translate): CheckResult 
     )
   }
 
-  if (version !== undefined && PRERELEASE.test(version) && input.publishTag === 'latest') {
+  if (
+    rules.prereleaseTag &&
+    version !== undefined &&
+    PRERELEASE.test(version) &&
+    input.publishTag === 'latest'
+  ) {
     errors.push(t('trigger.pre_release.error.prerelease_tag', { version }))
   }
 
-  if (input.changelog !== undefined) {
+  if (rules.changelog && input.changelog !== undefined) {
     const released = sections(input.changelog)
     const unreleased = released.get('unreleased')
     if (unreleased === undefined) {
       errors.push(t('trigger.pre_release.error.changelog'))
     } else {
-      for (const category of categoryHeadings(unreleased)) {
-        if (!CATEGORIES.has(category.toLowerCase())) {
-          errors.push(t('trigger.pre_release.error.changelog_category', { section: category }))
+      if (rules.changelogCategories) {
+        for (const category of categoryHeadings(unreleased)) {
+          if (!CATEGORIES.has(category.toLowerCase())) {
+            errors.push(t('trigger.pre_release.error.changelog_category', { section: category }))
+          }
         }
       }
-      const recorded = version === undefined ? undefined : released.get(version.toLowerCase())
+      const recorded = version === undefined ? undefined : sectionFor(released, version)
       const empty = unreleased.trim().length === 0 && (recorded ?? '').trim().length === 0
       if (empty) {
         errors.push(
@@ -269,8 +450,12 @@ export function createPreReleaseTrigger(
   options: TriggerOptions,
 ): (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision> {
   return async (exec, next) => {
+    // The gates behind this one decide first; a cancelled or refused call is not
+    // this check's to settle. Its `ask` is not a skip, though: `git tag` and
+    // `npm publish` are exactly what the outward guard asks about, so returning
+    // early on it would leave the release rules unread.
     const downstream = await next()
-    if (downstream.kind !== 'allow') return downstream
+    if (downstream.kind === 'cancel' || downstream.kind === 'deny') return downstream
 
     const agent = exec.agent
     if (agent === undefined) return downstream
@@ -282,26 +467,49 @@ export function createPreReleaseTrigger(
 
     const t = options.t()
     const config = options.config()
+    const rules = releaseRules(config)
     const cwd = agent.session.header.cwd ?? process.cwd()
     const sessionId = String(agent.session.id)
     options.log(t('trigger.pre_release.detected'))
 
+    // `pnpm --filter <name> publish` publishes another workspace package, whose
+    // version this check cannot read from here. It is said rather than guessed:
+    // comparing the tag against an unrelated manifest would be a wrong answer,
+    // not a missing one.
     const packageVersion = await readPackageVersion(join(cwd, 'package.json'))
     const changelog = await readText(join(cwd, config.docs.changelog.get()))
     const version = release.tag?.replace(/^v/, '') ?? packageVersion
 
     const input: ReleaseInput = {
       ...(version === undefined ? {} : { version }),
-      ...(release.tag === undefined ? {} : { tag: release.tag }),
+      ...(release.tag === undefined
+        ? {}
+        : { tag: release.tag, tagLiteral: release.tagLiteral ?? true }),
       ...(packageVersion === undefined ? {} : { packageVersion }),
       ...(changelog === undefined ? {} : { changelog }),
       ...(release.publishTag === undefined ? {} : { publishTag: release.publishTag }),
     }
-    const outcome = evaluateRelease(input, t)
+    const outcome = evaluateRelease(input, t, rules)
+    if (!(release.tagLiteral ?? true)) {
+      outcome.warnings.push(t('trigger.pre_release.warn.tag_literal'))
+    }
+    if (release.filter !== undefined) {
+      outcome.warnings.push(
+        t('trigger.pre_release.warn.filter', {
+          name: release.filter,
+          version: packageVersion ?? t('trigger.pre_release.warn.filter_unknown'),
+        }),
+      )
+    }
+    if (release.versionBump !== undefined) {
+      outcome.warnings.push(
+        t('trigger.pre_release.warn.version_bump', { kind: release.versionBump }),
+      )
+    }
     options.state.record({
       kind: 'release',
       ok: outcome.ok,
-      summary: outcome.errors[0] ?? t('command.toggle.check.clean'),
+      summary: summarize(outcome, t),
     })
 
     if (outcome.ok) return downstream
@@ -310,16 +518,24 @@ export function createPreReleaseTrigger(
     // for: a second attempt at releasing the same version is the same problem.
     const target = fingerprint(version ?? command)
     if (options.state.seen(sessionId, 'release', target)) return downstream
-    options.state.remember(sessionId, 'release', target)
 
-    return askAbout({
-      reasonKey: 'trigger.pre_release.reason',
-      askKey: 'trigger.pre_release.ask',
-      outcome,
-      t,
-      assess: (translator) => evaluateRelease(input, translator),
-      approval: options.approval,
-      session: agent.session,
-    })
+    // The findings are rendered again when the prompt opens so a text assembled
+    // by the shell is judged by its literal text only, exactly as the first pass
+    // did — the same rules, the same outcome.
+    return settleAbout(
+      downstream,
+      {
+        reasonKey: 'trigger.pre_release.reason',
+        askKey: 'trigger.pre_release.ask',
+        detailKey: 'trigger.pre_release.detail',
+        settledBy: 'trigger.pre_release.settled_by',
+        outcome,
+        t,
+        assess: (translator) => evaluateRelease(input, translator, rules),
+        approval: options.approval,
+        session: agent.session,
+      },
+      () => options.state.remember(sessionId, 'release', target),
+    )
   }
 }

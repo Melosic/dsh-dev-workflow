@@ -11,7 +11,7 @@ import {
   detectPullRequest,
   evaluatePullRequest,
 } from '../src/triggers/pre-pr.js'
-import { makeExec } from './harness.js'
+import { askOf, makeExec } from './harness.js'
 
 const t = createTranslator('en-US')
 const config = Config({})
@@ -223,7 +223,7 @@ describe('src/triggers/pre-pr.ts', () => {
   it('renders the approval prompt in both client languages', async () => {
     const { listener } = trigger()
     const decision = await fire(listener, 'gh pr create --title "Add the flag"')
-    const display = (decision as { displayReason: { en: string; zh: string } }).displayReason
+    const display = askOf(decision).displayReason
 
     expect(display.en).toContain(createTranslator('en-US')('trigger.pre_pr.ask').split('\n')[0])
     expect(display.zh).toContain(createTranslator('zh-CN')('trigger.pre_pr.ask').split('\n')[0])

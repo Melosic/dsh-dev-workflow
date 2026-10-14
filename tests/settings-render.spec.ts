@@ -26,8 +26,10 @@ interface Form {
     readonly invalid: boolean
     readonly saving: boolean
     readonly failed: boolean
+    readonly conflicted: boolean
     read(path: readonly string[]): unknown
     overridden(path: readonly string[]): boolean
+    live(path: readonly string[]): boolean
   }
 }
 
@@ -232,6 +234,78 @@ describe('client.js rendered section', () => {
 
     await scope.mutate([{ op: 'set', path: ['locale'], value: 'en-US' }])
     expect(notes(), 'an explicit choice needs no explanation').toHaveLength(0)
+  })
+
+  // A policy under a guard whose master switch is off is read by nobody. The
+  // panel used to leave those controls bright and editable, which is how a user
+  // came to believe a rule was still in force after turning its guard off.
+  it('marks the dependents of a guard that is switched off', async () => {
+    const { panel, form } = await build()
+    const inactive = (path: string): boolean =>
+      allNodes(fieldFor(panel, path)).some(
+        (node) =>
+          node.props.className === 'dsw-dev-workflow-badge' && node.props['data-tone'] === 'muted',
+      )
+    const controlDisabled = (path: string): boolean =>
+      allNodes(fieldFor(panel, path)).some(
+        (node) => typeof node.props.onClick === 'function' && node.props.disabled === true,
+      )
+
+    expect(inactive('gitGuard.forcePush'), 'a live policy needs no badge').toBe(false)
+    expect(form.getSnapshot().live(['gitGuard', 'forcePush'])).toBe(true)
+
+    clickIn(fieldFor(panel, 'gitGuard.enabled'), (node) => node.props.role === 'switch')
+
+    // The staged master switch already counts: the badge appears before Save,
+    // because the page shows the draft, not the file.
+    expect(form.getSnapshot().read(['gitGuard', 'enabled'])).toBe(false)
+    expect(inactive('gitGuard.forcePush')).toBe(true)
+    expect(controlDisabled('gitGuard.forcePush')).toBe(true)
+    // A field outside the guard's reach is untouched by its switch.
+    expect(inactive('outwardGuard.push')).toBe(false)
+  })
+
+  it('resets every overridden field at once from the footer', async () => {
+    const { panel, scope } = await build({
+      config: Config({ mode: 'off', gitGuard: { forcePush: 'deny' } }),
+      user: { mode: 'off', gitGuard: { forcePush: 'deny' } },
+    })
+
+    const resetAll = allNodes(renderSection(panel)).find(
+      (node) =>
+        typeof node.props.onClick === 'function' &&
+        nodeText(node).includes(panel.description.dictionaries.en['action.resetAll'] as string),
+    )
+    expect(resetAll, 'the reset-all button should be rendered').toBeDefined()
+    ;(resetAll?.props.onClick as () => void)()
+
+    const save = allNodes(renderSection(panel)).find(
+      (node) => node.props['data-variant'] === 'primary',
+    )
+    await (save?.props.onClick as () => Promise<void>)()
+
+    expect(scope.writes[0]?.every((op) => op.op === 'unset')).toBe(true)
+    expect(scope.writes[0]).toHaveLength(2)
+  })
+
+  it('says a conflict in its own words instead of reusing the failure line', async () => {
+    const { panel, scope, form } = await build()
+
+    clickIn(fieldFor(panel, 'commitCheck.enabled'), (node) => node.props.role === 'switch')
+    // Somebody else writes first, so the revision this panel read is gone.
+    await scope.mutate([{ op: 'set', path: ['locale'], value: 'en-US' }], 0)
+    const save = allNodes(renderSection(panel)).find(
+      (node) => node.props['data-variant'] === 'primary',
+    )
+    await (save?.props.onClick as () => Promise<void>)()
+
+    expect(form.getSnapshot().conflicted).toBe(true)
+    const notes = allNodes(renderSection(panel))
+      .filter((node) => node.props['data-tone'] === 'error')
+      .map(nodeText)
+      .join(' ')
+    expect(notes).toContain(panel.description.dictionaries.en['action.conflict'])
+    expect(notes).not.toContain(panel.description.dictionaries.en['action.failed'])
   })
 
   it('labels every rendered control with a string both dictionaries define', async () => {

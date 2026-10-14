@@ -140,25 +140,25 @@ describe('src/config.ts', () => {
   })
 
   it('rejects a mode outside on and off', () => {
-    expect(() => Config({ mode: 'maybe' })).toThrowError(
+    expect(() => Config({ mode: 'maybe' } as never)).toThrowError(
       '$.mode expected "on" | "off" but got "maybe"',
     )
   })
 
   it('rejects a locale it ships no dictionary for', () => {
-    expect(() => Config({ locale: 'fr' })).toThrowError(
+    expect(() => Config({ locale: 'fr' } as never)).toThrowError(
       '$.locale expected "auto" | "en-US" | "zh-CN" but got "fr"',
     )
   })
 
   it('rejects an unknown guard policy', () => {
-    expect(() => Config({ gitGuard: { forcePush: 'yes' } })).toThrowError(
+    expect(() => Config({ gitGuard: { forcePush: 'yes' } } as never)).toThrowError(
       '$.gitGuard.forcePush expected "deny" | "ask" | "allow" but got "yes"',
     )
   })
 
   it('rejects a commit type list that is not a list of strings', () => {
-    expect(() => Config({ commitCheck: { types: 'feat,fix' } })).toThrowError(
+    expect(() => Config({ commitCheck: { types: 'feat,fix' } } as never)).toThrowError(
       '$.commitCheck.types expected array but got feat,fix',
     )
   })

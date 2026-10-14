@@ -10,10 +10,38 @@ import { renderCheck } from './result.js'
 // code change ought to be described in ARCHITECTURE.md" is an editorial
 // judgement, so it is reported as a warning the author can dismiss.
 
-/** What the check needs in order to judge a change. */
+/** What the doc-sync rules judge: the paths a change touches, plus the paths already on the branch. */
 export interface DocSyncInput {
   /** Repository-relative paths this change touches. */
   readonly files: readonly string[]
+  /**
+   * Paths the working tree has changed but the commit does not include.
+   *
+   * A mirrored document left behind is a mistake. A mirrored document whose pair
+   * is sitting staged-or-dirty in the same tree is a half-finished edit, and a
+   * check that cannot tell the two apart turns "come back and finish this" into a
+   * wall every unrelated commit has to get past.
+   */
+  readonly worktreeFiles?: readonly string[]
+}
+
+/**
+ * Parse the paths out of `git status --porcelain=v1` output.
+ * @param stdout - the command's output.
+ * @returns repository-relative paths, in the order git printed them.
+ */
+function statusPaths(stdout: string): string[] {
+  const files: string[] = []
+  for (const line of stdout.split('\n')) {
+    if (line.length < 4) continue
+    // `XY path`, or `XY original -> path` for a rename. The second path is the
+    // one that exists now, which is what the rules are written against.
+    const entry = line.slice(3).trim()
+    const arrow = entry.indexOf(' -> ')
+    const path = arrow === -1 ? entry : entry.slice(arrow + 4)
+    files.push(unquote(path))
+  }
+  return files
 }
 
 /**
@@ -28,16 +56,31 @@ export async function listChangedFiles(
 ): Promise<{ ok: true; files: string[] } | { ok: false; failure: string; stderr: string }> {
   const result = await git.run(['status', '--porcelain=v1', '--untracked-files=all'], signal)
   if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
-  const files: string[] = []
-  for (const line of result.stdout.split('\n')) {
-    if (line.length < 4) continue
-    // `XY path`, or `XY original -> path` for a rename. The second path is the
-    // one that exists now, which is what the rules are written against.
-    const entry = line.slice(3).trim()
-    const arrow = entry.indexOf(' -> ')
-    const path = arrow === -1 ? entry : entry.slice(arrow + 4)
-    files.push(unquote(path))
-  }
+  return { ok: true, files: statusPaths(result.stdout) }
+}
+
+/**
+ * Read the paths staged for the next commit — what the commit about to run will
+ * actually contain.
+ *
+ * This is the set the commit-time rules must judge. The working tree is not it:
+ * a repository where edits are made continuously (and only some of them staged)
+ * would otherwise fail a convention check for changes the commit does not
+ * mention, and a half-finished pair of mirrored documents sitting in the tree
+ * would block every unrelated commit until it was completed or stashed.
+ * @param git - the runner for the repository.
+ * @param signal - caller-owned cancellation.
+ * @returns repository-relative paths, or a failure to report.
+ */
+export async function listStagedFiles(
+  git: GitRunner,
+  signal?: AbortSignal,
+): Promise<{ ok: true; files: string[] } | { ok: false; failure: string; stderr: string }> {
+  const result = await git.run(['diff', '--cached', '--name-only', '-z'], signal)
+  if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
+  // `-z` gives NUL-separated, unquoted paths, so a path with a space or a quote
+  // arrives as itself instead of as git's quoted rendering of itself.
+  const files = result.stdout.split('\0').filter((path) => path.length > 0)
   return { ok: true, files }
 }
 
@@ -75,10 +118,22 @@ export function checkDocSync(input: DocSyncInput, config: Config, t: Translate):
   const excluded = [...config.docs.exclude.get()]
 
   const mirrors = [...config.docs.mirrors.get()].map((group) => [...group])
+  const outside = new Set(input.worktreeFiles ?? [])
   for (const group of mirrors) {
     const touched = group.filter((path) => changed.has(path))
     if (touched.length === 0 || touched.length === group.length) continue
     const missing = group.filter((path) => !changed.has(path))
+    // Every missing half is already being edited outside this commit: the pair is
+    // in progress, so the finding is one line of attention rather than a refusal.
+    if (missing.every((path) => outside.has(path))) {
+      warnings.push(
+        t('tool.check_doc_sync.warn.mirror_pending', {
+          changed: touched.join(', '),
+          missing: missing.join(', '),
+        }),
+      )
+      continue
+    }
     errors.push(
       t('tool.check_doc_sync.error.mirror', {
         changed: touched.join(', '),

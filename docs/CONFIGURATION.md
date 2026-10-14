@@ -17,9 +17,10 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `rules` | 对象 | 见下 | 机械约定 |
 | `commitCheck` | 对象 | 见下 | 提交信息检查的开关、档位与类型清单 |
 | `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
+| `releaseCheck` | 对象 | 见下 | 发版前检查的四条规则开关与版本号模式 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
 | `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 本插件自身文案的语言（**不是**设置页的语言，也**不**决定模型怎么写提交信息） |
-| `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的提交前检查 |
+| `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的三个约定检查（提交前、PR 前、发版前） |
 | `gitGuard` | 对象 | 见下 | 危险 git 操作的策略 |
 | `outwardGuard` | 对象 | 见下 | 对外可见动作（推送、标签、PR、发布）的策略 |
 | `commandGuard` | 对象 | 见下 | 危险 shell 命令的策略 |
@@ -69,8 +70,14 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 ]
 ```
 
-判定规则（`src/tools/check-doc-sync.ts`）：某一组里有文件被改动、但组内还有文件没被改动 → **报错**。
-所以「改了 README.md 却没改 README.zh.md」是阻塞项，而不只是提醒。
+判定规则（`src/tools/check-doc-sync.ts`）分两级：
+
+- 某一组里有文件被改动、其他文件**完全没被碰** → **报错**（阻塞）。
+- 其他文件正躺在暂存区或工作区里编辑（成对的另一个文件也在这次改动里） → **只警告**
+  （「分支推出前把这一对补完」）。
+
+而且判定的是**这次提交**（`git diff --cached`），不是整个工作区。工作区只用来区分上面两种情况——
+否则一个「README 只改了一半挂着」的仓库会拦住所有无关提交。`/dev-workflow check` 判定的才是工作区。
 
 `exclude` 在判定「这是不是一个代码改动」之前生效：命中前缀的路径既不算代码，也不算文档，
 于是它可以用来把生成物、快照或脚本放进 `docs/` 这类目录里而不误报。
@@ -79,9 +86,14 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 
 | 字段 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `branchPattern` | `string` | `^(feature\|fix\|docs\|hotfix\|chore)/[a-z0-9][a-z0-9._-]*$` | 分支命名规则。**当前已声明、尚未被任何检查读取** |
-| `commitPattern` | `string` | 见下 | 提交头部的正则。**当前已声明、尚未被任何检查读取** |
-| `requireChangelogOnFeat` | `boolean` | `true` | `feat` 提交必须带上 CHANGELOG 改动，否则阻塞 |
+| `branchPattern` | `string` | `^(feature\|fix\|docs\|hotfix\|chore)/[a-z0-9][a-z0-9._-]*$` | 分支命名规则。**已声明、面板只读展示，当前尚未被任何触发器读取**（见下） |
+| `commitPattern` | `string` | 见下 | 提交头部的正则。**已声明、面板只读展示，当前尚未被任何检查读取** |
+| `requireChangelogOnFeat` | `boolean` | `true` | `feat` 提交必须带上 CHANGELOG 改动，否则阻塞（本次提交或分支已有都算） |
+
+`branchPattern` 与 `commitPattern` 都还没有接线：没有触发器检测「在建分支」这个动作，
+提交检查走的是 `src/tools/check-commit-message.ts` 里的类型清单而不是 `commitPattern`。
+两者保留是为了让规则有一个单一出处（将来接线时直接用），面板把它们放在「高级（只读）」区
+展示。**它们是"声明了但未生效"的**，不要按它们判断插件当前的行为。
 
 `commitPattern` 的默认值由 `COMMIT_TYPES` 派生，避免类型清单与正则漂移：
 
@@ -149,15 +161,15 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | 字段 | 类型 | 默认值 | 拦截什么 |
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | 守卫总开关 |
-| `forcePush` | 动作 | `'ask'` | `git push --force` / `-f` / `+refspec` |
+| `forcePush` | 动作 | `'ask'` | `git push --force` / `-f` / `--mirror` / `+refspec` |
 | `hardReset` | 动作 | `'ask'` | `git reset --hard` |
-| `rebase` | 动作 | `'ask'` | `git rebase`（会重写历史） |
+| `rebase` | 动作 | `'ask'` | `git rebase`（会重写历史；`--continue` / `--abort` / `--skip` 是恢复操作，不问） |
 | `amend` | 动作 | `'ask'` | `git commit --amend` |
 | `branchDelete` | 动作 | `'ask'` | `git branch -D`、`--delete --force`、`git push --delete` |
 | `cleanForce` | 动作 | `'ask'` | `git clean -f`（删未跟踪文件） |
-| `checkoutDiscard` | 动作 | `'ask'` | `git checkout -- <path>`（丢弃未暂存改动） |
+| `checkoutDiscard` | 动作 | `'ask'` | `git checkout -- <path>`、`git checkout .`、`git restore <path>` / `.`（丢弃未暂存改动） |
 | `noVerify` | 动作 | `'ask'` | `--no-verify`（跳过 git 钩子） |
-| `rememberApproved` | `boolean` | `false` | 同会话内已批准过的同一条命令不再重复询问（需要档里挂了审批通道） |
+| `rememberApproved` | `boolean` | `false` | 同会话内已批准过的同一条命令不再重复询问（需要档里挂了审批通道）。**git 与对外动作两道守卫共用**：批准过一次的 push / tag / publish 同样不再问 |
 
 「动作」是 `'deny' | 'ask' | 'allow'` 之一：
 
@@ -199,8 +211,13 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | `cancelled` | 拒绝（`security.guard.approval_cancelled`） |
 | `unavailable` | 拒绝（`security.guard.approval_unavailable`） |
 
-被记住的是**一次具体调用**：工具名加上序列化后的参数。所以 `git clean -f` 与
-`git clean -f -d` 是两次操作，换工作目录也是。记忆按会话隔离，插件重新加载即清空，绝不落盘。
+被记住的是**一次具体调用**：工具名加上序列化后的参数（对象键按字典序归一化，所以同一份参数
+换个书写顺序仍是同一次操作）。所以 `git clean -f` 与 `git clean -f -d` 是两次操作，换工作目录也是。
+记忆按会话隔离，插件重新加载即清空，绝不落盘。
+
+**这道开关同时管对外动作守卫。** 它住在 `gitGuard` 下，但 git 与 outward 两道守卫共用同一份
+批准记录：批准过一次的 `git push` / `git tag` / `npm publish` 在同一个会话里不再重新点头。
+默认关闭——**一次同意不等于整个会话的授权**，重度用户自己打开它来止住提示疲劳。
 
 边界（这几条是刻意的）：
 
@@ -213,9 +230,8 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
   不写「你拒绝了」——那会把平台的自动拒绝说成用户的决定。
 - **没有审批通道时不自行提问。** 档里没挂审批服务、或这次调用没有 agent，守卫就把问题交回
   dispatcher（与开关关闭时逐字相同的行为），绝不把「问不出来」当成「同意了」。
-- **不吞并别的 gate。** 若另一个 listener 已经拒绝，或者已经要提问，git 守卫不会自己再问一次：
+- **不吞并别的 gate。** 若另一个 listener 已经拒绝，或者已经要提问，守卫不会自己再问一次：
   别的 gate 的答案不是它该记的。
-- **默认关闭。** `false` 时行为与没有这个开关时完全一致。
 
 ### 权限策略为 `never` 时会发生什么
 
@@ -250,7 +266,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | `push` | 动作 | `'ask'` | 任意 `git push`（不含 `--dry-run`）；强推另由 `gitGuard.forcePush` 判定 |
 | `tag` | 动作 | `'ask'` | `git tag <name>` 建标签；`-l` / `-d` / `-v` 这类读操作不算 |
 | `pullRequest` | 动作 | `'ask'` | `gh pr create`；`gh pr list` / `view` 不算 |
-| `publish` | 动作 | `'ask'` | `npm publish` / `pnpm publish`；`--dry-run` / `-n` 不算 |
+| `publish` | 动作 | `'ask'` | `npm publish` / `pnpm publish` / `yarn publish` / `bun publish`；`--dry-run` / `-n` 不算 |
 
 四项默认都是 `ask` 而非 `deny`：这是唯一一道**本机不会造成任何损失**的守卫，要的是用户
 点头同意，而不是禁止这类操作。`git push --force` 同时命中本守卫与 `gitGuard.forcePush`，
@@ -264,10 +280,12 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 字段 | 类型 | 默认值 | 拦截什么 |
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | 守卫总开关 |
-| `dangerousShell` | 动作 | `'ask'` | `rm -rf /`、`mkfs`、`dd ... of=/dev/sda`、fork 炸弹、`chmod -R 777 /` |
+| `dangerousShell` | 动作 | `'ask'` | `rm -rf /`、`rm -rf ~/*`、`rm -r /etc`、`//`、`mkfs`、`dd ... of=/dev/sda`、fork 炸弹、`chmod -R 777 /` |
 
 普通删除（`rm -rf node_modules`、`rm -rf ./dist`、`rm -rf /tmp/build`）不命中：判定看的是
-**目标**，不是 `-rf` 本身。完整清单见 [docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
+**目标**，不是 `-rf` 本身。根级与家目录级的递归删除**不要求同时带 `-f`**——`rm -r /etc`
+不问的话它照样删掉整棵树，`-f` 只决定要不要弹一次确认。完整清单见
+[docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
 
 ## `fileGuard`
 
@@ -304,8 +322,9 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 **`genericHighEntropy` 默认关闭**，因为它是唯一会拦下普通文本的规则：长 base64、哈希、
 压缩数据都可能越过熵阈值。需要时再打开，并预期要处理误报。
 
-这一道同样**没有档位字段**：git 与命令守卫拦的是能重做的工作，覆盖档是合理的；凭据发出
-即收不回，所以固定 `deny`。
+`noRead` 与凭据前缀都**没有逐条例外的档位**：加一条精确路径是唯一的定制方式。已知会误伤的
+情况（测试夹具里的假 `AKIA`、文档中的 PEM 头示例）只能通过改清单或整关守卫来解决——这是
+刻意留出的边界，不是漏掉的配置项。
 
 ## `audit`
 
@@ -314,19 +333,28 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | `enabled` | `boolean` | `true` | 是否写审计记录 |
 | `path` | `string` | `'.dev-docs/audit-log.jsonl'` | 每行一个 JSON 对象；相对路径按调用的工作目录解析 |
 
-审计记录写的是决策的形状：时间、会话、工具名、命中的规则 key、应用的档位、工作目录与
-**脱敏后**的参数——凭据替换为 `[REDACTED]`，敏感路径只留文件名。写入同步落盘，失败只记
-调试日志，绝不让一次工具调用因为写不出日志而失败。完整说明见
-[docs/SECURITY.md](SECURITY.md#审计日志记什么)。
+每行记录：时间、会话、`callId`、工具名、命中的字典键、**配置档位**（`action`）、
+**最终决定**（`decision`，决策落定时写入）、工作目录，以及脱敏后的参数。两者都要有：
+`action` 是守卫自己会怎么做，`decision` 是这次调用实际怎么收场——另一道路径更严、用户回答了
+提问、或策略本来就是 `allow` 时，二者不同。敏感路径按**逐词**降到文件名（`cat /repo/.env && make x`
+记成 `cat .env && make x`）。写失败会累加计数，**第一次**以 warning 级别报出来——
+一份安静的审计日志比没有更糟，读者会把空文件当成「什么都没发生」。
+
+审计记录写的是决策的形状：时间、会话、`callId`、工具名、命中的规则 key、应用的档位、
+**最终决定**、工作目录与**脱敏后**的参数——凭据替换为 `[REDACTED]`，敏感路径只留文件名。
+写入同步落盘，失败**计数**并且第一次以 warning 报出，绝不让一次工具调用因为写不出日志而失败。
+完整说明见 [docs/SECURITY.md](SECURITY.md#审计日志记什么)。
 
 ## 关闭与降级
 
 | 想要的行为 | 配置 |
 | --- | --- |
 | 完全关掉插件（零常驻、零介入） | `mode: 'off'` |
-| 只关掉提交前检查（交给 husky / commitlint） | `enableOwnTrigger: false` |
-| 只关掉提交信息检查 | `commitCheck.enabled: false` |
+| 只关掉自带检查（交给 husky / commitlint） | `enableOwnTrigger: false`（管提交 / PR / 发版三个触发器） |
+| 只关掉提交信息检查 | `commitCheck.enabled: false`（PR 标题同样不再按提交规范判） |
 | 只关掉文档同步检查 | `docsCheck.enabled: false` |
+| 只关掉发版检查的某一条规则 | `releaseCheck.semver` / `changelog` / `changelogCategories` / `prereleaseTag` |
+| 放宽版本号格式 | `releaseCheck.versionPattern` 改成你要的正则 |
 | 只关掉危险 git 命令守卫 | `gitGuard.enabled: false` |
 | 只关掉对外动作守卫 | `outwardGuard.enabled: false` |
 | 只关掉危险 shell 命令守卫 | `commandGuard.enabled: false` |
@@ -336,8 +364,14 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 让某个操作放行 | 把该项设为 `'allow'`（仅限有档位的守卫） |
 | 让某个操作直接拒绝 | 把该项设为 `'deny'` |
 
-`/dev-workflow on` / `off` 是 `mode` 的**运行期等价物**：它同样撤掉全部注册。区别是它不落盘，
-插件重新加载后仍按 `mode` 决定。
+**没有逐条例外，也没有白名单。** 敏感文件与密钥两道固定 `deny`，只能整关；命令守卫只有
+一个档位（`mkfs` 与 `chmod` 不能分档）；git 与对外守卫没有 remote / branch 白名单
+（「个人 fork 可强推、upstream 禁止」这类要求当前表达不了）。这些是已知的能力缺口。
+
+`/dev-workflow on` / `off` 是 `mode` 的**运行期等价物**：它同样撤掉全部注册。区别有三点——
+不落盘、保留 `/dev-workflow` 这条命令本身（否则没有回头路）、以及**不会被无关的设置写入撤销**：
+只有 `mode` 真的变了才算对同一个问题给出回答。`status` 会区分「运行期 off（未落盘）」与
+「配置里 off」两种状态。
 
 ## 可视化面板
 
@@ -355,7 +389,9 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 
 ### 「已覆盖」与「恢复默认」
 
-每个字段标题右侧可能带一个「已覆盖」徽标和一颗「恢复默认」按钮。它们说的是同一件事：
+每个字段标题右侧可能带一个「已覆盖」徽标和一颗「恢复默认」按钮——徽标是 `Reset to default`，
+按钮也带全称，12px 小字改成与其它控件一致的字号。**面板底部还有一颗「全部恢复默认」**，
+一次把 draft 里所有被覆盖的项发成 `unset`，不必逐项去点。它们说的是同一件事：
 **这份 profile 里还留着这一项**。平台判定「已覆盖」看的是 user 层有没有这个键，而不是值等不
 等于默认值——官方实现把这条说得很直白（`dsh-client-ui-primitives/lib/index.js:7099-7102`）：
 
@@ -384,13 +420,13 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 [权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。现在撤销也只要一步：
 把那个档位选回 `ask` 再保存，profile 里那一项就被删掉了。
 
-### 面板可以改的（32 项）
+### 面板可以改的（36 项）
 
 | 分组 | 项目 |
 | --- | --- |
 | 工作流模式 | `mode`、`locale`、`enableOwnTrigger` |
 | 提交规范 | `commitCheck.enabled`、`onFailure`、`types`、`requireScope`、`subjectMaxLength` |
-| 文档同步 | `docsCheck.enabled`、`rules.requireChangelogOnFeat`、`docsCheck.requireReadmeOnConfig` |
+| 文档同步 | `docsCheck.enabled`、`rules.requireChangelogOnFeat`、`docsCheck.requireReadmeOnConfig`、`releaseCheck.semver`、`releaseCheck.changelog`、`releaseCheck.changelogCategories`、`releaseCheck.prereleaseTag` |
 | Git 安全 | `gitGuard.enabled`、八个操作档位、`gitGuard.rememberApproved` |
 | 对外可见动作 | `outwardGuard.enabled`、`push`、`tag`、`pullRequest`、`publish` |
 | 命令安全 | `commandGuard.enabled`、`commandGuard.dangerousShell` |
@@ -400,11 +436,15 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 主区只有开关与枚举（加上 `subjectMaxLength` 这一个数字输入），不提供自由文本——路径与正则
 是「写错就静默失效」的那一类值，不该交给一个没有校验的输入框。
 
-### 只能在文件里改的（11 项）
+每个守卫的**总开关都带一句后果说明**（关掉它之后哪一类动作不再被拦），关掉某个总开关时
+它下面的分项会同时标出「当前不生效」，避免「控件还亮着 = 规则还生效」的误读。
 
-面板的**高级**区（默认折叠、**只读**）展示其中 9 项，并提供一个打开当前 profile
+### 只能在文件里改的（12 项）
+
+面板的**高级**区（默认折叠、**只读**）展示其中 10 项，并提供一个打开当前 profile
 `cordis.patch.yml` 的按钮：`codePaths`、`docs.docsDir`、`docs.adrDir`、`docs.changelog`、
-`docs.exclude`、`rules.branchPattern`、`rules.commitPattern`、`docs.mirrors`、`audit.path`。
+`docs.exclude`、`rules.branchPattern`、`rules.commitPattern`、`releaseCheck.versionPattern`、
+`docs.mirrors`、`audit.path`。
 
 另外 2 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）
 与 `fileGuard.noRead`（不许读取的敏感路径清单）。一个路径清单不是开关或枚举，面板给不了
@@ -416,11 +456,12 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
   配置；`mode: 'off'` 是插件自己的「零常驻」语义，两者互不替代。
 - **不改由 DSH 拥有的东西**（审批策略、沙箱模式、插件名册）。
 - **不写入配置文件以外的地方。** 面板没有自己的持久化，也没有「仅本次会话生效」的开关。
+  `/dev-workflow off` 那种运行期开关**不在面板里**，因为它不落盘——面板上的每一项都写文件。
 
 ## 相关文档
 
 - 配置字段在代码里的唯一声明：`src/config.ts`
-- 面板的浏览器半：`client.js`；Host 半（关闭 schema 页、`loader/volatile-update` 后重建注册）在 `src/index.ts:320-344`
+- 面板的浏览器半：`client.js`；Host 半（关闭 schema 页、`loader/volatile-update` 后重建注册）在 `src/index.ts` 的 `createRuntime`
 - 每个工具的参数：`docs/TOOLS.md`
 - 默认值为什么这样定：`docs/SECURITY.md`
 - 守卫的判定细节与实测：`docs/TRIGGERS.md`

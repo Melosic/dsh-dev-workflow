@@ -24,11 +24,47 @@
 //    build output, absent from a fresh clone, so `prepack` builds first and then
 //    runs this script to prove the entry points exist and that `files` ships
 //    them. See the comment at the check itself for why it does not shell out.
+// 6. A pull request that changes one half of a mirrored pair must change the
+//    other half. The session tool `check_doc_sync` enforces this while the
+//    plugin is loaded, which does nothing for a contributor who does not use
+//    DSH — and the pair rule is the same rule either way, so it is read from
+//    the same place rather than restated here.
+// 7. The version in package.json, the CHANGELOG entry for it, and the git tags
+//    are one fact written down three times. A release that updates two of them
+//    ships a package whose changelog has no entry for it.
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 
 const root = new URL('../', import.meta.url)
 const readJson = (relative) => JSON.parse(readFileSync(new URL(relative, root), 'utf8'))
+
+/**
+ * The paths this change touches, as repository-relative paths.
+ *
+ * A pull request is compared against its base; a local run against the base
+ * branch it was cut from. A clone with no such ref (a shallow or detached
+ * checkout, or a repository with one branch) has nothing to compare, and
+ * reporting an empty change is the honest answer — this check cannot see a
+ * difference it was given no base for.
+ * @returns the changed paths, or an empty list when no base ref resolves.
+ */
+function changedFiles() {
+  const bases = ['origin/main', 'main']
+  for (const base of bases) {
+    try {
+      const output = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], {
+        cwd: new URL('.', root),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      return output.split('\n').filter((line) => line.length > 0)
+    } catch {
+      // No such ref, or no git at all: try the next base.
+    }
+  }
+  return []
+}
 
 /** Flatten to dot paths so a nested dict cannot hide a missing key. */
 function keyPaths(value, prefix = '') {
@@ -117,7 +153,7 @@ if (enShape.length !== zhShape.length) {
 // 4. Phase-number citations, as described above. Walking the repository also
 //    covers `.dev-docs/`, where the numbering is actually defined, so that
 //    directory is skipped explicitly.
-const PHASE = /第\s*[0-9一二三四五六七八九十]+\s*阶段/
+const PHASE = /第\s*[0-9一二三四五六七八九十]+\s*阶段|\bPhase\s+[0-9]+\b/
 // CONTRIBUTING.md defines the numbered phases; CHANGELOG.md is a historical
 // record of when they happened. Both are the only legitimate citations.
 const phaseExempt = new Set(['CONTRIBUTING.md', 'CHANGELOG.md'])
@@ -169,7 +205,16 @@ if (typeof patch !== 'string') {
 //    script, so packing from inside it would recurse. Existence plus whitelist
 //    coverage is what the tarball listing would prove.
 /** Entries in `files`: a trailing slash is a directory prefix, otherwise exact. */
-const shipped = ['lib/index.js', 'client.js', 'locale/en.json', 'skills/dsh-dev-workflow/SKILL.md']
+const shipped = [
+  'lib/index.js',
+  'lib/index.d.ts',
+  'client.js',
+  'locale/en.json',
+  'locale/zh.json',
+  'skills/dsh-dev-workflow/SKILL.md',
+  'skills/dsh-dev-workflow/SKILL.zh.md',
+  'cordis.patch.yml',
+]
 const covered = (file) =>
   (pkg.files ?? []).some((entry) =>
     entry.endsWith('/') ? file.startsWith(entry) : entry.replace(/^\.\//, '') === file,
@@ -182,6 +227,40 @@ for (const file of shipped) {
   }
 }
 
+//    The emitted maps name `../src/*.ts`. Shipping them without `src/` leaves a
+//    consumer's debugger pointing at a path the tarball never had, which is worse
+//    than no map at all: it looks like a working one until the first breakpoint.
+const emittedMaps = ['lib/index.js.map', 'lib/index.d.ts.map']
+if (emittedMaps.some((file) => existsSync(new URL(file, root))) && !covered('src/index.ts')) {
+  failures.push('package.json: files excludes src/ while the build emits source maps')
+}
+
+// 6. Mirrored pairs. The pair rule is the plugin's own (`docs.mirrors` in
+//    `src/config.ts`), so the list below is the schema's default, kept here only
+//    because a fresh clone has no build output to import it from.
+const mirrors = pkg.dsh?.config?.docs?.mirrors ?? [
+  ['README.md', 'README.zh.md'],
+  ['locale/en.json', 'locale/zh.json'],
+  ['skills/dsh-dev-workflow/SKILL.md', 'skills/dsh-dev-workflow/SKILL.zh.md'],
+]
+const changed = new Set(changedFiles())
+for (const pair of mirrors) {
+  const touched = pair.filter((file) => changed.has(file))
+  if (touched.length > 0 && touched.length < pair.length) {
+    failures.push(
+      `${touched[0]}: changed without its mirror (${pair.filter((f) => !changed.has(f)).join(', ')})`,
+    )
+  }
+}
+
+// 7. Version alignment. The titled heading is what the release notes point at,
+//    so a version without one is a release nobody can read about.
+const changelog = readFileSync(new URL('CHANGELOG.md', root), 'utf8')
+const escaped = pkg.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+if (!new RegExp(`^##\\s+\\[?v?${escaped}\\]?\\b`, 'm').test(changelog)) {
+  failures.push(`CHANGELOG.md: no section for the released version ${pkg.version}`)
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`error: ${failure}`)
   process.exit(1)
@@ -191,5 +270,7 @@ console.log(
   `locale keys aligned (${en.size} keys); bundle patch declared and shipped; ` +
     `skill headings aligned (${enShape.length} sections); ` +
     `published entry points present (${shipped.length} checked); ` +
+    `mirrored pairs consistent (${mirrors.length} groups); ` +
+    `CHANGELOG records ${pkg.version}; ` +
     `no numbered development phases cited.`,
 )

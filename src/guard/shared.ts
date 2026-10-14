@@ -1,6 +1,7 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { ApprovalPolicyReporter } from '../approval-policy.js'
 import { unaskable } from '../approval-policy.js'
+import type { AuditSink } from '../audit.js'
 import type { Config } from '../config.js'
 import { createTranslator } from '../i18n.js'
 import type { Translate, TranslationParams } from '../i18n.js'
@@ -96,13 +97,14 @@ export interface GuardOptions {
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
   /**
-   * Security audit sink, called once per recognised hit.
+   * Security audit sink, called once per recognised hit and once more when the
+   * call settles, so the log says both what the guard saw and what happened.
    *
    * Optional so a bare guard can be driven on its own, but the runtime always
    * supplies it: a guard that fires without leaving a record is a guard nobody
    * can review afterwards.
    */
-  readonly audit?: (hit: GuardHit, exec: ToolExecution) => void
+  readonly audit?: AuditSink
   /**
    * Asks the user on the guard's behalf, for a guard whose policy remembers the
    * answer. Optional: the other four guards never ask themselves.
@@ -127,6 +129,17 @@ export interface GuardDefinition extends GuardOptions {
    * @returns the recognised operation, or `undefined` for an ordinary call.
    */
   readonly detect: (exec: ToolExecution) => GuardHit | undefined
+  /**
+   * Classify one call into every operation it performs.
+   *
+   * A guard that recognises more than one — `git push -f --no-verify` is a force
+   * push *and* a hook bypass — returns all of them here, so the status line's
+   * tally counts each operation rather than only the strictest one. Optional:
+   * without it, {@link GuardDefinition.detect} is the whole story.
+   * @param exec - the call the agent is about to make.
+   * @returns every recognised operation, strictest last.
+   */
+  readonly detectAll?: (exec: ToolExecution) => GuardHit[]
 }
 
 /** Severity order used to pick one decision when a line does several things. */
@@ -203,46 +216,61 @@ export function createGuard(
   definition: GuardDefinition,
 ): (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision> {
   return async (exec, next) => {
-    const hit = definition.detect(exec)
-    if (hit === undefined || hit.action === 'allow') return next()
-    if (exec.signal.aborted) return { kind: 'cancel' }
+    const found = definition.detectAll?.(exec)
+    const hit = found === undefined ? definition.detect(exec) : strictest(found)
+    if (hit === undefined) return next()
 
     // Counted and audited before the decision is settled, so the status line and
     // the audit log report what the guard saw even when another gate settles the
-    // call first.
-    definition.state.recordGuardHit(hit.reason)
-    definition.log(`[dsh-dev-workflow] ${definition.label}: ${hit.reason}`)
-    definition.audit?.(hit, exec)
+    // call first. Every operation a line performs is counted — `git push -f
+    // --no-verify` is two — and only the decision is taken from the strictest. A
+    // hit the configuration downgraded to `allow` is counted too: a guard that
+    // recognises an operation and says nothing about it is exactly what the
+    // audit log exists to show.
+    for (const one of found ?? [hit]) {
+      definition.state.recordGuardHit(one.reason, one.action)
+      definition.log(`[dsh-dev-workflow] ${definition.label}: ${one.reason}`)
+      definition.audit?.(one, exec)
+    }
+
+    /** Record what the call settled as, so the log answers "did it happen?". */
+    const settle = (decision: PreToolDecision): PreToolDecision => {
+      definition.audit?.settled(hit, exec, decision.kind)
+      return decision
+    }
+
+    if (hit.action === 'allow') return settle(await next())
+    if (exec.signal.aborted) return settle({ kind: 'cancel' })
 
     const t = definition.t()
     const session = exec.agent?.session
     const downstream = await next()
     // An aborted call stays aborted, and a refusal by another gate is never
     // weakened into a question.
-    if (downstream.kind === 'cancel') return downstream
-    if (hit.action === 'deny') return decide(hit, t)
-    if (downstream.kind === 'deny') return downstream
+    if (downstream.kind === 'cancel') return settle(downstream)
+    if (hit.action === 'deny') return settle(decide(hit, t))
+    if (downstream.kind === 'deny') return settle(downstream)
 
     const approver = definition.approver
     if (approver !== undefined && approver.remembers(hit)) {
       // Already answered in this session. The operation may proceed, and any
       // question another gate still wants to ask stays that gate's to ask.
-      if (approver.approved(hit, exec)) return downstream
+      if (approver.approved(hit, exec)) return settle(downstream)
       // Ask only when this guard's question would be the one the user answers.
       // If another gate already asks, its outcome is not ours to remember, so
       // the question stays with the dispatcher — the behaviour with the policy
       // switched off.
       if (downstream.kind === 'allow') {
         const refused = await approver.ask(hit, exec, t)
-        if (refused !== undefined) return refused
+        if (refused !== undefined) return settle(refused)
         approver.remember(hit, exec)
-        return { kind: 'allow' }
+        return settle({ kind: 'allow' })
       }
     }
 
     // Otherwise the call was going to proceed. The guard's own question replaces
     // any other `ask`, so the reason shown names the operation that was actually
     // recognised; the approval it needs is the same either way.
-    return unaskable(decide(hit, t), t, definition.approval, session)
+    return settle(unaskable(decide(hit, t), t, definition.approval, session))
   }
 }

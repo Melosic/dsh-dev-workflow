@@ -10,7 +10,7 @@
 
 **要求**
 
-- Node.js >= 20（`engines.node` 声明的下限；CI 目前只跑 Node 20）
+- Node.js >= 20（`engines.node` 声明的下限；CI 跑当前 LTS，即 Node 22）
 - pnpm 10.x
 
 **步骤**

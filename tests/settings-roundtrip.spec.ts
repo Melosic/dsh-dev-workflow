@@ -13,8 +13,10 @@ interface Form {
     readonly invalid: boolean
     readonly saving: boolean
     readonly failed: boolean
+    readonly conflicted: boolean
     read(path: readonly string[]): unknown
     overridden(path: readonly string[]): boolean
+    live(path: readonly string[]): boolean
   }
   edit(path: readonly string[], value: unknown): void
   clear(path: readonly string[]): void
@@ -183,7 +185,7 @@ describe('client.js read/write roundtrip', () => {
     expect(plain(config.commitCheck.subjectMaxLength)).toBe(50)
   })
 
-  it('rejects a draft written against a stale revision', async () => {
+  it('reports a draft written against a stale revision as a conflict, not a failure', async () => {
     const { config, scope, form } = await build()
 
     form.edit(['mode'], 'off')
@@ -191,7 +193,12 @@ describe('client.js read/write roundtrip', () => {
     await scope.mutate([{ op: 'set', path: ['locale'], value: 'en-US' }], 0)
     await form.save()
 
-    expect(form.getSnapshot().failed).toBe(true)
+    // The two share the "did not land" outcome but not the next step, so the
+    // page reads one and not the other: reload and compare, versus try again.
+    const snapshot = form.getSnapshot()
+    expect(snapshot.conflicted).toBe(true)
+    expect(snapshot.failed).toBe(false)
+    expect(snapshot.dirty).toBe(true)
     expect(config.mode.get()).toBe('on')
     expect(scope.revisions).toEqual([0, 0])
     expect(plain(config.locale)).toBe('en-US')

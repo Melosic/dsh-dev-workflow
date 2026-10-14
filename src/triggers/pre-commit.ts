@@ -4,10 +4,17 @@ import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
 import type { WorkflowState } from '../state.js'
-import { listChangedFiles } from '../tools/check-doc-sync.js'
-import { detectCommit, evaluate, fingerprint, resolveCommitMessage, summarize } from '../checks.js'
+import { listChangedFiles, listStagedFiles } from '../tools/check-doc-sync.js'
+import {
+  amendedMessage,
+  detectCommit,
+  evaluate,
+  fingerprint,
+  resolveCommitMessage,
+  summarize,
+} from '../checks.js'
 import { commandOf } from '../shell.js'
-import { askAbout } from './shared.js'
+import { settleAbout } from './shared.js'
 
 // The automatic half of the plugin: before the agent runs a shell command that
 // creates a commit, check that commit against the workflow rules and route the
@@ -47,10 +54,13 @@ export function createPreCommitTrigger(
   options: PreCommitTriggerOptions,
 ): (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision> {
   return async (exec, next) => {
-    // Every other gate gets to speak first, including the ones this plugin does
-    // not own. Only an allowed call is worth inspecting.
+    // Every other gate gets to speak first — including the ones this plugin does
+    // not own — because a call that another gate cancels or refuses is not this
+    // check's to settle. What that answer does *not* do is suppress the check: a
+    // guard that asks about the same commit would otherwise be the only thing
+    // the user hears about it, and the convention rules would never run at all.
     const downstream = await next()
-    if (downstream.kind !== 'allow') return downstream
+    if (downstream.kind === 'cancel') return downstream
 
     const agent = exec.agent
     if (agent === undefined) return downstream
@@ -58,6 +68,9 @@ export function createPreCommitTrigger(
     if (command === undefined) return downstream
     const commit = detectCommit(command)
     if (commit === undefined) return downstream
+    // A refusal needs no run, but it is worth naming: the call was stopped for a
+    // convention problem as well as for whatever the other gate objected to.
+    if (downstream.kind === 'deny') return downstream
     if (exec.signal.aborted) return { kind: 'cancel' }
 
     const t = options.t()
@@ -68,46 +81,81 @@ export function createPreCommitTrigger(
     const sessionId = agent.session.id
     options.log(t('trigger.pre_commit.detected'))
 
-    const listed = await listChangedFiles(options.git(cwd), exec.signal)
+    // The commit's own contents, not the working tree: what is staged is what the
+    // command is about to record, and judging the rest would fail a commit for
+    // edits it does not mention. The working tree is read too, but only to tell
+    // a mirrored document left behind from one whose pair is being edited in the
+    // same tree.
+    const runner = options.git(cwd)
+    const listed = await listStagedFiles(runner, exec.signal)
     const files = listed.ok ? listed.files : undefined
-    const message = await resolveCommitMessage(commit, cwd)
+    const worktree = files === undefined ? undefined : await listChangedFiles(runner, exec.signal)
+    // A degraded listing is not a clean one. The doc rules cannot run, and the
+    // outcome says so rather than leaving the reader to assume they passed.
+    const degraded =
+      listed.ok || listed.failure === undefined
+        ? undefined
+        : t(`error.${listed.failure.replace(/-/g, '_')}`)
+    const resolved = await resolveCommitMessage(commit, cwd)
+    // `--amend` names no message, and repairing the message is exactly what
+    // amend is for: the one still in history is the one git would keep.
+    const message =
+      resolved.message ??
+      (commit.amend === true ? await amendedMessage(runner, exec.signal) : undefined)
     const input = {
       ...(message === undefined ? {} : { message }),
       ...(files === undefined ? {} : { files }),
+      ...(worktree === undefined || !worktree.ok ? {} : { worktreeFiles: worktree.files }),
     }
 
     const outcome = evaluate(input, config, t)
+    if (degraded !== undefined) {
+      outcome.warnings.push(t('trigger.pre_commit.warn.degraded', { reason: degraded }))
+    }
+    // A message this check could not read is not a message it approved. Saying
+    // so is the difference between "the rules passed" and "the rules did not
+    // run", and only one of those is true here.
+    const unreadable = resolved.unreadable
+    if (unreadable !== undefined && message === undefined) {
+      outcome.warnings.push(t('trigger.pre_commit.warn.unreadable', { source: unreadable }))
+    }
     options.state.record({
       kind: 'commit',
       ok: outcome.ok,
       summary: summarize(outcome, t),
     })
 
-    if (outcome.ok) return downstream
+    if (outcome.ok && degraded === undefined) return downstream
 
-    // Remember before asking: an author who is asked once and proceeds anyway
-    // must not be asked again for the identical commit, and the prompt gives no
-    // channel to record the answer afterwards.
     const commitTarget = fingerprint(message ?? command)
     const docTarget = fingerprint((files ?? []).join('\n'))
     const repeated =
       options.state.seen(String(sessionId), 'commit', commitTarget) &&
       (files === undefined || options.state.seen(String(sessionId), 'doc', docTarget))
+    // A commit that already broke the rules is allowed to proceed instead of
+    // being asked about twice, but only until the user has answered a question
+    // that carried the findings: `settleAbout` remembers them only then, so a
+    // refusal does not turn into a one-time reminder.
     if (repeated) return downstream
-    options.state.remember(String(sessionId), 'commit', commitTarget)
-    if (files !== undefined) options.state.remember(String(sessionId), 'doc', docTarget)
+    const remember = (): void => {
+      options.state.remember(String(sessionId), 'commit', commitTarget)
+      if (files !== undefined) options.state.remember(String(sessionId), 'doc', docTarget)
+    }
 
-    // The approval prompt selects one of these by the client's locale, which is
-    // not necessarily the plugin's own, so each side is rendered from scratch
-    // with its own translator — findings included, not just the wrapper.
-    return askAbout({
-      reasonKey: 'trigger.pre_commit.reason',
-      askKey: 'trigger.pre_commit.ask',
-      outcome,
-      t,
-      assess: (translator) => evaluate(input, config, translator),
-      approval: options.approval,
-      session: agent.session,
-    })
+    return settleAbout(
+      downstream,
+      {
+        reasonKey: 'trigger.pre_commit.reason',
+        askKey: 'trigger.pre_commit.ask',
+        detailKey: 'trigger.pre_commit.detail',
+        settledBy: 'trigger.pre_commit.settled_by',
+        outcome,
+        t,
+        assess: (translator) => evaluate(input, config, translator),
+        approval: options.approval,
+        session: agent.session,
+      },
+      remember,
+    )
   }
 }

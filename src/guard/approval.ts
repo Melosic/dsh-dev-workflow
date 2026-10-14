@@ -63,6 +63,23 @@ export interface ApprovalOptions {
 }
 
 /**
+ * Serialise one argument value with object keys in a stable order, so that two
+ * spellings of the same call fingerprint the same. A tool call that lists its
+ * fields in another order is the same operation, and asking about it twice is
+ * how a prompt trains its reader to approve without looking.
+ * @param value - any part of a tool call's arguments.
+ * @returns the canonical text.
+ */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : 1))
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`).join(',')}}`
+  }
+  return JSON.stringify(value ?? null) ?? 'null'
+}
+
+/**
  * What makes two calls the same operation: one tool and one serialised
  * argument list. Not just the recognised operation — `git clean -f` and
  * `git clean -f -d` are different commands, and a grant for one is not a grant
@@ -71,7 +88,7 @@ export interface ApprovalOptions {
  * @returns the text the fingerprint is taken over.
  */
 function operationOf(exec: ToolExecution): string {
-  return `${exec.name} ${JSON.stringify(exec.arguments ?? null)}`
+  return `${exec.name} ${canonical(exec.arguments ?? null)}`
 }
 
 /**

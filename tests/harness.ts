@@ -210,19 +210,56 @@ export function makeExec(
 export const allow = async (): Promise<PreToolDecision> => ({ kind: 'allow' })
 
 /**
- * A git runner whose `status --porcelain` output is whatever the spec says.
+ * Read an approval question out of a decision, as the two things a spec asserts
+ * about it: the line the model is shown and the pair of client-side reasons.
+ *
+ * The decision type is a union, so every spec that inspects a question would
+ * otherwise narrow it by hand — and the panel-shaped `displayReason` is optional
+ * on the type even for a question, because a refusal carries none.
+ * @param decision - what a listener returned.
+ * @returns the reason and the per-language display reasons.
+ */
+export function askOf(decision: PreToolDecision): {
+  readonly reason: string
+  readonly displayReason: Readonly<Record<string, string>>
+} {
+  if (decision.kind !== 'ask') throw new Error(`expected an ask, got ${decision.kind}`)
+  return {
+    reason: decision.reason ?? '',
+    displayReason: decision.displayReason ?? {},
+  }
+}
+
+/**
+ * A git runner whose answers are whatever the spec says the repository holds.
+ *
+ * Both questions the checks ask are answered from the same list: `status
+ * --porcelain` is the working tree, and `diff --cached --name-only -z` is what
+ * the next commit would contain. A spec that wants the two to differ passes a
+ * runner of its own.
  * @param files - read on every call, so a spec can change the working tree.
  * @returns the runner.
  */
 export function makeGit(files: () => readonly string[] = () => []): GitRunner {
   return {
     cwd: process.cwd(),
-    run: async (): Promise<GitResult> => ({
-      ok: true,
-      stdout: files()
-        .map((file) => ` M ${file}\n`)
-        .join(''),
-    }),
+    run: async (args): Promise<GitResult> => {
+      if (args[0] === 'diff' && args[1] === '--cached') {
+        // `-z`: NUL-separated and unquoted, the way git answers for a script.
+        return {
+          ok: true,
+          stdout: files()
+            .map((file) => `${file}\0`)
+            .join(''),
+        }
+      }
+      return {
+        ok: true,
+        stdout: files()
+          .map((file) => ` M ${file}\n`)
+          .join(''),
+      }
+    },
     locate: async () => ({ ok: true, path: 'git' }),
   }
 }
@@ -433,8 +470,17 @@ export interface PanelDescription {
     readonly hint?: string
     readonly note?: string
     readonly options?: readonly (string | { readonly value: string })[]
+    /** For a `switch`: the value its on-state writes, when it is not `true`. */
+    readonly on?: unknown
+    /** For a `switch`: the value its off-state writes, when it is not `false`. */
+    readonly off?: unknown
   }[]
-  readonly advanced: readonly { readonly path: readonly string[]; readonly label: string }[]
+  readonly advanced: readonly {
+    readonly path: readonly string[]
+    readonly label: string
+    /** Set when the panel declares the field unwired, so it wears a badge. */
+    readonly inactive?: boolean
+  }[]
   readonly commitTypes: readonly string[]
   readonly gitPolicies: readonly string[]
   readonly dictionaries: {
@@ -606,6 +652,9 @@ export async function loadPanel(scope: FormScope): Promise<LoadedPanel> {
       },
     }
     try {
+      // A plain-JavaScript client bundle with no declaration file: the specs read
+      // it through the loader stub, not through its types.
+      // @ts-expect-error -- client.js ships untyped; nothing here needs its types.
       await import('../client.js')
     } finally {
       globals.window = previous

@@ -11,11 +11,14 @@ pnpm install
 pnpm test:watch     # 边改边跑
 ```
 
-提交前跑与 CI 完全相同的六个检查：
+提交前跑与 CI 完全相同的检查：
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
+pnpm typecheck && pnpm typecheck:tests && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
 ```
+
+CI 还多一步 commitlint 校验提交信息（见 `.github/workflows/ci.yml`）；本地由 husky 的
+`commit-msg` 钩子在提交时执行同一套规则，所以本地循环与 CI 的差别只在「什么时候跑」。
 
 `pnpm build` 产出 `lib/`，但**测试不读 `lib/`**：spec 直接 import `../src/*.js`，由 Vitest
 自己转译 TypeScript。因此改完 `src/` 不需要先构建就能看到测试结果，也不存在
@@ -69,8 +72,9 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
   一半」和「`feat` 没补 CHANGELOG」这类 `errors` 才会。断言这类行为时写清楚断言在哪一层。
 - **断言报错文本用 `t()` 而不是字面量。** 字典改动时测试会跟着动，而不是留下一条
   读不出意图的字符串比较。
-- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 85 个 key、扁平化后 86 个叶子路径
-  （`tests/i18n.spec.ts` 两个数字都断言了）。数 key 时想清楚数的是哪一层。
+- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 110 个 key、扁平化后 111 个叶子路径。
+  这个数字会随每条新文案变化，所以 `tests/i18n.spec.ts` 断言的是两边键集相等，而不是写死常量
+  ——写死的常量正是它和本文件对不上的原因。数 key 时想清楚数的是哪一层。
 
 ## 加一条新规则要动什么
 
@@ -113,25 +117,36 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 
 ## CI 会拦住什么
 
-`.github/workflows/ci.yml` 在 Node 20 上依次跑：`pnpm install --frozen-lockfile`、
-`typecheck`、`lint`、`format:check`、`test`、`build`、`ci:checks`。
+`.github/workflows/ci.yml` 在 Node 22 上依次跑：`pnpm install --frozen-lockfile`、
+`typecheck`、`typecheck:tests`、`lint`、对本次 PR 新增提交跑 `commitlint`、
+`format:check`、`test`、`build`、`ci:checks`。
+（单个 Node 版本而非矩阵：`engines.node` 声明的是代码所需的下限，CI 跑的是当前 LTS。）
 `main` 分支的保护规则要求 `verify` 这个检查通过、要求 PR、且禁止强制推送。
 
-`pnpm ci:checks`（`scripts/ci-checks.mjs`）跑三个不需要额外依赖的守卫：
+`pnpm ci:checks`（`scripts/ci-checks.mjs`）跑一组不需要额外依赖的守卫：
 
 1. **两份 locale 字典的 key 集合完全一致**（递归扁平化后比较，嵌套对象藏不住）。
 2. **`dsh.bundle.patch` 指向的文件存在，且写进了 `package.json` 的 `files`** —— 后者漏了
    的话补丁不会随包发布，而且没有任何报错，只表现为插件装上去不生效。
 3. **SKILL 两份语言的标题数量与层级顺序一致**（跳过围栏代码块：正文里的示例 PR 模板
    含 `##` 行，那是示例文本不是章节）。
+4. **没有文档按编号引用开发阶段**（中文「第 N 阶段」与英文 `Phase N` 都算）——阶段只定义在
+   `.dev-docs/PROGRESS.md` 里，那份文件不发布，所以读者无法解析这种引用。
+5. **发布出去的入口文件存在且被 `files` 覆盖**（`lib/index.js`、`lib/index.d.ts`、`client.js`、
+   两份字典、两份 SKILL、补丁文件）。缺 `lib/` 说明没先 `pnpm build`。
+6. **成对镜像文件同改**：改动落在 `docs.mirrors` 某一组的一半上就失败。这同时覆盖了不用 DSH
+   的贡献者——会话内的 `check_doc_sync` 对他们不生效。
+7. **版本三处对齐**：`package.json` 的版本在 `CHANGELOG.md` 里必须有对应标题。
 
 CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种语言里语义是否一致，是人工审查项。
 
 ## 已知的坑
 
-- **`tsconfig.json` 不覆盖 `tests/`。** `include` 只有 `src/**/*.ts`，所以 `pnpm typecheck`
-  检查的是发布出去的那部分源码；测试的类型问题由 ESLint 的 `**/*.ts` 规则和 Vitest 的转译
-  暴露。这是刻意的：测试不随包发布，不该被 `rootDir: src` 拉进构建。
+- **`tsconfig.json` 不覆盖 `tests/`，但有独立的 `tsconfig.test.json`。** `pnpm typecheck`
+  检查发布出去的源码；`pnpm typecheck:tests` 用第二份配置把 `tests/` 也检查一遍——它同样不随包
+  发布，所以不进构建的 `rootDir`，但类型错误应该在 CI 里现形，而不是等到某条断言以奇怪的方式失败。
+  `scripts/` 是 `.mjs`，由 ESLint 覆盖，不在这两份配置里。CI 与 `pnpm ci:checks` 之外，
+  `prepublishOnly` 也跑这两个 typecheck。
 - **`AGENTS.md` 只放稳定规则，不放进度。** 进度写 `.dev-docs/PROGRESS.md`（本机私有，
   已被 gitignore）。`AGENTS.md` 每次会话都会被注入，里面每条过期状态都是常驻成本。
 - **`docs/SECURITY.md` 里 git-guard 与 husky 的分工不要混。** 前者管 DSH 会话里的模型行为，

@@ -2,11 +2,13 @@ import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { CONFIG_FILES } from './config.js'
 import type { Config } from './config.js'
+import type { GitRunner } from './git.js'
 import type { Translate } from './i18n.js'
 import type { CheckResult } from './tools/result.js'
 import { checkCommitMessage } from './tools/check-commit-message.js'
 import { checkDocSync } from './tools/check-doc-sync.js'
-import { gitInvocations } from './shell.js'
+import { quoteCommandWords, shellWordIsLiteral, subcommandWords, wordInvocations } from './shell.js'
+import type { CommandWord } from './shell.js'
 
 // Inspection of one change, shared by the pre-commit trigger and the
 // `/dev-workflow check` command. The working tree is read once by the caller, so
@@ -19,6 +21,21 @@ export interface CommitCommand {
   readonly message?: string
   /** Path given to `-F`/`--file`, as written on the command line. */
   readonly file?: string
+  /**
+   * Whether the command amends the previous commit instead of creating one.
+   * Under `--amend` the message is whatever the editor or `-m` supplies, so a
+   * command that states none still has a message worth checking.
+   */
+  readonly amend?: boolean
+  /**
+   * A message the command names in a form this check cannot read.
+   *
+   * `git commit -m "$msg"`, `-F` with a file another part of the same command
+   * line writes, and `-F -` all land here. They are reported, not ignored: a
+   * check that could not read the message must not be mistaken for one that
+   * read it and approved.
+   */
+  readonly unreadable?: string
 }
 
 /** What one inspection covers. Omit a field to skip its rules. */
@@ -27,64 +44,88 @@ export interface EvaluationInput {
   readonly message?: string
   /** The repository-relative paths the change touches. */
   readonly files?: readonly string[]
+  /**
+   * Paths the branch already carries, when the caller knows them. A rule that
+   * asks "was this documented with the change?" is answered by the branch, not
+   * by whichever commit is being made now.
+   */
+  readonly branchFiles?: readonly string[]
+  /** Paths the working tree has changed outside this commit — see {@link DocSyncInput.worktreeFiles}. */
+  readonly worktreeFiles?: readonly string[]
+}
+
+/**
+ * Whether a command-line value is text the check can actually read.
+ *
+ * A command substitution has an unknown value by the time the check runs, and a
+ * parameter expansion names one rather than being one. Treating either as "no
+ * message readable" is better than checking a literal `$(...)` and blocking a
+ * commit over text git will never see — but it is also why the caller has to
+ * report *that* it could not read the value, rather than passing in silence.
+ *
+ * Quoting decides the rest. `'$(cat m)'` is a value the shell is about to expand
+ * and a check cannot know; the same text inside a single-quoted word is what git
+ * will record. {@link quoteCommandWords} keeps that distinction per word, and
+ * this is the one predicate the checks read it through.
+ * @param word - one word of a command line.
+ * @returns whether the word is literal text.
+ */
+export function isLiteral(word: CommandWord): boolean {
+  return shellWordIsLiteral(word)
 }
 
 /**
  * Read the message arguments of a `git commit`.
- * @param args - the words after `commit`.
+ * @param args - the words after `commit`, each saying how it was written.
  * @returns what the command line states, if anything.
  */
-function commitArguments(args: readonly string[]): CommitCommand {
+function commitArguments(args: readonly CommandWord[]): CommitCommand {
   const messages: string[] = []
   let file: string | undefined
-
-  // A command substitution has an unknown value by the time the check runs;
-  // treating it as "no message readable" is better than checking a literal
-  // `$(...)` and blocking a commit over text git will never see.
-  const literal = (value: string): boolean => !value.includes('$(') && !value.includes('`')
+  let amend = false
+  let unreadable: string | undefined
 
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index] ?? ''
-    const value = args[index + 1]
-    if (token === '-m' || token === '--message') {
-      if (value !== undefined) {
-        if (literal(value)) messages.push(value)
-        index += 1
+    const token = args[index]?.value ?? ''
+    const next = args[index + 1]
+    if (token === '--amend') amend = true
+    if (!token.startsWith('-') || token === '--' || token === '-') continue
+    // A long option names itself; a short cluster is read letter by letter, so
+    // `-am "msg"` and `-m "msg"` are the same command. The first letter that
+    // takes a value consumes the rest of the cluster, or the next word.
+    const letters = token.startsWith('--') ? [] : [...token.slice(1)]
+    const names = letters.length > 0 ? letters : [token]
+    for (let position = 0; position < names.length; position += 1) {
+      const name = names[position] ?? ''
+      const rest = letters.length > 0 ? token.slice(2 + position) : undefined
+      // A value inside the cluster is part of the option word, so the shell
+      // never saw it as a word of its own; it is literal text only if the word
+      // it was cut out of was — which it was not.
+      const inline: CommandWord | undefined =
+        rest !== undefined && rest.length > 0 ? { value: rest, literal: false } : next
+      if (name === 'm' || name === '--message') {
+        if (rest === undefined || rest.length === 0) index += 1
+        if (inline === undefined) break
+        if (isLiteral(inline)) messages.push(inline.value)
+        else unreadable = inline.value
+        break
       }
-      continue
-    }
-    if (token.startsWith('--message=')) {
-      const inline = token.slice('--message='.length)
-      if (literal(inline)) messages.push(inline)
-      continue
-    }
-    if (token.startsWith('-m') && token.length > 2) {
-      const inline = token.slice(2)
-      if (literal(inline)) messages.push(inline)
-      continue
-    }
-    if (token === '-F' || token === '--file') {
-      if (value !== undefined) {
-        if (literal(value)) file = value
-        index += 1
+      if (name === 'F' || name === '--file') {
+        if (rest === undefined || rest.length === 0) index += 1
+        // Kept even when the word is not literal text: the caller has to be able
+        // to say that a message was named but could not be read.
+        if (inline !== undefined) file = inline.value
+        break
       }
-      continue
-    }
-    if (token.startsWith('--file=')) {
-      const inline = token.slice('--file='.length)
-      if (literal(inline)) file = inline
-      continue
-    }
-    if (token.startsWith('-F') && token.length > 2) {
-      const inline = token.slice(2)
-      if (literal(inline)) file = inline
     }
   }
 
   // Git joins repeated `-m` bodies as separate paragraphs.
-  if (messages.length > 0) return { message: messages.join('\n\n') }
-  if (file !== undefined) return { file }
-  return {}
+  if (messages.length > 0) {
+    return { message: messages.join('\n\n'), ...(amend ? { amend } : {}) }
+  }
+  if (file !== undefined) return { file, ...(amend ? { amend } : {}) }
+  return { ...(amend ? { amend } : {}), ...(unreadable === undefined ? {} : { unreadable }) }
 }
 
 /**
@@ -93,30 +134,93 @@ function commitArguments(args: readonly string[]): CommitCommand {
  * @returns the commit when the command creates one, otherwise `undefined`.
  */
 export function detectCommit(command: string): CommitCommand | undefined {
-  for (const invocation of gitInvocations(command)) {
-    if (invocation.subcommand === 'commit') return commitArguments(invocation.args)
+  const words = quoteCommandWords(command)
+  for (const invocation of wordInvocations(words)) {
+    if (invocation.program !== 'git' && invocation.program !== 'git.exe') continue
+    const commit = subcommandWords(invocation.args)
+    if (commit === undefined || commit.subcommand !== 'commit') continue
+    return commitArguments(commit.args)
   }
   return undefined
 }
 
 /**
  * Resolve the message a command will commit with.
+ *
+ * The distinction between "no message to read" and "a message that cannot be
+ * read yet" is kept, because they are different answers: `git commit --amend`
+ * opens the editor, while `echo x > m && git commit -F m` writes the file later
+ * in the same command line, and a check that runs before the write must say it
+ * could not read the message rather than behaving as if there were none.
  * @param commit - what {@link detectCommit} found.
  * @param cwd - the working directory the command runs in.
- * @returns the message, or `undefined` when git will have to ask for one.
+ * @returns the message and whether an unreadable one was named.
  */
 export async function resolveCommitMessage(
   commit: CommitCommand,
   cwd: string,
-): Promise<string | undefined> {
-  if (commit.message !== undefined) return commit.message
-  if (commit.file === undefined || commit.file === '-') return undefined
+): Promise<{ readonly message?: string; readonly unreadable?: string }> {
+  if (commit.message !== undefined) return { message: commit.message }
+  if (commit.unreadable !== undefined) return { unreadable: commit.unreadable }
+  if (commit.file === undefined) return {}
+  if (commit.file === '-') return { unreadable: '-' }
   const path = isAbsolute(commit.file) ? commit.file : join(cwd, commit.file)
   try {
-    return await readFile(path, 'utf8')
+    return { message: await readFile(path, 'utf8') }
   } catch {
-    return undefined
+    return { unreadable: commit.file }
   }
+}
+
+/**
+ * Read the message of the commit `--amend` would rewrite.
+ *
+ * Amending is the moment the message is most likely to be rewritten with a
+ * hand-typed summary, and the command line names no message at all: without
+ * this, repairing a message would be the one path the message rules never see.
+ * @param run - a git runner bound to the working directory.
+ * @param signal - cancellation for the read.
+ * @returns the message git would open in the editor, or `undefined`.
+ */
+export async function amendedMessage(
+  run: GitRunner,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const result = await run.run(['log', '-1', '--format=%B'], signal)
+  if (!result.ok) return undefined
+  const message = result.stdout.trim()
+  return message.length === 0 ? undefined : message
+}
+
+/**
+ * Judge one message against the commit-message rules, applying the gate's own
+ * policy.
+ *
+ * `commitCheck.enabled` and `commitCheck.onFailure` belong to the rule, not to
+ * the entry point that happens to run it: a pull request title is the commit
+ * message under squash merge, so a repository that turned the check off or
+ * downgraded it to a warning did so for that text too.
+ * @param message - the message to judge.
+ * @param files - the change the message describes, when known.
+ * @param config - resolved plugin configuration.
+ * @param t - translator for every returned line.
+ * @returns blocking problems and advisory observations.
+ */
+export function evaluateMessage(
+  message: string,
+  files: readonly string[] | undefined,
+  config: Config,
+  t: Translate,
+): CheckResult {
+  if (!config.commitCheck.enabled.get()) return { ok: true, errors: [], warnings: [] }
+  const check = checkCommitMessage(
+    { message, ...(files === undefined ? {} : { files }) },
+    config,
+    t,
+  )
+  return config.commitCheck.onFailure.get() === 'warn'
+    ? { ok: true, errors: [], warnings: [...check.errors, ...check.warnings] }
+    : { ok: check.errors.length === 0, errors: check.errors, warnings: check.warnings }
 }
 
 /**
@@ -131,7 +235,14 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
   const warnings: string[] = []
 
   if (input.files !== undefined && config.docsCheck.enabled.get()) {
-    const docs = checkDocSync({ files: input.files }, config, t)
+    const docs = checkDocSync(
+      {
+        files: input.files,
+        ...(input.worktreeFiles === undefined ? {} : { worktreeFiles: input.worktreeFiles }),
+      },
+      config,
+      t,
+    )
     errors.push(...docs.errors)
     warnings.push(...docs.warnings)
 
@@ -148,11 +259,13 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
 
     const type = input.message === undefined ? undefined : /^([a-z]+)/.exec(input.message)?.[1]
     const changelog = config.docs.changelog.get()
-    if (
-      config.rules.requireChangelogOnFeat.get() &&
-      type === 'feat' &&
-      !input.files.includes(changelog)
-    ) {
+    // "Carried by this change" is satisfied by the change under review or by an
+    // earlier commit on the branch. A feature built over several commits updates
+    // the changelog once, and the rule is about the branch, not the commit that
+    // happens to be the last one.
+    const carriesChangelog =
+      input.files.includes(changelog) || (input.branchFiles ?? []).includes(changelog)
+    if (config.rules.requireChangelogOnFeat.get() && type === 'feat' && !carriesChangelog) {
       // The documentation check already says this softly. The repository rule
       // makes it blocking for a feature, so the advisory line is replaced
       // rather than repeated.
@@ -163,18 +276,10 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
     }
   }
 
-  if (input.message !== undefined && config.commitCheck.enabled.get()) {
-    const commit = checkCommitMessage(
-      { message: input.message, ...(input.files === undefined ? {} : { files: input.files }) },
-      config,
-      t,
-    )
-    warnings.push(...commit.warnings)
-    // `onFailure` is the gate's policy, not the check's: a hard problem is
-    // reported either way, and only here does the setting decide whether it
-    // stops the commit or merely warns about it.
-    if (config.commitCheck.onFailure.get() === 'warn') warnings.push(...commit.errors)
-    else errors.push(...commit.errors)
+  if (input.message !== undefined) {
+    const judged = evaluateMessage(input.message, input.files, config, t)
+    errors.push(...judged.errors)
+    warnings.push(...judged.warnings)
   }
 
   return { ok: errors.length === 0, errors, warnings }

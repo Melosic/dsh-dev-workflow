@@ -125,16 +125,24 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 ## secret-guard 保护什么
 
 扫描**每一次**工具调用的全部参数（不只是 shell 命令）：把凭据写进源码文件与敲进命令行
-一样是泄漏。识别四种有固定形状的凭据：
+一样是泄漏。识别九种有固定形状的凭据：
 
 | 模式 | 例子形状 |
 | --- | --- |
 | AWS access key | `AKIA` + 16 位大写字母数字 |
 | GitHub token | `ghp_` / `gho_` / `ghs_` / `ghr_` + 16 位以上 |
+| GitHub fine-grained token | `github_pat_` + 20 位以上 |
 | Slack token | `xoxb-` / `xoxp-` / `xoxa-` / `xoxr-` / `xoxs-` |
+| npm token | `npm_` + 36 位字母数字 |
+| GitLab token | `glpat-` + 20 位以上 |
+| JWT | `eyJ` 开头的三段 base64url |
+| Bearer token | `Authorization: Bearer` 后跟 20 位以上不透明值 |
 | 私钥头 | `-----BEGIN … PRIVATE KEY-----` |
 
-第五类「无前缀的高熵字符串」（`secretGuard.genericHighEntropy`）**默认关闭**：它是唯一
+前缀库只覆盖**有固定形状**的凭据：没有前缀、也没有注册表发行格式的通用密钥仍然识别
+不了，需要时打开下面那条高熵规则。
+
+第十类「无前缀的高熵字符串」（`secretGuard.genericHighEntropy`）**默认关闭**：它是唯一
 会拦下普通文本的规则，误报代价高，需要的人自己打开。
 
 **档位固定为 `deny`，不可配置。** git 与命令守卫拦的是**能重做**的工作，所以给一个

@@ -1,5 +1,5 @@
-import en from '../locale/en.json'
-import zh from '../locale/zh.json'
+import en from '../locale/en.json' with { type: 'json' }
+import zh from '../locale/zh.json' with { type: 'json' }
 import { describe, expect, it } from 'vitest'
 import { createTranslator, resolveLocale } from '../src/i18n.js'
 
@@ -70,14 +70,17 @@ describe('src/i18n.ts', () => {
     expect(sameSet(new Set(Object.keys(en)), new Set(Object.keys(zh)))).toBe(true)
     expect(new Set(Object.keys(en))).toEqual(new Set(Object.keys(zh)))
     expect([...new Set(Object.keys(en))].sort()).toEqual([...new Set(Object.keys(zh))].sort())
-    expect(new Set(Object.keys(en)).size).toBe(89)
+    // The floor exists to catch a dictionary that loaded empty; the exact size is
+    // not asserted anywhere, because a hand-written constant is what made
+    // `docs/DEVELOPMENT.md` disagree with this file for two releases.
+    expect(new Set(Object.keys(en)).size).toBeGreaterThan(40)
   })
 
   it('ships the same leaf paths in both dictionaries, nesting included', () => {
     // Top-level keys alone would not notice `meta.title` disappearing from one
     // side, because `meta` would still be there on both.
     expect(keyPaths(en).sort()).toEqual(keyPaths(zh).sort())
-    expect(keyPaths(en)).toHaveLength(90)
+    expect(keyPaths(en).length).toBeGreaterThan(new Set(Object.keys(en)).size)
   })
 
   it('carries the same placeholders in both languages', () => {

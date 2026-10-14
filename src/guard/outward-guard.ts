@@ -2,6 +2,8 @@ import type { Config } from '../config.js'
 import { commandOf, gitInvocations } from '../shell.js'
 import { detectPullRequest } from '../triggers/pre-pr.js'
 import { detectRelease } from '../triggers/pre-release.js'
+import { createGuardApprover } from './approval.js'
+import type { ApprovalService } from './approval.js'
 import { createGuard, hasShortOption, strictest } from './shared.js'
 import type { GuardHit, GuardOptions } from './shared.js'
 
@@ -24,11 +26,18 @@ import type { GuardHit, GuardOptions } from './shared.js'
 // the user says yes, and the push goes through untouched.
 //
 // What this guard cannot see is the same limit the triggers have: it reads the
-// command line, so a `git push` wrapped in a quoted shell (`sh -c "git push"`)
-// is invisible to it.
+// command line, so a `git push` wrapped in a quoting this lexer cannot read is
+// invisible to it — a boundary SECURITY.md states rather than a claim it makes.
 
-/** What this guard needs: the same shape as every other guard's. */
-export type OutwardGuardOptions = GuardOptions
+/**
+ * What this guard needs. Same shape as every other guard's, plus the approval
+ * seam it asks through when `gitGuard.rememberApproved` is on: a session that
+ * has already consented to publishing this branch is not asked again for the
+ * same push, tag or publish.
+ */
+export type OutwardGuardOptions = Omit<GuardOptions, 'approval'> & {
+  readonly approval?: () => ApprovalService | undefined
+}
 
 /**
  * Find the outward-facing action in one shell command.
@@ -75,6 +84,15 @@ export function createOutwardGuard(options: OutwardGuardOptions): ReturnType<typ
   return createGuard({
     ...options,
     label: 'outward guard',
+    // The policy switch lives in `gitGuard`, beside the git guard's own memory.
+    // A push the user has already approved in this session is the same push the
+    // next turn is about to make: asking again is how a prompt teaches its
+    // reader to approve without reading.
+    approver: createGuardApprover({
+      approval: options.approval ?? (() => undefined),
+      state: options.state,
+      remembers: () => options.config().gitGuard.rememberApproved.get(),
+    }),
     detect: (exec) => {
       const command = commandOf(exec.arguments)
       return command === undefined ? undefined : detectOutward(command, options.config())

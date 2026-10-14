@@ -23,6 +23,157 @@
   这条只影响应用内那条路：`dsh plugin --profile <profile> add …` 转发给 pnpm 10.30.3，
   不受影响，README 的安装命令无需改动。
 
+- **`releaseCheck`：发版检查的四条规则各自可关。** 此前规则全硬编码，想放宽一条只能
+  `enableOwnTrigger=false` 整关。现在 `releaseCheck.semver`（版本号须是 SemVer）、
+  `changelog`（须有 `[Unreleased]` 段）、`changelogCategories`（`###` 标题须是
+  Keep a Changelog 的六类）、`prereleaseTag`（预发布版本不得推 `latest`）四项默认全开、
+  各自可关；`releaseCheck.versionPattern` 是**文件级**正则，用来放宽或收紧版本号格式，
+  默认即 `SEMVER_PATTERN`。默认值与原行为逐字相同。
+- **`gitGuard.checkoutDiscard`：丢弃工作区改动的档位。** `git checkout -- <path>`、
+  `git checkout .`、`git restore <path>`、`git restore .` 会丢掉未提交的改动，此前
+  完全没有守卫——现代写法 `restore` 与 `checkout .` 形态都拦不住。默认 `ask`；
+  `git checkout main`（切分支）、`git restore --staged`（只动索引）不命中。
+- **密钥前缀库由四种扩到九种。** 新增 npm token、GitLab token、GitHub fine-grained
+  token、JWT、`Authorization` 头里的 Bearer 值。此前这些只在
+  `secretGuard.genericHighEntropy`（默认关）打开时才可能被拦。判定顺序「先具体后泛化」：
+  一个 Slack token 出现在 Bearer 头里仍然报 `Slack token`。`docs/SECURITY.md` 的模式表
+  与面板文案同步更新。
+- **面板标注「尚未生效」的配置。** `docs.adrDir`、`rules.branchPattern`、
+  `rules.commitPattern` 三项在 `src/` 中从未被读取，现在在高级区带一枚 `action.inactive`
+  徽章，与「只读」区分开——只读是「能改但不在面板改」，这两者不是一回事。
+- **`tsconfig.test.json` + `pnpm typecheck:tests`：`tests/` 与 `scripts/` 终于参与类型检查。**
+  此前 `tsconfig.json` 的 `include` 只有 `src/**/*.ts`，测试目录从不被检查；CI 增加
+  `Typecheck tests` 步骤，`prepublishOnly` 也串上。Node 版本由 20 提到 22（20 已于
+  2026 年 4 月 EOL，`engines.node` 仍写 `>=20` 作为下限）。
+- **`pnpm ci:checks` 由五项守卫增至七项**：新增镜像对成对变更（`README.md`/`README.zh.md`、
+  `locale/en.json`/`zh.json`、`SKILL.md`/`SKILL.zh.md`）与版本三处对齐（`package.json`
+  的版本在 `CHANGELOG.md` 里必须有对应标题）；发布入口检查内补上源码映射链路
+  （构建产出 `.map` 时 `files` 必须包含 `src/`，否则消费端调试断链）。
+  面板词典的占位符对齐另由 `tests/settings-schema.spec.ts` 断言，不在 `ci:checks` 里。
+
+### Fixed
+
+- **触发器不再被守卫的询问吞掉。** 瀑布由外向内、`allow` 之外一律透传，而触发器注册在
+  外层、守卫在内层：默认档下 `gh pr create` 先被 `outwardGuard` 以 `ask` 拦下，PR 标题与
+  描述的三段检查、发版的版本号与 CHANGELOG 检查**一行都不评估**，`state.record` 也不发生；
+  用户批准那次泛泛的确认后命令直接执行。`git commit --amend` 同理吞掉提交信息检查。
+  现在触发器即使下游是 `ask` 也先完成评估（`detect` 已命中，评估是纯函数加一次文件读），
+  把发现合并进那道询问的 `reason` 与 `displayReason.en`/`zh`，`state.record` 照常写入。
+  `docs/TRIGGERS.md` 里「顺序不影响最终结果」的说法已改正。
+- **触发器「先记后问」改为「真问过才记」。** 指纹此前在提问之前写入，用户点「拒绝」后
+  agent 重跑同一条命令，见 `seen` 直接放行——一次否决被降级成一次提醒；`never` 策略下
+  连插件自己的拒绝也被记入。现在复用审批 seam：只有自己的提问真的弹出来了才 `remember`，
+  别的 gate 即将提问时改写那道提问而不是放弃检查。
+- **`/dev-workflow off` 的三处状态机缺陷。** (a) `off` 把命令自己也注销，回显不告知恢复
+  方式，随后 `/dev-workflow on` 是「未知命令」；现在 `off` 保留命令自身注册并写明恢复
+  方式。(b) `setActive(false)` 把 `registered` 清成 `''`，而 `'' !== registrationSignature()`
+  恒成立——任何一次 loader / `volatile-update`（哪怕只是改 locale）都会把手动关掉的插件
+  重新激活；现在用 `manualOff` 标志记住手动关闭，只有 mode 或自身签名真的变化才激活。
+  (c) `status` 区分「运行期 off（未落盘）」与「配置里 off」，不再与面板显示矛盾。
+- **`git commit -am "..."` 不再让提交信息检查静默失效。** `commitArguments` 只认
+  `-m` / `-mXXX` / `--message=` / `-F`，而 `'-am'.startsWith('-m')` 为假 → 消息为
+  `undefined` → 类型、破坏性变更与 `changelogOnFeat` 全部跳过，结论直接是 `ok`，连
+  「这次没检」都不说。现在短选项簇逐字母解析（`-am`、`-avm`、`-qm` 都认得，取值选项
+  吃掉簇剩余部分或下一个词）。
+- **文档同步改为按「本次提交」判定，而不是整个工作区。** 此前用
+  `git status --porcelain --untracked-files=all`：README 只改一半挂在工作区时，任何无关
+  提交都被镜像 error 拦下（成对文件分两次提交，第二次必报错）；一条未暂存的 CHANGELOG
+  改动就能满足 `requireChangelogOnFeat`（规则被静默架空）；与本次提交无关的脏文件会让
+  纯文档提交判失败。现在提交路径用 `git diff --cached --name-only` 判定，工作区状态只留给
+  `/dev-workflow check`；镜像对另一半「已暂存或已在分支」时降为 warning；CHANGELOG 由
+  「本次提交含它」或「分支 diff 含它」满足。顺带去掉大仓库每次提交跑
+  `--untracked-files=all` 的开销。
+- **shell 词法层的六种静默绕过。** 编译产物实测曾全部放行：`sudo -u root git push --force`、
+  `sh -c "git push --force origin main"`、`sh -c "rm -rf /"`、`echo $(git push --force …)`、
+  反引号里的 `git reset --hard`、`find / -exec rm -rf {} +`。现在：`$(...)` 与反引号递归
+  切进 token 流（带深度上限）；`sh`/`bash`/`zsh`/`dash`/`ksh`/`ash` 视为透明并把 `-c`
+  的参数再解析一遍；`skipWrappers` 跳过取值选项（`-u`/`-g`/`--user=` 等）与其取值；
+  `find -exec`/`xargs` 交给 rm 一类破坏性程序时按「目标集合是否由作者限定」判定——
+  根目录或家目录为起点一律命中，谓词把集合收窄到作者选定的名字则放行。
+- **Windows 上敏感文件守卫对 shell 读取全部失效。** `\` 被无条件当作转义符，
+  `tokenize('type C:\Users\x\.env')` 得到一个不存在的路径，规则匹配失败放行；同一个文件
+  经工具的 `file_path`（原始字符串）却被拒——两条路径行为相反。现在反斜杠只在转义表内
+  的字符前才是转义符，否则保留原样。
+- **`grep`/`glob` 的搜索模式不再被当成路径。** `PATH_FIELDS.grep` 此前含 `pattern` 与
+  `include`，于是 `grep pattern=".env"`、`glob pattern="**/*.pem"` 一律 deny，
+  「查 `.env` 有没有入库」这个本插件鼓励的工作流反而被硬拒，且 deny 不可配置、无逐条例外。
+  现在搜索正则不参与路径匹配，只用 `path` / `include`；`file-guard` 也复用 `programWords`
+  剥掉包装词，`sudo cat .env` 不再绕过。
+- **命令守卫的目标判定。** `slice(0,-1)` 差一导致 `//` 条目永不可达，`rm -rf ~/*`、
+  `rm -rf $HOME/*`、`rm -rf //`、`rm -r /etc` 全部放行，而 `rm -rf ~` 被拦——同一组目标
+  一半拦一半漏。现在归一并修正切片；递归删除根级或家目录目标不再要求 `-f` 同时出现
+  （`rm -r /etc` 也命中）。
+- **git 守卫的漏报。** `git restore .`、`git restore --staged`、`git checkout .` 完全无守卫；
+  `git push --mirror`（隐含 `--force` 与 `--delete`）只命中 `outward_push`，一旦放宽对外
+  推送档位就连带绕过强推与删分支；`yarn publish` / `bun publish` 无任何守卫。现在补齐
+  `restore`/`checkout` 形态、`--mirror` 归入 `forcePush`、包管理器扩到 yarn 与 bun。
+- **默认档的提示疲劳，以及记忆开关只护 git 守卫。** 每次 `rebase` 都问，连
+  `--continue`/`--abort`/`--skip`（冲突恢复与安全回退）也问；每次 `amend` 都问；对外
+  的 push/tag/PR/publish 每次重新点头（`approver` 只注入 git 守卫）。现在豁免冲突恢复
+  标志，并把会话内记忆接到对外守卫（`gitGuard.rememberApproved` 一处开关同时管两处）。
+- **pre-pr 的三个缺口。** `gh pr create --fill`（或交互式无 `-t`/`-b`）此前得到
+  `input={}`，规则全跳过却照样写 `state.record({kind:'pr',ok:true})`——squash 工作流下
+  PR 标题就是最终 commit message；现在至少给一条「标题将由提交信息填充，无法校验」的
+  warning 并记录。`-b "$(cat pr.md)"` 这类字面量此前不做字面量放弃判定，误报「缺
+  What/Why/How to verify」并反复拦截；现在复用 `literal()`。PR 标题检查此前无视
+  `commitCheck.enabled`/`onFailure`，同一套规则三个入口行为不一致；现在读同一份配置。
+- **pre-release 的识别盲区与误报。** `git tag v$(cat VERSION)` 被判「不是语义化版本号」；
+  `## v1.0.0 - date` 这种常见风格因捕获名带 `v` 而永远判「没有 1.0.0 条目」、每次打 tag
+  必被硬拦；`npm version patch` 一条命令完成 bump+commit+tag，三层门禁全不触发；
+  `pnpm --filter pkg publish` 虽然识别，版本却核对会话 cwd 的 `package.json` 而非被发布的包。
+  现在 tag 名走 `literal()`、`## v1.0.0` 与 `[v1.0.0]` 归一化查表、识别 `npm version`、
+  `--filter` 的包路径参与读取，并在 `docs/TRIGGERS.md` 补上「我们看不见什么」清单。
+- **提交信息解析的另外三处盲区。** PowerShell 裸变量 `git commit -m $msg` 不被 `literal()`
+  识别（只挡 `$(` 与反引号）→ 误报 `missing_type`；`echo … > m && git commit -F m` 的检测
+  发生在执行前，文件尚不存在就静默跳过；`git commit --amend` 走编辑器、读不到消息时不校验
+  ——而「用 amend 修消息」恰是最该检查的路径，现在这种情况下读一次
+  `git log -1 --format=%B`。
+- **审计：记录最终决策、可关联的 callId、写失败不再静默。** 此前 `action` 记的是配置档位
+  而非实际决策（被拒、被批、自动放行无痕），也没有 `callId`，多守卫的记录无法关联；写盘
+  失败只走 debug 日志，磁盘满或权限错误时审计静默断档。现在 `decision` 与 `callId` 各自
+  成字段，写失败计数并在首次失败时上报；敏感路径的脱敏改为子串级，`cat /repo/.env && …`
+  这类参数不再把目录原样落盘。
+- **命中计数不再漏掉 `allow` 档。** `action === 'allow'` 提前 return，用户放宽某档后
+  状态归零、审计对该操作无痕，与「命中先计数」的口径矛盾。现在每一档都计数与审计，用
+  `action` 字段区分；同一次调用命中多条规则时全部计数，只有决策取最严。
+- **无 git 或非仓库时的降级不再静默。** 提交前检查失败即 `files=undefined`，只剩提交
+  信息规则在跑，用户看到的是「检查都过了」；同一个能力在 `check_doc_sync` 工具里却明确报
+  `error.not_a_git_repository` / `error.git_not_available`。现在降级事实作为 warning 进入
+  触发器结论。
+- **locale 切换后工具与命令描述停在旧语言。** 工具描述与命令描述是注册时求值成字符串的，
+  而 `resync` 只刷新 locale、locale 又不在注册签名里；面板改 locale 后技能目录立刻变新
+  语言，每轮都可见的工具描述却不变。现在 locale 参与注册签名并触发重建——顺带修掉
+  「重建时只重注册工具、不重注册命令」的次生问题。
+- **同一发现在两个出口的渲染顺序相反。** 触发器侧 errors 在前，工具侧 warnings 在前
+  且被测试固化，现在统一为 errors 在前。
+- **`matchesPattern` 的前锚与重复分支。** 第二分支缺 `(^|/)` 前锚，`config/secrets` 会命中
+  `myconfig/secrets`；该分支与第一分支重复，已删。
+- **审批指纹对参数键序敏感。** 同一次 push 换个参数顺序就要重新弹问；现在序列化前递归
+  排序对象键。
+
+### Changed
+
+- `docs/TRIGGERS.md` 纠正「顺序不影响最终结果」，补「我们看不见什么」清单与 `-F` 的
+  同命令时序说明。
+- `docs/SECURITY.md` 的凭据模式表由四种扩到九种，并写明前缀库只覆盖有固定形状的凭据；
+  `sh -c` 的已知边界升级为运行时可见的说明。
+- `docs/CONFIGURATION.md` 记录能力缺口（密钥与敏感文件无逐条例外、命令守卫单一档位、
+  git 与对外守卫无 remote/branch 白名单），而不是当成漏掉的配置项；补 `releaseCheck`
+  与 `checkoutDiscard`。
+- `docs/DEVELOPMENT.md` 的数字与流程改为与测试断言一致（i18n 键数、守卫数量、CI 步骤）；
+  `docs/I18N.md` 写明描述类文本在注册时求值这一边界，并同步 `ci:checks` 的实际输出样例；
+  `docs/PUBLISHING.md` 的守卫条数由五项改为七项（新增镜像对与版本对齐两项的说明）；
+  `CONTRIBUTING.md` 的环境要求写明 CI 跑的是当前 LTS 而非 `engines.node` 的下限。
+- `skills/dsh-dev-workflow/SKILL.md` 与 `SKILL.zh.md` 明确「没有任何触发器监视建分支动作」，
+  不再让模型的预期建立在插件的宣称上。
+- 新增 `tests/chain.spec.ts`：第一批「触发器与五道守卫同链」的集成用例。此前的触发器测试
+  全部以单独 listener + `next()=allow` 驱动，因此上面若干条高危（检查被询问吞掉、`-am`
+  静默失效、镜像半脏阻塞无关提交）在单测视角下永远发现不了。
+- 新增 `tests/commands.spec.ts`：`/dev-workflow` 此前零行为测试，而 README 让用户用它验证；
+  覆盖「off 后仍可 on」「手动 off 穿过一次无关设置写入」「运行期 off 与配置 off 的区分」。
+- 新增 `tests/shell.spec.ts`：词法层此前无独立单测，288 个用例只覆盖实现「恰好能处理」的
+  形态，也正是六种绕过长期存在的原因。
+
 ## [0.2.0] - 2026-10-06
 
 ### Added

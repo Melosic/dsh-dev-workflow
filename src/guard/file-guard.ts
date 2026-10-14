@@ -1,5 +1,5 @@
 import type { Config } from '../config.js'
-import { commandOf, segments, tokenize } from '../shell.js'
+import { commandOf, programWords, segments, tokenize } from '../shell.js'
 import { createGuard } from './shared.js'
 import type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 
@@ -37,6 +37,11 @@ const SAMPLE_VARIANTS = new Set(['example', 'sample', 'template', 'dist', 'defau
  * Argument fields that name a path, per tool. Keyed by tool name so that an
  * ordinary string argument — a commit message that happens to mention `.env` —
  * is never mistaken for a path.
+ *
+ * `grep.pattern` is deliberately absent: it is a search expression, not a path,
+ * and matching it against `noRead` would refuse `grep -rn "credentials" .` —
+ * exactly the check that tells you whether a secret is in the tree. The files a
+ * search reads are named by `path` and `include`.
  */
 const PATH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   read: ['file_path'],
@@ -44,7 +49,7 @@ const PATH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   edit: ['file_path'],
   write: ['file_path'],
   glob: ['pattern', 'path'],
-  grep: ['pattern', 'path', 'include'],
+  grep: ['path', 'include'],
 }
 
 /** Programs whose job is to print a file, so their path arguments are reads. */
@@ -93,14 +98,11 @@ export function matchesPattern(path: string, pattern: string): boolean {
     return expression.test(value)
   }
 
+  // `(^|/)` on both ends is what keeps a pattern with a slash inside a path
+  // component: `config/secrets` covers `app/config/secrets` and does not cover
+  // `myconfig/secrets`.
   const expression = new RegExp(`(^|/)${escape(glob).replace(/\*/g, '[^/]*')}$`)
   if (expression.test(value)) return true
-
-  // A pattern that names a path also matches at any depth: the caller may have
-  // written the absolute form of the same file.
-  if (glob.includes('/')) {
-    return new RegExp(`${escape(glob).replace(/\*/g, '[^/]*')}$`).test(value)
-  }
 
   const base = value.split('/').pop() ?? value
   if (new RegExp(`^${escape(glob).replace(/\*/g, '[^/]*')}$`).test(base)) return true
@@ -154,16 +156,23 @@ function argumentPaths(name: string, args: unknown): string[] {
  *
  * Only the words of a known reader are considered, so a command that merely
  * mentions the name of a sensitive file in an unrelated argument is not a hit.
+ * An argument this cannot split is left out: `grep -rn "credentials and keys" .`
+ * names a search expression rather than a file, and reading it as a path would
+ * refuse the very search that shows whether a secret is in the tree. The
+ * dangerous spellings this gives up are the ones SECURITY.md already lists.
  * @param command - the command line.
  * @returns the candidate paths.
  */
 function commandPaths(command: string): string[] {
   const found: string[] = []
   for (const segment of segments(tokenize(command))) {
-    const program = segment[0]
+    // `sudo cat .env` reads the same file as `cat .env`; the wrapper is dropped
+    // here for the same reason the other guards drop it.
+    const words = programWords(segment)
+    const program = words[0]
     if (program === undefined) continue
     if (!READERS.has((program.split(/[\\/]/).pop() ?? program).toLowerCase())) continue
-    found.push(...segment.slice(1).filter((word) => !word.startsWith('-')))
+    found.push(...words.slice(1).filter((word) => !word.startsWith('-') && /^\S+$/.test(word)))
   }
   return found
 }

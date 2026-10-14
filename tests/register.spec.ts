@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import * as plugin from '../src/index.js'
 import { Config } from '../src/config.js'
+import { createTranslator } from '../src/i18n.js'
 import { createHarness } from './harness.js'
 
 // The cordis contract: what the loader sees, and what `apply` hands to the
 // registries. Everything here is a shape assertion — the behaviour of what gets
 // registered is covered by the other specs.
+
+/**
+ * Write one configuration leaf the way the panel's loader does: the volatile
+ * references are what the settings controller commits into.
+ * @param leaf - the volatile reference to change.
+ * @param value - the value to commit.
+ */
+function commitLeaf(leaf: unknown, value: unknown): void {
+  ;(leaf as Record<symbol, (next: unknown) => void>)[Symbol.for('cosmokit.volatile.write')]!(value)
+}
 
 describe('src/index.ts', () => {
   it('exposes the plugin as named exports, with no default export', () => {
@@ -109,7 +120,6 @@ describe('src/index.ts', () => {
     const harness = createHarness()
     plugin.apply(harness.ctx, Config({}))
     const [commit, docs] = harness.tools
-
     expect(commit?.parameters.type).toBe('object')
     expect(Object.keys(commit?.parameters.properties ?? {}).sort()).toEqual(['files', 'message'])
     expect(commit?.parameters.required ?? []).toContain('message')
@@ -198,7 +208,9 @@ describe('createRuntime', () => {
     const harness = createHarness()
     const runtime = plugin.createRuntime(harness.ctx, Config({ locale: 'zh-CN' }))
     expect(runtime.locale()).toBe('zh-CN')
-    expect(runtime.t()('command.toggle.hint')).toBe('on | off | status | check')
+    expect(runtime.t()('command.toggle.hint')).toBe(
+      'on | off | status | check [--message "type: subject"]',
+    )
   })
 
   it('reuses one git runner per working directory', () => {
@@ -206,5 +218,27 @@ describe('createRuntime', () => {
     const runtime = plugin.createRuntime(harness.ctx, Config({}))
     expect(runtime.git('C:/repo')).toBe(runtime.git('C:/repo'))
     expect(runtime.git('C:/repo')).not.toBe(runtime.git('C:/other'))
+  })
+
+  // A tool's `description` and a command's `description`/`hint` are strings the
+  // registry reads once, when the registration is built. A locale change through
+  // the panel therefore has to rebuild the registrations, or the tool list keeps
+  // the language it was registered in while the skill catalog line moves.
+  it('rebuilds the registrations when the locale changes', () => {
+    const harness = createHarness({ commands: true })
+    const config = Config({ locale: 'en-US' })
+    plugin.createRuntime(harness.ctx, config)
+    const before = harness.tools[0]?.description
+
+    commitLeaf(config.locale, 'zh-CN')
+    for (const listener of harness.volatile) listener()
+
+    const after = harness.tools[0]?.description
+    expect(after).not.toBe(before)
+    expect(after).toBe(createTranslator('zh-CN')('tool.check_commit_message.description'))
+    // The command survives the rebuild: it is the only way back from `off`, so a
+    // locale change must not leave the user without it.
+    expect(harness.commands).toHaveLength(1)
+    expect(harness.commands[0]?.input?.hint).toBe(createTranslator('zh-CN')('command.toggle.hint'))
   })
 })

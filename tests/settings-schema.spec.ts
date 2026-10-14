@@ -44,6 +44,10 @@ const REQUIRED = [
   'docsCheck.enabled',
   'rules.requireChangelogOnFeat',
   'docsCheck.requireReadmeOnConfig',
+  'releaseCheck.semver',
+  'releaseCheck.changelog',
+  'releaseCheck.changelogCategories',
+  'releaseCheck.prereleaseTag',
   'gitGuard.enabled',
   'gitGuard.forcePush',
   'gitGuard.hardReset',
@@ -76,6 +80,7 @@ const READONLY = [
   'docs.exclude',
   'rules.branchPattern',
   'rules.commitPattern',
+  'releaseCheck.versionPattern',
   'docs.mirrors',
   'audit.path',
 ]
@@ -101,12 +106,16 @@ describe('client.js schema agreement', () => {
 
   it('controls only leaves the host declares volatile', () => {
     const volatile = new Set(volatilePaths(Config).map(keyOf))
+    // The pattern fields are shown for reference rather than edited: a regular
+    // expression is a configuration-file setting, like the branch and commit
+    // patterns beside it, so the panel renders them without committing a value.
+    const readonly = new Set(READONLY)
     const controlled = [
       ...description.fields.map((field) => keyOf(field.path)),
       ...description.advanced.map((entry) => keyOf(entry.path)),
     ]
 
-    expect(controlled.filter((path) => !volatile.has(path))).toEqual([])
+    expect(controlled.filter((path) => !volatile.has(path) && !readonly.has(path))).toEqual([])
   })
 
   it('covers every volatile leaf except the file-only ones', () => {
@@ -203,10 +212,37 @@ describe('client.js schema agreement', () => {
     }
   })
 
+  it('marks exactly the unwired advanced fields as not in effect', () => {
+    // A read-only row is a claim that the value is real; a row nothing reads is
+    // a claim the panel would otherwise make by omission. The documentation
+    // names the same three fields, so this list is the pairing.
+    const unwired = ['docs.adrDir', 'rules.branchPattern', 'rules.commitPattern']
+    const marked = description.advanced
+      .filter((entry) => entry.inactive === true)
+      .map((entry) => keyOf(entry.path))
+
+    expect(marked.toSorted()).toEqual(unwired.toSorted())
+    expect(description.advanced.length).toBeGreaterThan(marked.length)
+  })
+
   it('ships both locales with the same keys', () => {
     expect(Object.keys(description.dictionaries.zh).toSorted()).toEqual(
       Object.keys(description.dictionaries.en).toSorted(),
     )
     expect(Object.keys(description.dictionaries.en).length).toBeGreaterThan(40)
+  })
+
+  it('carries the same placeholders in both panel languages', () => {
+    // The panel dictionary is a second translation surface with its own file
+    // conventions, so it gets the same check the locale dictionaries get: a
+    // translation that drops `{path}` renders a sentence with the value missing,
+    // and a matching key set would not notice.
+    const placeholders = (template: string): string[] =>
+      (template.match(/\{(\w+)\}/g) ?? []).map((match) => match.slice(1, -1)).sort()
+    for (const [key, template] of Object.entries(description.dictionaries.en)) {
+      expect(placeholders(description.dictionaries.zh[key] ?? ''), key).toEqual(
+        placeholders(template),
+      )
+    }
   })
 })

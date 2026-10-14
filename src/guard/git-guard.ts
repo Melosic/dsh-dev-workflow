@@ -38,8 +38,13 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
   // `--force-with-lease` on its own needs no special case here: it matches none
   // of the words below, so it stays an ordinary push. It must not short-circuit,
   // because plain `--force` overrides the lease and clobbers the remote anyway.
+  //
+  // `--mirror` is the same act by another name: it makes the remote match the
+  // local refs exactly, which deletes every ref the local repository does not
+  // have. Requiring the word `--force` would leave that spelling unguarded.
   const forced =
     args.includes('--force') ||
+    args.includes('--mirror') ||
     hasShortOption(args, 'f') ||
     // A leading `+` on a refspec means "overwrite this ref".
     args.some((word) => word.startsWith('+') && word.length > 1 && !word.startsWith('++'))
@@ -52,9 +57,10 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
   }
   // Deleting a remote branch discards it everywhere it has been fetched, which
   // is the same loss `git branch -D` causes locally — so it answers to the same
-  // policy rather than to a new one. Three spellings delete: `--delete`, `-d`,
-  // and an empty left side on a refspec (`git push origin :topic`). A force
-  // delete is already caught above, where the stricter `forcePush` policy wins.
+  // policy rather than to a new one. Four spellings delete: `--delete`, `-d`,
+  // an empty left side on a refspec (`git push origin :topic`), and `--prune`.
+  // A force delete is already caught above, where the stricter `forcePush`
+  // policy wins.
   const deletes =
     args.includes('--delete') ||
     hasShortOption(args, 'd') ||
@@ -65,44 +71,96 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
   return undefined
 }
 
+/** Options that only continue or unwind a rebase already in progress. */
+const REBASE_RECOVERY = new Set(['--continue', '--abort', '--skip'])
+
 /**
- * Find the destructive operation in one shell command.
+ * The file or tree a `checkout`/`restore` is pointed at, when it names one.
+ *
+ * Only the words after `--` are read as paths, exactly as git reads them, plus
+ * the one reserved spelling that needs no separator: a plain `.` restores the
+ * whole working tree. Reading any bare word as a path instead would turn a
+ * branch switch into an alarm, and the names that matter are the ones a person
+ * types.
+ * @param args - the words after the subcommand.
+ * @returns the target word, or `undefined` when the command names no path.
+ */
+function restoreTarget(args: readonly string[]): string | undefined {
+  const separator = args.indexOf('--')
+  if (separator !== -1) return args[separator + 1]
+  const plain = args.find((word) => !word.startsWith('-'))
+  return plain === '.' || plain === './' ? plain : undefined
+}
+
+/**
+ * Whether a `checkout` or `restore` replaces files in the working tree.
+ *
+ * `git checkout .` and `git restore .` throw away uncommitted edits exactly as
+ * `git checkout -- .` does — the modern spelling of the same loss. `git restore
+ * --staged` moves changes back to the working tree and discards nothing, and a
+ * restore from another commit is how a file is recovered, so neither is a hit.
+ * @param args - the words after the subcommand.
+ * @returns whether the command overwrites working-tree files.
+ */
+function discardsWork(args: readonly string[]): boolean {
+  const staged = args.includes('--staged') || args.includes('-S')
+  if (staged) return false
+  const source = args.find((word) => word.startsWith('--source'))
+  return source === undefined || source === '--source=HEAD' || source === '--source'
+}
+
+/**
+ * Find every destructive operation in one shell command.
+ *
+ * A single line can do more than one thing: `git push -f --no-verify` is a force
+ * push *and* a hook bypass, and each is worth counting on its own. The decision
+ * still comes from the strictest of them.
  * @param command - the command line the agent is about to run.
  * @param config - resolved plugin configuration.
- * @returns the strictest hit, or `undefined` when nothing is destructive.
+ * @returns every hit, strictest last, or an empty array when nothing is destructive.
  */
-export function detectGuard(command: string, config: Config): GuardHit | undefined {
-  if (!config.gitGuard.enabled.get()) return undefined
+export function detectAllGuards(command: string, config: Config): GuardHit[] {
+  if (!config.gitGuard.enabled.get()) return []
   const guard = config.gitGuard
   const hits: GuardHit[] = []
 
   for (const { subcommand, args } of gitInvocations(command)) {
-    let hit: GuardHit | undefined
     if (subcommand === 'push') {
-      hit = pushHit(args, config)
+      const push = pushHit(args, config)
+      if (push !== undefined) hits.push(push)
     } else if (subcommand === 'reset' && args.includes('--hard')) {
-      hit = { reason: 'security.guard.hard_reset', action: guard.hardReset.get() }
-    } else if (subcommand === 'rebase') {
-      hit = { reason: 'security.guard.rebase', action: guard.rebase.get() }
+      hits.push({ reason: 'security.guard.hard_reset', action: guard.hardReset.get() })
+    } else if (
+      subcommand === 'rebase' &&
+      !args.some((word) => REBASE_RECOVERY.has(word)) &&
+      // `--exec` in the same call runs a command per commit, so an invocation
+      // that continues a rebase and also executes is not the safe spelling.
+      !args.includes('--exec') &&
+      !hasShortOption(args, 'x')
+    ) {
+      hits.push({ reason: 'security.guard.rebase', action: guard.rebase.get() })
     } else if (subcommand === 'clean' && (args.includes('--force') || hasShortOption(args, 'f'))) {
-      hit = { reason: 'security.guard.clean_force', action: guard.cleanForce.get() }
+      hits.push({ reason: 'security.guard.clean_force', action: guard.cleanForce.get() })
     } else if (subcommand === 'commit' && args.includes('--amend')) {
-      hit = { reason: 'security.guard.amend', action: guard.amend.get() }
+      hits.push({ reason: 'security.guard.amend', action: guard.amend.get() })
     } else if (
       subcommand === 'branch' &&
       (hasShortOption(args, 'D') || (args.includes('--delete') && args.includes('--force')))
     ) {
-      hit = { reason: 'security.guard.branch_delete', action: guard.branchDelete.get() }
-    } else if (subcommand === 'checkout') {
-      // `checkout -- <path>` restores from the index, discarding whatever was
-      // edited in those files. A trailing `--` with nothing after it discards
-      // nothing.
-      const separator = args.indexOf('--')
-      if (separator !== -1 && separator < args.length - 1) {
-        hit = { reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() }
+      hits.push({ reason: 'security.guard.branch_delete', action: guard.branchDelete.get() })
+    } else if (subcommand === 'checkout' || subcommand === 'restore') {
+      // `checkout -- <path>` and `checkout .` both restore from the index,
+      // discarding whatever was edited in those files, and `restore <path>` is
+      // the modern spelling of the same loss. `restore --staged` moves changes
+      // back to the working tree and discards nothing, so it is not a hit.
+      const target = restoreTarget(args)
+      if (target !== undefined && discardsWork(args)) {
+        hits.push({
+          reason: 'security.guard.checkout_discard',
+          action: guard.checkoutDiscard.get(),
+        })
       }
     }
-    if (hit !== undefined) hits.push(hit)
 
     // `--no-verify` is a property of the invocation rather than of one
     // operation, so it is checked for every subcommand — and it is recorded
@@ -115,7 +173,17 @@ export function detectGuard(command: string, config: Config): GuardHit | undefin
     }
   }
 
-  return strictest(hits)
+  return hits
+}
+
+/**
+ * Find the destructive operation in one shell command.
+ * @param command - the command line the agent is about to run.
+ * @param config - resolved plugin configuration.
+ * @returns the strictest hit, or `undefined` when nothing is destructive.
+ */
+export function detectGuard(command: string, config: Config): GuardHit | undefined {
+  return strictest(detectAllGuards(command, config))
 }
 
 /**
@@ -138,6 +206,12 @@ export function createGitGuard(options: GitGuardOptions): ReturnType<typeof crea
     detect: (exec) => {
       const command = commandOf(exec.arguments)
       return command === undefined ? undefined : detectGuard(command, options.config())
+    },
+    // Every destructive operation on the line is counted, not only the one whose
+    // policy wins: the status line is a record of what the plugin saw.
+    detectAll: (exec) => {
+      const command = commandOf(exec.arguments)
+      return command === undefined ? [] : detectAllGuards(command, options.config())
     },
   })
 }
