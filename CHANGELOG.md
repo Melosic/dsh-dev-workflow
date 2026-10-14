@@ -45,9 +45,11 @@
   此前 `tsconfig.json` 的 `include` 只有 `src/**/*.ts`，测试目录从不被检查；CI 增加
   `Typecheck tests` 步骤，`prepublishOnly` 也串上。Node 版本由 20 提到 22（20 已于
   2026 年 4 月 EOL，`engines.node` 仍写 `>=20` 作为下限）。
-- **`pnpm ci:checks` 增加三项守卫**：源码映射链路（构建产出 `.map` 时 `files` 必须包含
-  `src/`，否则消费端调试断链）、镜像对成对变更（`README.md`/`README.zh.md`、
-  `locale/en.json`/`zh.json`、`SKILL.md`/`SKILL.zh.md`）、面板词典占位符对齐。
+- **`pnpm ci:checks` 由五项守卫增至七项**：新增镜像对成对变更（`README.md`/`README.zh.md`、
+  `locale/en.json`/`zh.json`、`SKILL.md`/`SKILL.zh.md`）与版本三处对齐（`package.json`
+  的版本在 `CHANGELOG.md` 里必须有对应标题）；发布入口检查内补上源码映射链路
+  （构建产出 `.map` 时 `files` 必须包含 `src/`，否则消费端调试断链）。
+  面板词典的占位符对齐另由 `tests/settings-schema.spec.ts` 断言，不在 `ci:checks` 里。
 
 ### Fixed
 
@@ -159,7 +161,9 @@
   git 与对外守卫无 remote/branch 白名单），而不是当成漏掉的配置项；补 `releaseCheck`
   与 `checkoutDiscard`。
 - `docs/DEVELOPMENT.md` 的数字与流程改为与测试断言一致（i18n 键数、守卫数量、CI 步骤）；
-  `docs/I18N.md` 写明描述类文本在注册时求值这一边界。
+  `docs/I18N.md` 写明描述类文本在注册时求值这一边界，并同步 `ci:checks` 的实际输出样例；
+  `docs/PUBLISHING.md` 的守卫条数由五项改为七项（新增镜像对与版本对齐两项的说明）；
+  `CONTRIBUTING.md` 的环境要求写明 CI 跑的是当前 LTS 而非 `engines.node` 的下限。
 - `skills/dsh-dev-workflow/SKILL.md` 与 `SKILL.zh.md` 明确「没有任何触发器监视建分支动作」，
   不再让模型的预期建立在插件的宣称上。
 - 新增 `tests/chain.spec.ts`：第一批「触发器与五道守卫同链」的集成用例。此前的触发器测试

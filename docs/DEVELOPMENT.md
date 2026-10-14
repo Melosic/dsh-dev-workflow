@@ -117,8 +117,10 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 
 ## CI 会拦住什么
 
-`.github/workflows/ci.yml` 在 Node 20 上依次跑：`pnpm install --frozen-lockfile`、
-`typecheck`、`lint`、`format:check`、`test`、`build`、`ci:checks`。
+`.github/workflows/ci.yml` 在 Node 22 上依次跑：`pnpm install --frozen-lockfile`、
+`typecheck`、`typecheck:tests`、`lint`、对本次 PR 新增提交跑 `commitlint`、
+`format:check`、`test`、`build`、`ci:checks`。
+（单个 Node 版本而非矩阵：`engines.node` 声明的是代码所需的下限，CI 跑的是当前 LTS。）
 `main` 分支的保护规则要求 `verify` 这个检查通过、要求 PR、且禁止强制推送。
 
 `pnpm ci:checks`（`scripts/ci-checks.mjs`）跑一组不需要额外依赖的守卫：
