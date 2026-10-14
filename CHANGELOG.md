@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
 ### Added
 
 - `docs/PUBLISHING.md` 新增「发布后 24 小时内：安装可能停在上一版」一节。应用内的插件管理器
@@ -50,6 +52,29 @@
   的版本在 `CHANGELOG.md` 里必须有对应标题）；发布入口检查内补上源码映射链路
   （构建产出 `.map` 时 `files` 必须包含 `src/`，否则消费端调试断链）。
   面板词典的占位符对齐另由 `tests/settings-schema.spec.ts` 断言，不在 `ci:checks` 里。
+- **新增 `tests/chain.spec.ts`：第一批「触发器与五道守卫同链」的集成用例。** 此前的触发器测试
+  全部以单独 listener + `next()=allow` 驱动，因此上面若干条高危（检查被询问吞掉、`-am`
+  静默失效、镜像半脏阻塞无关提交）在单测视角下永远发现不了。
+- **新增 `tests/commands.spec.ts`：`/dev-workflow` 此前零行为测试**，而 README 让用户用它验证；
+  覆盖「off 后仍可 on」「手动 off 穿过一次无关设置写入」「运行期 off 与配置 off 的区分」。
+- **新增 `tests/shell.spec.ts`：词法层此前无独立单测**，288 个用例只覆盖实现「恰好能处理」的
+  形态，也正是六种绕过长期存在的原因。新增用例表驱动地跑正反两面的形态。
+
+### Changed
+
+- `docs/TRIGGERS.md` 纠正「顺序不影响最终结果」，补「我们看不见什么」清单与 `-F` 的
+  同命令时序说明。
+- `docs/SECURITY.md` 的凭据模式表由四种扩到九种，并写明前缀库只覆盖有固定形状的凭据；
+  `sh -c` 的已知边界升级为运行时可见的说明。
+- `docs/CONFIGURATION.md` 记录能力缺口（密钥与敏感文件无逐条例外、命令守卫单一档位、
+  git 与对外守卫无 remote/branch 白名单），而不是当成漏掉的配置项；补 `releaseCheck`
+  与 `checkoutDiscard`。
+- `docs/DEVELOPMENT.md` 的数字与流程改为与测试断言一致（i18n 键数、守卫数量、CI 步骤）；
+  `docs/I18N.md` 写明描述类文本在注册时求值这一边界，并同步 `ci:checks` 的实际输出样例；
+  `docs/PUBLISHING.md` 的守卫条数由五项改为七项（新增镜像对与版本对齐两项的说明）；
+  `CONTRIBUTING.md` 的环境要求写明 CI 跑的是当前 LTS 而非 `engines.node` 的下限。
+- `skills/dsh-dev-workflow/SKILL.md` 与 `SKILL.zh.md` 明确「没有任何触发器监视建分支动作」，
+  不再让模型的预期建立在插件的宣称上。
 
 ### Fixed
 
@@ -150,29 +175,6 @@
   `myconfig/secrets`；该分支与第一分支重复，已删。
 - **审批指纹对参数键序敏感。** 同一次 push 换个参数顺序就要重新弹问；现在序列化前递归
   排序对象键。
-
-### Changed
-
-- `docs/TRIGGERS.md` 纠正「顺序不影响最终结果」，补「我们看不见什么」清单与 `-F` 的
-  同命令时序说明。
-- `docs/SECURITY.md` 的凭据模式表由四种扩到九种，并写明前缀库只覆盖有固定形状的凭据；
-  `sh -c` 的已知边界升级为运行时可见的说明。
-- `docs/CONFIGURATION.md` 记录能力缺口（密钥与敏感文件无逐条例外、命令守卫单一档位、
-  git 与对外守卫无 remote/branch 白名单），而不是当成漏掉的配置项；补 `releaseCheck`
-  与 `checkoutDiscard`。
-- `docs/DEVELOPMENT.md` 的数字与流程改为与测试断言一致（i18n 键数、守卫数量、CI 步骤）；
-  `docs/I18N.md` 写明描述类文本在注册时求值这一边界，并同步 `ci:checks` 的实际输出样例；
-  `docs/PUBLISHING.md` 的守卫条数由五项改为七项（新增镜像对与版本对齐两项的说明）；
-  `CONTRIBUTING.md` 的环境要求写明 CI 跑的是当前 LTS 而非 `engines.node` 的下限。
-- `skills/dsh-dev-workflow/SKILL.md` 与 `SKILL.zh.md` 明确「没有任何触发器监视建分支动作」，
-  不再让模型的预期建立在插件的宣称上。
-- 新增 `tests/chain.spec.ts`：第一批「触发器与五道守卫同链」的集成用例。此前的触发器测试
-  全部以单独 listener + `next()=allow` 驱动，因此上面若干条高危（检查被询问吞掉、`-am`
-  静默失效、镜像半脏阻塞无关提交）在单测视角下永远发现不了。
-- 新增 `tests/commands.spec.ts`：`/dev-workflow` 此前零行为测试，而 README 让用户用它验证；
-  覆盖「off 后仍可 on」「手动 off 穿过一次无关设置写入」「运行期 off 与配置 off 的区分」。
-- 新增 `tests/shell.spec.ts`：词法层此前无独立单测，288 个用例只覆盖实现「恰好能处理」的
-  形态，也正是六种绕过长期存在的原因。
 
 ## [0.2.0] - 2026-10-06
 
@@ -593,6 +595,7 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.2.0...main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.3.0...main
+[0.3.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Melosic/dsh-dev-workflow/releases/tag/v0.1.0

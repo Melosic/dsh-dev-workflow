@@ -108,7 +108,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && p
 
 `ci:checks` 输出 `locale keys aligned (112 keys); bundle patch declared and shipped;
 skill headings aligned (28 sections); published entry points present (8 checked);
-mirrored pairs consistent (3 groups); CHANGELOG records 0.2.0;
+mirrored pairs consistent (3 groups); CHANGELOG records 0.3.0;
 no numbered development phases cited.`——这就是全部七项结构守卫。（括号里的数字都是当前值，
 脚本按实际内容算出，不硬编码；换句话说这些数字会随内容变，不要拿这里出现的具体数字去断言
 CI 是否通过。）
@@ -235,24 +235,24 @@ git log --oneline -3
 
 在 `CHANGELOG.md` 里：
 
-- 把 `## [Unreleased]` 下**全部**条目移到新的 `## [0.1.0] - 2026-10-05` 标题下；
+- 把 `## [Unreleased]` 下**全部**条目移到新的 `## [<版本号>] - <日期>` 标题下；
 - `## [Unreleased]` **保留在原位且清空**（不是删除）——它是下一次改动的入口；
 - 更新文件底部的链接定义：`[Unreleased]` 指向新版本与 `main` 的比较，
-  新增 `[0.1.0]` 指向该 tag 与上一版本（首个版本则指向该 tag）；
+  新增 `[<版本号>]` 指向该 tag 与上一版本（首个版本则指向该 tag）；
 - **不要编辑已发布的段落。** 之后的更正写成新条目。
 
 日期用 `YYYY-MM-DD`。
 
 ### 第三步：版本号与之对齐
 
-`package.json` 的 `version` 改成与标题一致的 `0.1.0`。**版本号只有这一个来源**，
+`package.json` 的 `version` 改成与标题一致的版本号。**版本号只有这一个来源**，
 README、徽章、文档里的版本引用都从它派生，不手动维护第二份。
 
 ### 第四步：提交并打 tag
 
 ```bash
-git commit -m "chore(release): prepare v0.1.0"
-git tag v0.1.0
+git commit -m "chore(release): <版本号>"
+git tag v<版本号>
 ```
 
 tag 打在**发布准备这个提交**上，因为「发布什么」由它定义。
@@ -270,10 +270,10 @@ npm publish --registry=https://registry.npmjs.org
 **关于 `--tag`：**
 
 - 不加 `--tag` → 推到 `latest`，用户 `npm install @melosic/dsh-dev-workflow` 直接装到。
-  这是 v0.1.0 的选择：0.x 阶段确实不保证兼容，但**首个版本装不到才是问题**。
+  这是 v0.1.0 以来的选择：0.x 阶段确实不保证兼容，但**首个版本装不到才是问题**。
 - 加 `--tag next` → 不推 `latest`，用户必须写 `@next` 才装得到。
   SKILL.md 规定**预发布版本**（`-rc.1`、`-beta.1`、`-alpha.1`）必须这样发，
-  以免有人误装 release candidate。0.1.0 不是预发布版本，故不加。
+  以免有人误装 release candidate。正式版不是预发布版本，故不加。
 
 ### 第六步：验证它真的落地了
 
@@ -288,10 +288,10 @@ npm view @melosic/dsh-dev-workflow dist-tags --registry=https://registry.npmjs.o
 ### 第七步：GitHub Release
 
 ```bash
-gh release create v0.1.0 --title "v0.1.0" --notes-file .dev-docs/_release-notes.md
+gh release create v<版本号> --title "v<版本号>" --notes-file .dev-docs/_release-notes.md
 ```
 
-`--notes-file` 指向从 `CHANGELOG.md` 抄出来的 `[0.1.0]` 段。
+`--notes-file` 指向从 `CHANGELOG.md` 抄出来的 `[<版本号>]` 段。
 （SKILL.md 里写的 `<(awk ...)` 是 bash 进程替换，在 PowerShell 里不可用，
 本机做法是先写文件再传入。）注意 tag 必须已经推送：
 

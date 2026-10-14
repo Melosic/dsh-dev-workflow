@@ -72,7 +72,7 @@ asar 内随宿主出货的官方包。这些包没有被引入依赖，但**本�
 | [TypeScript](https://www.typescriptlang.org/) | Apache-2.0 | 源码语言与类型检查 |
 | [ESLint](https://eslint.org/) / [typescript-eslint](https://typescript-eslint.io/) | MIT | 静态检查 |
 | [Prettier](https://prettier.io/) | MIT | 格式化 |
-| [Vitest](https://vitest.dev/) | MIT | 测试运行器（`tests/` 的 288 个用例） |
+| [Vitest](https://vitest.dev/) | MIT | 测试运行器（`tests/` 的 328 个用例） |
 | [Husky](https://typicode.github.io/husky/) | MIT | 本地 git 钩子 |
 | [lint-staged](https://github.com/lint-staged/lint-staged) | MIT | 只对暂存文件跑 lint 与 format |
 | [commitlint](https://commitlint.js.org/) | MIT | 提交信息校验（`@commitlint/config-conventional`） |
