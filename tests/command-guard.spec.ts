@@ -99,6 +99,28 @@ describe('src/guard/command-guard.ts', () => {
     expect(classify('nohup doas rm -rf /')?.reason).toBe('command.guard.dangerous_warning')
   })
 
+  it('recognises a destructive delete handed to find or xargs', () => {
+    // The set is what a search walks or a pipe carries, which the command line
+    // never spells out, so the delegated program is what gets judged.
+    expect(classify('find / -exec rm -rf {} +')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('find / -exec rm -rf {} \\;')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('find / -delete')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('find . -exec rm {} +')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('echo x | xargs rm -rf')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('xargs -0 rm -rf')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('xargs -I{} rm -rf {}')?.reason).toBe('command.guard.dangerous_warning')
+  })
+
+  it('passes a delete a predicate narrowed first', () => {
+    // A predicate between the root and the acting expression is what makes the
+    // set the author's choice rather than the whole tree.
+    expect(classify('find . -name "*.log" -exec rm {} +')).toBeUndefined()
+    expect(classify('find . -name "*.tmp" -delete')).toBeUndefined()
+    expect(classify('find src -delete')).toBeUndefined()
+    expect(classify('find . -name "*.ts"')).toBeUndefined()
+    expect(classify('xargs echo hi')).toBeUndefined()
+  })
+
   it('passes an ordinary delete, including a recursive one', () => {
     expect(classify('rm build.log')).toBeUndefined()
     expect(classify('rm -rf node_modules')).toBeUndefined()
@@ -144,8 +166,9 @@ describe('src/guard/command-guard.ts', () => {
   it('passes the call through when the configured tier is allow', async () => {
     const { decision, state } = await run('rm -rf /', { action: 'allow' })
     expect(decision.kind).toBe('allow')
-    // An allowed operation is not a hit: it was never guarded.
-    expect(state.guardHits()).toEqual({})
+    // A hit is counted under every tier: the operation was recognised, and the
+    // count is what tells the user how often the tier let it through.
+    expect(state.guardHits()).toEqual({ 'command.guard.dangerous_warning': 1 })
   })
 
   it('leaves an ordinary call to the other gates', async () => {

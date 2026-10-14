@@ -23,5 +23,15 @@ if (!command) {
   process.exit(2)
 }
 
-const result = spawnSync(command, args, { cwd: root, stdio: 'inherit', shell: true })
+const result = spawnSync(resolveLocal(command), args, { cwd: root, stdio: 'inherit', shell: true })
 process.exit(result.status ?? 1)
+
+// `shell: true` lets the shell resolve the command against PATH, and on Windows
+// a globally installed `tsc` (a pre-release one, say) shadows the version this
+// repository pins in its own devDependencies. Prefer the local binary so
+// `pnpm typecheck` reports what this checkout declares, not what the machine
+// happens to have installed.
+function resolveLocal(command) {
+  const local = new URL(`../node_modules/.bin/${command}`, import.meta.url)
+  return existsSync(local) ? fileURLToPath(local) : command
+}

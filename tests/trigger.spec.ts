@@ -7,7 +7,7 @@ import type { GitRunner } from '../src/git.js'
 import { createRuntime } from '../src/index.js'
 import { createPreCommitTrigger } from '../src/triggers/pre-commit.js'
 import { checkDocSync } from '../src/tools/check-doc-sync.js'
-import { createHarness, makeExec, makeGit } from './harness.js'
+import { createHarness, askOf, makeExec, makeGit } from './harness.js'
 
 const t = createTranslator('en-US')
 
@@ -75,7 +75,7 @@ describe('src/triggers/pre-commit.ts', () => {
   it('renders the approval prompt in both client languages', async () => {
     const { listener } = trigger()
     const decision = await fire(listener, 'git commit -m "Add the thing"')
-    const display = (decision as { displayReason: { en: string; zh: string } }).displayReason
+    const display = askOf(decision).displayReason
 
     expect(display.en).toContain(
       createTranslator('en-US')('tool.check_commit_message.error.missing_type'),
@@ -109,7 +109,10 @@ describe('src/triggers/pre-commit.ts', () => {
     expect(decision.kind === 'deny' && decision.reason).toContain(
       t('tool.check_commit_message.error.missing_type'),
     )
-    expect(decision.kind === 'deny' && decision.reason).toContain(t('approval.disabled'))
+    // A trigger judges a whole class of actions, so the way out it names is not
+    // the guard's "set this operation to allow" — that field does not exist here.
+    expect(decision.kind === 'deny' && decision.reason).toContain(t('approval.disabled_trigger'))
+    expect(decision.kind === 'deny' && decision.reason).not.toContain(t('approval.disabled'))
   })
 
   it('stays out of the way while the agent is only coding', async () => {
@@ -134,10 +137,22 @@ describe('src/triggers/pre-commit.ts', () => {
     })
     expect(refusal).toEqual({ kind: 'deny', reason: 'another gate says no' })
 
+    // The question another gate is asking is not replaced by a second one. Its
+    // prompt is the published route to the plugin's approval seam, so the
+    // finding is folded into that prompt instead of being dropped.
     const question = await fire(listener, 'git commit -m "Add the thing"', {
       downstream: { kind: 'ask', reason: 'another gate asks' },
     })
-    expect(question).toEqual({ kind: 'ask', reason: 'another gate asks' })
+    const reason = askOf(question).reason
+    const display = askOf(question).displayReason
+
+    expect(question.kind).toBe('ask')
+    expect(reason).toContain('another gate asks')
+    expect(reason).toContain(t('tool.check_commit_message.error.missing_type'))
+    expect(display.en).toContain(t('trigger.pre_commit.settled_by').slice(0, 20))
+    expect(display.zh).toContain(
+      createTranslator('zh-CN')('trigger.pre_commit.settled_by').slice(0, 8),
+    )
   })
 
   it('reports an abort rather than a finding', async () => {

@@ -194,7 +194,9 @@ describe('src/guard/git-guard.ts', () => {
 
     const allowed = await run('git rebase main', { overrides: { rebase: 'allow' } })
     expect(allowed.decision.kind).toBe('allow')
-    expect(allowed.state.guardHits()).toEqual({})
+    // The hit is counted under every tier: a generous policy changes the
+    // decision, not whether the operation was recognised.
+    expect(allowed.state.guardHits()).toEqual({ 'security.guard.rebase': 1 })
   })
 
   it('counts a hit before the decision is settled', async () => {

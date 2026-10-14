@@ -55,6 +55,9 @@ window.__ModuleLoader__.load({
 .dsw-dev-workflow-invalid{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
 .dsw-dev-workflow-reset{padding:0;border:0;background:none;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}
 .dsw-dev-workflow-badge{flex:none;padding:1px 6px;border:0.5px solid var(--dsw-alias-border-l1);border-radius:4px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary)}
+.dsw-dev-workflow-badge[data-tone='muted']{font-style:italic;opacity:0.7}
+.dsw-dev-workflow-check input:disabled+span{opacity:0.5}
+.dsw-dev-workflow-number:disabled,.dsw-dev-workflow-segments[data-disabled=''] .dsw-dev-workflow-segment{opacity:0.5}
 .dsw-dev-workflow-switch{box-sizing:border-box;position:relative;flex:none;width:36px;height:20px;padding:2px;border:0;border-radius:999px;background:var(--dsw-alias-border-l1);cursor:pointer}
 .dsw-dev-workflow-switch[aria-checked='true']{background:var(--dsw-alias-brand-primary)}
 .dsw-dev-workflow-switch:disabled{opacity:0.4;cursor:default}
@@ -113,7 +116,7 @@ window.__ModuleLoader__.load({
       'group.advanced': 'Advanced (read-only)',
       'field.mode': 'Plugin mode',
       'field.locale': 'Plugin text language',
-      'field.ownTrigger': 'Run the pre-commit check',
+      'field.ownTrigger': 'Run the built-in checks (commit, PR, release)',
       'field.commitEnabled': 'Check commit messages',
       'field.onFailure': 'On a hard problem',
       'field.types': 'Allowed types',
@@ -122,6 +125,10 @@ window.__ModuleLoader__.load({
       'field.docsEnabled': 'Check documentation sync',
       'field.requireChangelog': 'A feat must update the changelog',
       'field.requireReadmeOnConfig': 'A configuration change must update the README',
+      'field.releaseSemver': 'Check the version number',
+      'field.releaseChangelog': 'The release must be in the changelog',
+      'field.releaseCategories': 'Changelog headings must be standard categories',
+      'field.releasePrerelease': 'A pre-release must not publish to latest',
       'field.gitEnabled': 'Git guard',
       'field.outwardEnabled': 'Outward guard',
       'field.rememberApproved': 'Remember approved operations',
@@ -153,12 +160,26 @@ window.__ModuleLoader__.load({
         'A header that does not parse, a type outside the allowed set, and a `!` without a BREAKING CHANGE footer are hard problems. Length, a trailing period and a missing scope are always warnings.',
       'hint.requireScope':
         'Off leaves a missing scope as a hint, shown only when the change touches one module.',
+      'hint.ownTrigger':
+        'Governs all three triggers: the message and documentation checks before a commit, the title and description checks before a pull request, and the version and changelog checks before a release. Turn it off when the repository already enforces the conventions with husky and commitlint.',
+      'hint.releaseSemver':
+        'The version a tag or publish names must look like a version. Off for a repository that versions by date or build number; the pattern itself is in the configuration file.',
       'hint.genericHighEntropy':
         'Also stops long random strings with no known prefix. This is the rule most likely to interrupt an ordinary call, so it is off by default.',
       'hint.rememberApproved':
         'Applies to git operations whose policy is Ask: one approval covers the same operation for the rest of the session. Deny is never affected.',
       'hint.outward':
         'Covers the actions other people can see: a push, a tag, a pull request, a publish. Nothing here is lost if it goes wrong on this machine — the question is whether you agreed to announce it.',
+      'hint.gitEnabled':
+        'Off means no git operation is questioned again: a force push, a hard reset, a rebase, an amend, a branch delete, a clean, a discarded working tree, or --no-verify all run untouched.',
+      'hint.commandEnabled':
+        'Off means a recursive delete aimed at a filesystem root, a reformat, a raw write to a block device and a fork bomb all run untouched.',
+      'hint.fileEnabled':
+        'Off means the files listed in `fileGuard.noRead` (a .env, an ssh key, a *.pem, a credentials file) may be read by any tool. There is no per-file exception, so this is the only way to read one.',
+      'hint.secretEnabled':
+        'Off means a call carrying an AWS key, a GitHub token (classic or fine-grained), a Slack token, an npm or GitLab token, a JWT, a Bearer header or a private key is forwarded. A credential that has been sent cannot be recalled.',
+      'hint.auditEnabled':
+        'Off means no guard decision is recorded: a reviewer has no trail of what was questioned, allowed, or refused after the session ends.',
       'value.on': 'On',
       'value.off': 'Off',
       'value.auto': 'Auto',
@@ -177,6 +198,10 @@ window.__ModuleLoader__.load({
       'action.reset': 'Reset',
       'action.overridden': 'Overridden',
       'action.failed': 'Could not save. The draft is kept.',
+      'action.conflict':
+        'Someone else changed these settings while this page was open. The draft is kept — reload to see both, then save again.',
+      'action.resetAll': 'Reset all to defaults',
+      'action.inactive': 'Not in effect',
       'action.unavailable': 'These settings are not available right now.',
       'advanced.note':
         'Declared in the configuration file only. The panel shows them for reference and never edits them.',
@@ -189,6 +214,7 @@ window.__ModuleLoader__.load({
       'advanced.exclude': 'Excluded paths',
       'advanced.branchPattern': 'Branch name pattern',
       'advanced.commitPattern': 'Commit header pattern',
+      'advanced.versionPattern': 'Version pattern',
       'advanced.mirrors': 'Code \u2194 document mirrors',
       'advanced.auditPath': 'Audit log path',
     }
@@ -208,7 +234,9 @@ window.__ModuleLoader__.load({
       'group.advanced': '高级（只读）',
       'field.mode': '插件模式',
       'field.locale': '插件文案语言',
-      'field.ownTrigger': '运行 pre-commit 检查',
+      'field.ownTrigger': '运行自带检查（提交 / PR / 发版）',
+      'hint.ownTrigger':
+        '管三个触发器：提交前的信息与文档检查、PR 前的标题与描述检查、发版前的版本与 CHANGELOG 检查。仓库自己用 husky / commitlint 兜住规范时关掉它。',
       'field.commitEnabled': '检查提交信息',
       'field.onFailure': '出现硬性问题时',
       'field.types': '允许的 type',
@@ -217,6 +245,10 @@ window.__ModuleLoader__.load({
       'field.docsEnabled': '检查文档同步',
       'field.requireChangelog': 'feat 必须更新 CHANGELOG',
       'field.requireReadmeOnConfig': '配置变更必须更新 README',
+      'field.releaseSemver': '校验版本号',
+      'field.releaseChangelog': '发版必须写入 CHANGELOG',
+      'field.releaseCategories': 'CHANGELOG 分类必须是标准类别',
+      'field.releasePrerelease': '预发布不得发到 latest',
       'field.gitEnabled': 'Git 守卫',
       'field.outwardEnabled': '对外动作守卫',
       'field.rememberApproved': '记住已批准的同类操作',
@@ -246,12 +278,24 @@ window.__ModuleLoader__.load({
       'hint.onFailure':
         'header 无法解析、type 不在允许集合、`!` 缺少 BREAKING CHANGE footer 属于硬性问题。长度、句末句点和缺少 scope 始终只是警告。',
       'hint.requireScope': '关闭时，只有改动落在单个模块里才提示补 scope。',
+      'hint.releaseSemver':
+        '打标签或发布时写出的版本号必须像一个版本号。按日期或构建号发版的仓库可以关闭；具体正则写在配置文件里。',
       'hint.genericHighEntropy':
         '没有已知前缀的长随机串也会被拦。这一项最容易打断普通调用，所以默认关闭。',
       'hint.rememberApproved':
         '仅对策略为「询问」的 git 操作生效：一次同意覆盖本会话内同一操作。策略为「拒绝」的操作永不受影响。',
       'hint.outward':
         '覆盖其他人看得见的动作：推送、打标签、创建 PR、发布。这些在本机做错了都还能回头 —— 要确认的是你有没有同意把它公开出去。',
+      'hint.gitEnabled':
+        '关闭后不再过问任何 git 操作：强制推送、硬重置、变基、修改已有提交、删分支、清理未跟踪文件、丢弃工作区改动、--no-verify 全部原样执行。',
+      'hint.commandEnabled':
+        '关闭后，指向文件系统根目录的递归删除、格式化、向块设备裸写、fork 炸弹都原样执行。',
+      'hint.fileEnabled':
+        '关闭后 `fileGuard.noRead` 里的文件（.env、ssh 私钥、*.pem、凭据文件）任何工具都能读。这项没有逐条例外，所以关闭它是读这些文件的唯一办法。',
+      'hint.secretEnabled':
+        '关闭后，带着 AWS key、GitHub token（经典或 fine-grained）、Slack token、npm / GitLab token、JWT、Bearer 头或私钥的调用会原样转发。凭据一旦发出就收不回来。',
+      'hint.auditEnabled':
+        '关闭后不再记录任何守卫决策：会话结束后，审查者看不到哪些操作被问过、被放行或被拒绝。',
       'value.on': '开启',
       'value.off': '关闭',
       'value.auto': '自动',
@@ -270,6 +314,10 @@ window.__ModuleLoader__.load({
       'action.reset': '恢复默认',
       'action.overridden': '已覆盖',
       'action.failed': '保存失败。草稿已保留。',
+      'action.conflict':
+        '页面打开期间有人改过这些设置。草稿已保留 —— 重新打开页面看到两边内容后再保存。',
+      'action.resetAll': '全部恢复默认',
+      'action.inactive': '当前不生效',
       'action.unavailable': '当前无法读取这些设置。',
       'advanced.note': '这些项只能在配置文件里声明。面板只作展示，从不修改它们。',
       'advanced.open': '打开配置文件',
@@ -281,6 +329,7 @@ window.__ModuleLoader__.load({
       'advanced.exclude': '排除路径',
       'advanced.branchPattern': '分支命名正则',
       'advanced.commitPattern': '提交标题正则',
+      'advanced.versionPattern': '版本号正则',
       'advanced.mirrors': '代码 ↔ 文档映射',
       'advanced.auditPath': '审计日志路径',
     }
@@ -356,6 +405,7 @@ window.__ModuleLoader__.load({
         path: ['enableOwnTrigger'],
         control: 'switch',
         label: 'field.ownTrigger',
+        hint: 'hint.ownTrigger',
       },
       {
         group: 'commit',
@@ -409,10 +459,36 @@ window.__ModuleLoader__.load({
         label: 'field.requireReadmeOnConfig',
       },
       {
+        group: 'docs',
+        path: ['releaseCheck', 'semver'],
+        control: 'switch',
+        label: 'field.releaseSemver',
+        hint: 'hint.releaseSemver',
+      },
+      {
+        group: 'docs',
+        path: ['releaseCheck', 'changelog'],
+        control: 'switch',
+        label: 'field.releaseChangelog',
+      },
+      {
+        group: 'docs',
+        path: ['releaseCheck', 'changelogCategories'],
+        control: 'switch',
+        label: 'field.releaseCategories',
+      },
+      {
+        group: 'docs',
+        path: ['releaseCheck', 'prereleaseTag'],
+        control: 'switch',
+        label: 'field.releasePrerelease',
+      },
+      {
         group: 'git',
         path: ['gitGuard', 'enabled'],
         control: 'switch',
         label: 'field.gitEnabled',
+        hint: 'hint.gitEnabled',
       },
       ...GIT_POLICIES.map((policy) => ({
         group: 'git',
@@ -447,6 +523,7 @@ window.__ModuleLoader__.load({
         path: ['commandGuard', 'enabled'],
         control: 'switch',
         label: 'field.commandEnabled',
+        hint: 'hint.commandEnabled',
       },
       {
         group: 'command',
@@ -460,12 +537,14 @@ window.__ModuleLoader__.load({
         path: ['fileGuard', 'enabled'],
         control: 'switch',
         label: 'field.fileEnabled',
+        hint: 'hint.fileEnabled',
       },
       {
         group: 'files',
         path: ['secretGuard', 'enabled'],
         control: 'switch',
         label: 'field.secretEnabled',
+        hint: 'hint.secretEnabled',
       },
       {
         group: 'files',
@@ -479,17 +558,26 @@ window.__ModuleLoader__.load({
         path: ['audit', 'enabled'],
         control: 'switch',
         label: 'field.auditEnabled',
+        hint: 'hint.auditEnabled',
       },
     ]
     // Read-only projection of the fields the profile file owns.
+    //
+    // `inactive` marks a field the plugin declares but no check reads yet. It is
+    // a different claim from "read-only": the value is real and the Host accepts
+    // it, but nothing acts on it, and a panel that shows it without saying so
+    // reads as a promise. The flag is data, not a comment, because the test that
+    // pairs this list with the schema asserts it is set exactly where the
+    // documentation says the field is unwired.
     const ADVANCED = [
       { path: ['codePaths'], label: 'advanced.codePaths' },
       { path: ['docs', 'docsDir'], label: 'advanced.docsDir' },
-      { path: ['docs', 'adrDir'], label: 'advanced.adrDir' },
+      { path: ['docs', 'adrDir'], label: 'advanced.adrDir', inactive: true },
       { path: ['docs', 'changelog'], label: 'advanced.changelog' },
       { path: ['docs', 'exclude'], label: 'advanced.exclude' },
-      { path: ['rules', 'branchPattern'], label: 'advanced.branchPattern' },
-      { path: ['rules', 'commitPattern'], label: 'advanced.commitPattern' },
+      { path: ['rules', 'branchPattern'], label: 'advanced.branchPattern', inactive: true },
+      { path: ['rules', 'commitPattern'], label: 'advanced.commitPattern', inactive: true },
+      { path: ['releaseCheck', 'versionPattern'], label: 'advanced.versionPattern' },
       { path: ['docs', 'mirrors'], label: 'advanced.mirrors' },
       { path: ['audit', 'path'], label: 'advanced.auditPath' },
     ]
@@ -497,6 +585,61 @@ window.__ModuleLoader__.load({
     // fails here never becomes an operation, which is what disables Save.
     const VALIDATORS = {
       'commitCheck.subjectMaxLength': (value) => Number.isInteger(value) && value >= 1,
+    }
+    // Control → the switch it depends on. A guard's own `enabled` off means the
+    // policies under it are read by nobody, so the page says so rather than
+    // leaving live-looking controls that change nothing. This is the mapping the
+    // panel used to lack: turning off `fileGuard` left its list bright and its
+    // meaning unchanged.
+    const DEPENDENTS = {
+      mode: [
+        'enableOwnTrigger',
+        'commitCheck.enabled',
+        'docsCheck.enabled',
+        'releaseCheck.semver',
+        'releaseCheck.changelog',
+        'releaseCheck.changelogCategories',
+        'releaseCheck.prereleaseTag',
+        'rules.requireChangelogOnFeat',
+        'docsCheck.requireReadmeOnConfig',
+        'gitGuard.enabled',
+        'outwardGuard.enabled',
+        'commandGuard.enabled',
+        'fileGuard.enabled',
+        'secretGuard.enabled',
+        'audit.enabled',
+      ],
+      'commitCheck.enabled': [
+        'commitCheck.onFailure',
+        'commitCheck.types',
+        'commitCheck.requireScope',
+        'commitCheck.subjectMaxLength',
+      ],
+      'docsCheck.enabled': ['rules.requireChangelogOnFeat', 'docsCheck.requireReadmeOnConfig'],
+      'gitGuard.enabled': [
+        'gitGuard.forcePush',
+        'gitGuard.hardReset',
+        'gitGuard.rebase',
+        'gitGuard.amend',
+        'gitGuard.branchDelete',
+        'gitGuard.cleanForce',
+        'gitGuard.checkoutDiscard',
+        'gitGuard.noVerify',
+        'gitGuard.rememberApproved',
+      ],
+      'outwardGuard.enabled': [
+        'outwardGuard.push',
+        'outwardGuard.tag',
+        'outwardGuard.pullRequest',
+        'outwardGuard.publish',
+      ],
+      'commandGuard.enabled': ['commandGuard.dangerousShell'],
+      'secretGuard.enabled': ['secretGuard.genericHighEntropy'],
+    }
+    /** The switch each dependent control answers to, keyed by the dependent's path. */
+    const MASTERS = new Map()
+    for (const [master, dependents] of Object.entries(DEPENDENTS)) {
+      for (const path of dependents) if (!MASTERS.has(path)) MASTERS.set(path, master)
     }
 
     const keyOf = (path) => path.join('.')
@@ -547,6 +690,7 @@ window.__ModuleLoader__.load({
         this.baseline = undefined
         this.saving = false
         this.failed = false
+        this.conflicted = false
         this.saved = false
         this.snapshot = undefined
         this.off = scope.subscribe(() => {
@@ -571,6 +715,13 @@ window.__ModuleLoader__.load({
         const state = this.scope.getSnapshot()
         const value = state.value
         const staged = this.staged
+        /** The effective value of a path, staged entries included. */
+        const effective = (path) => {
+          const entry = staged.get(keyOf(path))
+          if (entry === undefined) return readPath(value, path)
+          if (entry.clear === true) return readPath(state.base, path)
+          return entry.value
+        }
         return {
           status: state.status,
           writable: state.writable === true,
@@ -578,16 +729,9 @@ window.__ModuleLoader__.load({
           invalid: [...staged.values()].some((entry) => entry.invalid === true),
           saving: this.saving,
           failed: this.failed,
+          conflicted: this.conflicted,
           saved: this.saved,
-          read: (path) => {
-            const entry = staged.get(keyOf(path))
-            if (entry === undefined) return readPath(value, path)
-            // A staged clear previews what the field will hold once the entry is
-            // gone — the inherited value — so the control keeps showing a real
-            // selection instead of blanking out.
-            if (entry.clear === true) return readPath(state.base, path)
-            return entry.value
-          },
+          read: effective,
           invalidAt: (path) => {
             const entry = staged.get(keyOf(path))
             return entry !== undefined && entry.invalid === true
@@ -599,6 +743,19 @@ window.__ModuleLoader__.load({
             const entry = staged.get(keyOf(path))
             if (entry !== undefined && entry.clear === true) return false
             return hasPath(state.user, path)
+          },
+          /**
+           * Whether a control is read by anybody right now.
+           *
+           * A policy under a guard whose master switch is off is never consulted,
+           * so the page has to say so: a bright control that changes nothing is
+           * how a user comes to believe a rule is still in force. The staged value
+           * counts, so turning a master off marks its dependents at once.
+           */
+          live: (path) => {
+            const master = MASTERS.get(keyOf(path))
+            if (master === undefined) return true
+            return effective(master.split('.')) === true
           },
         }
       }
@@ -676,12 +833,10 @@ window.__ModuleLoader__.load({
         if (ops.length === 0) return
         this.saving = true
         this.invalidate()
+        const revision = this.baseline === undefined ? undefined : this.baseline.revision
         let landed = false
         try {
-          landed = await this.scope.mutate(
-            ops,
-            this.baseline === undefined ? undefined : this.baseline.revision,
-          )
+          landed = await this.scope.mutate(ops, revision)
         } catch {
           landed = false
         }
@@ -692,15 +847,47 @@ window.__ModuleLoader__.load({
           // A retry after a rejected batch has to clear the failure, or the
           // panel would keep claiming the save failed.
           this.failed = false
+          this.conflicted = false
           // The official SettingsForm only ever reports failure, so a plain
           // successful save leaves no visible trace: the button just stops
           // being disabled, which on a form this long reads as "nothing
           // happened". The note is this panel's deliberate addition.
           this.saved = true
         } else {
-          this.failed = true
+          // A `false` answer is not always an error. When the batch carried the
+          // revision this panel read and the work still did not land, someone
+          // else wrote in between — the draft is intact and reloading shows both.
+          // Telling that apart from "the write failed" is what keeps the user
+          // from retrying a batch that cannot land until they look.
+          this.conflicted = revision !== undefined && this.scope.getSnapshot().revision !== revision
+          this.failed = !this.conflicted
           this.saved = false
         }
+        this.invalidate()
+      }
+      /** Stage "back to the inherited value" for every field the file overrides. */
+      resetAll() {
+        const state = this.scope.getSnapshot()
+        this.saved = false
+        this.failed = false
+        this.conflicted = false
+        // A field the user layer carries is one the panel can unset; the draft
+        // then previews the inherited value for all of them at once.
+        for (const spec of FIELDS) {
+          if (hasPath(state.user, spec.path))
+            this.staged.set(keyOf(spec.path), {
+              path: spec.path,
+              clear: true,
+            })
+        }
+        for (const entry of ADVANCED) {
+          if (hasPath(state.user, entry.path))
+            this.staged.set(keyOf(entry.path), {
+              path: entry.path,
+              clear: true,
+            })
+        }
+        if (this.staged.size > 0) this.baseline ??= state
         this.invalidate()
       }
       /**
@@ -714,6 +901,7 @@ window.__ModuleLoader__.load({
           edit: (path, value) => this.edit(path, value),
           clear: (path) => this.clear(path),
           discard: () => this.discard(),
+          resetAll: () => this.resetAll(),
           save: () => this.save(),
           acknowledgeSaved: () => this.acknowledgeSaved(),
         }
@@ -886,7 +1074,11 @@ window.__ModuleLoader__.load({
       const value = form.read(spec.path)
       const invalid = form.invalidAt(spec.path)
       const label = t(spec.label)
-      const disabled = !form.writable
+      // A dependent of a master switch that is off: the control still shows its
+      // value (the file keeps it) but nothing reads it, so it is marked rather
+      // than hidden — hiding it would make the setting look lost.
+      const live = form.live(spec.path)
+      const disabled = !form.writable || !live
       // Only `auto` needs the explanation; an explicit choice already names the
       // language it selects.
       const machine = spec.note !== undefined && value === 'auto' ? machineLocale() : undefined
@@ -962,6 +1154,16 @@ window.__ModuleLoader__.load({
         'div',
         { className: 'dsw-dev-workflow-fieldHead' },
         labelNode,
+        // Two badges can sit side by side and mean different things: "the file
+        // overrides this" and "nothing reads this right now". The second is the
+        // one that keeps a live-looking control from lying.
+        !live
+          ? h(
+              'span',
+              { className: 'dsw-dev-workflow-badge', 'data-tone': 'muted' },
+              t('action.inactive'),
+            )
+          : null,
         form.overridden(spec.path)
           ? h(
               React.Fragment,
@@ -1055,6 +1257,13 @@ window.__ModuleLoader__.load({
             'div',
             { key: keyOf(entry.path), className: 'dsw-dev-workflow-advancedRow' },
             h('span', { className: 'dsw-dev-workflow-advancedKey' }, t(entry.label)),
+            entry.inactive
+              ? h(
+                  'span',
+                  { className: 'dsw-dev-workflow-badge', 'data-tone': 'muted' },
+                  t('action.inactive'),
+                )
+              : null,
             h(
               'code',
               { className: 'dsw-dev-workflow-advancedValue' },
@@ -1152,6 +1361,16 @@ window.__ModuleLoader__.load({
                 t('action.failed'),
               )
             : null,
+          // A revision conflict and a failed write are different events with
+          // different next steps, so they cannot share one sentence: the first
+          // says to reload and compare, the second says to try again.
+          form.conflicted
+            ? h(
+                'p',
+                { className: 'dsw-dev-workflow-note', 'data-tone': 'error', role: 'status' },
+                t('action.conflict'),
+              )
+            : null,
           form.saved
             ? h(
                 'p',
@@ -1159,6 +1378,16 @@ window.__ModuleLoader__.load({
                 t('action.saved'),
               )
             : null,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'dsw-dev-workflow-button',
+              disabled: !form.dirty || form.saving,
+              onClick: () => actions.resetAll(),
+            },
+            t('action.resetAll'),
+          ),
           h(
             'button',
             {

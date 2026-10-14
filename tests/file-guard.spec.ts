@@ -22,6 +22,16 @@ function classify(path: string, tool = 'read') {
   return hit === undefined ? undefined : { reason: hit.reason, params: hit.params }
 }
 
+/**
+ * The pattern name a hit reports, for the assertions that are about which rule
+ * matched rather than about the finding as a whole.
+ * @param hit - a hit from {@link classify} or {@link detectFile}.
+ * @returns the rule name, or undefined when nothing matched.
+ */
+function rule(hit: { params?: Record<string, string | number> } | undefined): unknown {
+  return hit?.params?.rule
+}
+
 describe('src/guard/file-guard.ts', () => {
   it('refuses a call that names a dotenv file', () => {
     expect(classify('.env')?.reason).toBe('security.sensitive_file_blocked')
@@ -39,7 +49,7 @@ describe('src/guard/file-guard.ts', () => {
     // only teach the agent to stop using the guard.
     expect(classify('.env.example')).toBeUndefined()
     expect(classify('config/.env.sample')).toBeUndefined()
-    expect(classify('.env.local.example')?.params.rule).toBe('.env')
+    expect(rule(classify('.env.local.example'))).toBe('.env')
   })
 
   it('refuses an ssh private key at any depth', () => {
@@ -102,11 +112,11 @@ describe('src/guard/file-guard.ts', () => {
   })
 
   it('refuses a shell command that prints a sensitive file', () => {
-    expect(detectFile({ command: 'cat .env' }, 'bash', Config({}))?.params.rule).toBe('.env')
-    expect(detectFile({ command: 'cat /repo/.ssh/id_rsa' }, 'bash', Config({}))?.params.rule).toBe(
+    expect(rule(detectFile({ command: 'cat .env' }, 'bash', Config({})))).toBe('.env')
+    expect(rule(detectFile({ command: 'cat /repo/.ssh/id_rsa' }, 'bash', Config({})))).toBe(
       '.ssh/id_rsa',
     )
-    expect(detectFile({ command: 'grep AWS .env' }, 'bash', Config({}))?.params.rule).toBe('.env')
+    expect(rule(detectFile({ command: 'grep AWS .env' }, 'bash', Config({})))).toBe('.env')
   })
 
   it('passes a shell command that only mentions the name', () => {
@@ -166,7 +176,7 @@ describe('src/guard/file-guard.ts', () => {
 
   it('honours a configured pattern list', () => {
     const config = Config({ fileGuard: { noRead: ['*.vault'] } })
-    expect(detectFile({ file_path: 'a.vault' }, 'read', config)?.params.rule).toBe('*.vault')
+    expect(rule(detectFile({ file_path: 'a.vault' }, 'read', config))).toBe('*.vault')
     // The built-in list was replaced, not extended.
     expect(detectFile({ file_path: '.env' }, 'read', config)).toBeUndefined()
   })

@@ -54,6 +54,21 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   // ghr_ (refresh).
   { id: 'GitHub token', source: '\\bgh[pors]_[A-Za-z0-9]{16,}\\b' },
   { id: 'Slack token', source: '\\bxox[baprs]-[A-Za-z0-9-]{10,}\\b' },
+  // Registry tokens: npm's `npm_` prefix (36 base62 characters) and GitLab's
+  // `glpat-`.
+  { id: 'npm token', source: '\\bnpm_[A-Za-z0-9]{36}\\b' },
+  { id: 'GitLab token', source: '\\bglpat-[A-Za-z0-9_-]{20,}\\b' },
+  // Fine-grained PATs carry their own prefix rather than the `ghp_` family.
+  { id: 'GitHub fine-grained token', source: '\\bgithub_pat_[A-Za-z0-9_]{20,}\\b' },
+  // A JWT is three base64url segments, the first of which starts with the
+  // encoded `{"` header.
+  {
+    id: 'JWT',
+    source: '\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}',
+  },
+  // A long opaque value handed to an `Authorization` header. The 20-character
+  // floor is what keeps this off ordinary prose that merely says "Bearer".
+  { id: 'Bearer token', source: '\\bBearer[ \\t]+[A-Za-z0-9._~+/=-]{20,}' },
   { id: 'private key', source: '-----BEGIN [A-Z ]*PRIVATE KEY-----' },
 ]
 

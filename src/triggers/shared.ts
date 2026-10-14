@@ -38,17 +38,20 @@ export interface TriggerOptions {
 
 /**
  * Render findings as the body of an approval prompt.
+ *
+ * Errors come first and are never crowded out by warnings: a repository with
+ * many advisories would otherwise push the one blocking finding past the cut,
+ * leaving a prompt that asks about something it does not show.
  * @param outcome - what the check found.
  * @param t - translator for the truncation line.
  * @returns one line per finding, capped at {@link MAX_DETAILS}.
  */
 export function detailsOf(outcome: CheckResult, t: Translate): string {
-  const lines = [
-    ...outcome.errors.map((line) => `✖ ${line}`),
-    ...outcome.warnings.map((line) => `⚠ ${line}`),
-  ]
-  const shown = lines.slice(0, MAX_DETAILS)
-  const omitted = lines.length - shown.length
+  const room = Math.max(0, MAX_DETAILS - 1)
+  const errors = outcome.errors.map((line) => `✖ ${line}`)
+  const warnings = outcome.warnings.map((line) => `⚠ ${line}`)
+  const shown = [...errors.slice(0, room), ...warnings.slice(0, Math.max(0, room - errors.length))]
+  const omitted = errors.length + warnings.length - shown.length
   if (omitted > 0) shown.push(t('trigger.omitted', { count: omitted }))
   return shown.join('\n')
 }
@@ -59,6 +62,8 @@ export interface AskOptions {
   readonly reasonKey: string
   /** Dictionary key for the full prompt the UI shows. */
   readonly askKey: string
+  /** Dictionary key naming one finding in the prompt's own language. */
+  readonly detailKey: string
   /** What the check found, already rendered in the plugin's own locale. */
   readonly outcome: CheckResult
   /** Translator for the plugin's own locale. */
@@ -75,6 +80,30 @@ export interface AskOptions {
   readonly approval?: () => ApprovalPolicyReporter | undefined
   /** The session the question would be asked in. */
   readonly session?: unknown
+  /**
+   * What the findings mean for the prompt they are folded into.
+   *
+   * A `git commit` is stopped by the git guard before the commit message is
+   * ever judged, so the trigger's question would be the second one asked about
+   * the same command — and a prompt that names one concern while three more sit
+   * unseen behind it teaches its reader to approve without looking. Naming the
+   * other gate works for both: a question still shows the findings, and a
+   * refusal says what else the command broke.
+   */
+  readonly settledBy?: string
+}
+
+/** One finding, rendered for one side of the prompt. */
+function sideOf(
+  outcome: CheckResult,
+  t: Translate,
+  detailKey: string,
+): { readonly details: string; readonly first: string } {
+  const rendered = detailsOf(outcome, t)
+  // The first line doubles as the one-sentence account appended to another
+  // gate's reason, so it keeps its own `✖`/`⚠` rather than gaining a second one.
+  const first = rendered.split('\n')[0] ?? t(detailKey, { details: rendered })
+  return { details: rendered, first }
 }
 
 /**
@@ -90,21 +119,110 @@ export function askAbout(options: AskOptions): PreToolDecision {
   const chinese = createTranslator('zh-CN')
   // The Chinese key is the literal `zh`: the client lower-cases a locale and
   // falls back to `en`, so `zh-CN` would never match.
+  const own = sideOf(options.outcome, options.t, options.detailKey)
   return unaskable(
     {
       kind: 'ask',
-      reason: options.t(options.reasonKey, {
-        details: detailsOf(options.outcome, options.t),
-      }),
+      reason: options.t(options.reasonKey, { details: own.details }),
       displayReason: {
-        en: english(options.askKey, { details: detailsOf(options.assess(english), english) }),
-        zh: chinese(options.askKey, { details: detailsOf(options.assess(chinese), chinese) }),
+        en: english(options.askKey, {
+          details: sideOf(options.assess(english), english, options.detailKey).details,
+        }),
+        zh: chinese(options.askKey, {
+          details: sideOf(options.assess(chinese), chinese, options.detailKey).details,
+        }),
       },
     },
     options.t,
     options.approval,
     options.session,
+    // Triggers gate an action by its shape, not by a per-operation tier, so the
+    // guard's way out — "set this operation to allow" — names a field that does
+    // not exist here. The trigger's own way out is the switch, or the reason.
+    'approval.disabled_trigger',
   )
+}
+
+/**
+ * The line naming the gate that asked first, in one language.
+ *
+ * `settledBy` is already a translated sentence, so it is read, not looked up:
+ * the findings follow it in the prompt, which is why the line does not repeat
+ * them.
+ * @param t - translator for one side of the prompt.
+ * @param settledBy - the sentence the trigger supplied.
+ * @returns the line, ending with a newline before the findings.
+ */
+function noteOf(t: Translate, settledBy: string): string {
+  return `\n${t(settledBy)}`
+}
+
+/**
+ * Splice a decided check into the question another gate is asking.
+ *
+ * The prompt keeps its own wrapper and gains the findings: a prompt that names
+ * one concern while three more sit unseen behind it teaches its reader to
+ * approve without looking. The `reason` the model reads carries them too,
+ * because that text is the model's only account of why the call was stopped.
+ * @param decision - the `ask` to extend.
+ * @param options - the keys, and how to re-render the findings per language.
+ * @returns the extended decision.
+ */
+function mergeRequest(
+  decision: PreToolDecision & { readonly kind: 'ask' },
+  options: AskOptions,
+): PreToolDecision {
+  const english = createTranslator('en-US')
+  const chinese = createTranslator('zh-CN')
+  const own = sideOf(options.outcome, options.t, options.detailKey)
+  const settledBy = options.settledBy ?? ''
+  return {
+    ...decision,
+    reason: `${decision.reason ?? ''}\n${own.details}`,
+    displayReason: {
+      ...decision.displayReason,
+      en: `${decision.displayReason?.en ?? ''}${noteOf(english, settledBy)}\n${sideOf(options.assess(english), english, options.detailKey).details}`,
+      zh: `${decision.displayReason?.zh ?? ''}${noteOf(chinese, settledBy)}\n${sideOf(options.assess(chinese), chinese, options.detailKey).details}`,
+    },
+  }
+}
+
+/**
+ * Settle a check that has already been evaluated.
+ *
+ * Four things shape the answer, and the order matters. A gate that denied the
+ * call is not second-guessed, but the check still ran and its outcome is still
+ * recorded, so the status line can say the command failed its convention check
+ * rather than saying nothing happened. A question another gate is asking gains
+ * the findings rather than being asked twice. And only a check that was really
+ * put to the user is remembered: a refusal answers one attempt, so the next one
+ * is judged again.
+ * @param downstream - what the gates behind this one decided.
+ * @param options - the keys, the outcome, and how to re-render it.
+ * @param remember - records that the question was really put to the user.
+ * @returns the decision for `tools/pre-execute`.
+ */
+export function settleAbout(
+  downstream: PreToolDecision,
+  options: AskOptions,
+  remember: () => void,
+): PreToolDecision {
+  if (downstream.kind === 'cancel') return downstream
+  if (downstream.kind === 'deny') return downstream
+
+  const settledBy = options.settledBy
+  if (downstream.kind !== 'allow' && settledBy !== undefined) {
+    // Another gate is about to ask the same user about the same call. Its
+    // prompt shows the findings; this check asks nothing of its own.
+    return mergeRequest(downstream, options)
+  }
+
+  const decision = askAbout(options)
+  // The question was shown — the prompt is the trigger's own, or nothing behind
+  // it had anything to say. Under the `never` policy it never reaches anybody,
+  // so it is not remembered and the next attempt speaks again.
+  if (decision.kind === 'ask') remember()
+  return decision
 }
 
 /**

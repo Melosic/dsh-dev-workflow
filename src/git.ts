@@ -106,10 +106,17 @@ export interface GitRunner {
 export function createGitRunner(ctx: Context, cwd: string): GitRunner {
   const subprocess = service(ctx)
 
+  // The executable does not move while the process runs, and every git call in a
+  // tool invocation would otherwise pay a fresh filesystem search for the same
+  // answer.
+  let found: string | undefined
+
   const locate: GitRunner['locate'] = async (signal) => {
     if (subprocess === undefined) return { ok: false, failure: 'git-not-available' }
+    if (found !== undefined) return { ok: true, path: found }
     try {
-      return { ok: true, path: await subprocess.resolveExecutable('git', undefined, signal) }
+      found = await subprocess.resolveExecutable('git', undefined, signal)
+      return { ok: true, path: found }
     } catch {
       return { ok: false, failure: 'git-not-available' }
     }

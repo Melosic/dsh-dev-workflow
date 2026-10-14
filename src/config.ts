@@ -43,6 +43,13 @@ export const CONFIG_FILES = ['package.json', 'cordis.patch.yml'] as const
 export const DEFAULT_COMMIT_PATTERN = `^(${COMMIT_TYPES.join('|')})(\\([^)]+\\))?!?: \\S`
 
 /**
+ * Semantic version, pre-release and build metadata included, as a full match.
+ * Exported so the release check compiles exactly the pattern the schema
+ * defaults to — a repository that narrows it narrows the check with it.
+ */
+export const SEMVER_PATTERN = String.raw`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`
+
+/**
  * One destructive-git policy value.
  *
  * `deny` blocks the call, `ask` routes it through the approval prompt, and
@@ -138,6 +145,36 @@ export const Config = z.object({
       requireScope: z.boolean().default(false).volatile(),
       /** Maximum subject length, measured from the text after `type: `. */
       subjectMaxLength: z.number().step(1).min(1).default(SUBJECT_MAX_LENGTH).volatile(),
+    })
+    .default({}),
+  /** Which release rules the pre-release check applies. */
+  releaseCheck: z
+    .object({
+      /**
+       * Require a `MAJOR.MINOR.PATCH` version. A repository that versions by
+       * date or by build number turns this off rather than silencing the whole
+       * check.
+       */
+      semver: z.boolean().default(true).volatile(),
+      /** Require the changelog to carry the release, or a non-empty `[Unreleased]`. */
+      changelog: z.boolean().default(true).volatile(),
+      /**
+       * Restrict `###` headings to the Keep a Changelog categories. Off lets a
+       * repository keep its own headings — `### Internal` and the like.
+       */
+      changelogCategories: z.boolean().default(true).volatile(),
+      /** Block a pre-release published to `latest` instead of a `next`-style tag. */
+      prereleaseTag: z.boolean().default(true).volatile(),
+      /**
+       * How a version is written: the pattern the tag and the manifest are
+       * checked against, as a full-match regular expression. The default is
+       * `MAJOR.MINOR.PATCH` with optional pre-release and build metadata; a
+       * repository that versions by date or build number says so here.
+       *
+       * Not volatile: like `rules.branchPattern` and `rules.commitPattern`, a
+       * regular expression is a file-only setting the panel shows for reference.
+       */
+      versionPattern: z.string().default(SEMVER_PATTERN),
     })
     .default({}),
   /** Master switch. `off` registers nothing, so the plugin costs no tokens. */

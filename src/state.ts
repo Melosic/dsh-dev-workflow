@@ -46,6 +46,17 @@ export interface WorkflowState {
    */
   remember(sessionId: string, kind: CheckKind, targetId: string): void
   /**
+   * Drop a target, so the next attempt asks again.
+   *
+   * A refusal is an answer about one attempt, not about the target: the user
+   * who declined a commit with a bad message must be asked again after fixing
+   * it, and asked again if they change nothing at all.
+   * @param sessionId - the session the tool call belongs to.
+   * @param kind - which check.
+   * @param targetId - hash of what was checked.
+   */
+  forget(sessionId: string, kind: CheckKind, targetId: string): void
+  /**
    * Whether the user already approved this exact operation in this session.
    * @param sessionId - the session the tool call belongs to.
    * @param targetId - hash of the operation.
@@ -65,12 +76,19 @@ export interface WorkflowState {
   /** The most recent outcome, or `undefined` if no check has run yet. */
   lastOutcome(): CheckOutcome | undefined
   /**
-   * Count one guard hit.
+   * Count one guard hit, under the tier that applied to it.
+   *
+   * The tally counts recognition, not the decision: a policy set to `allow`
+   * still records that the operation was seen, which is the only way the status
+   * line can tell "nothing happened" from "everything was downgraded".
    * @param reason - the dictionary key of the guard that fired.
+   * @param action - the policy that applied, for the status line.
    */
-  recordGuardHit(reason: string): void
+  recordGuardHit(reason: string, action?: string): void
   /** A copy of the guard tallies, so callers cannot mutate them. */
   guardHits(): GuardTally
+  /** The tier each counted reason was last seen under. */
+  guardHitActions(): Readonly<Record<string, string>>
 }
 
 // A long session can commit many times; each remembered target is a short hash,
@@ -86,6 +104,7 @@ const MAX_TARGETS_PER_SESSION = 512
 export function createWorkflowState(): WorkflowState {
   const targets = new Map<string, Set<string>>()
   const guardHits = new Map<string, number>()
+  const guardActions = new Map<string, string>()
   let last: CheckOutcome | undefined
 
   const bucket = (sessionId: string): Set<string> => {
@@ -98,6 +117,10 @@ export function createWorkflowState(): WorkflowState {
 
   const add = (sessionId: string, key: string): void => {
     const set = bucket(sessionId)
+    // Re-inserting moves the key to the end, so the eviction below drops the
+    // least recently used target rather than the oldest one. A commit replayed
+    // all afternoon stays remembered; one from a hundred commits ago can go.
+    set.delete(key)
     set.add(key)
     while (set.size > MAX_TARGETS_PER_SESSION) {
       const oldest = set.values().next().value
@@ -109,6 +132,9 @@ export function createWorkflowState(): WorkflowState {
   return {
     seen: (sessionId, kind, targetId) => bucket(sessionId).has(`${kind}:${targetId}`),
     remember: (sessionId, kind, targetId) => add(sessionId, `${kind}:${targetId}`),
+    forget: (sessionId, kind, targetId) => {
+      targets.get(sessionId)?.delete(`${kind}:${targetId}`)
+    },
     // A remembered approval is keyed apart from the checks: the same operation
     // being approved says nothing about a check having run over it.
     approved: (sessionId, targetId) => bucket(sessionId).has(`approved:${targetId}`),
@@ -117,9 +143,11 @@ export function createWorkflowState(): WorkflowState {
       last = outcome
     },
     lastOutcome: () => last,
-    recordGuardHit: (reason) => {
+    recordGuardHit: (reason, action) => {
       guardHits.set(reason, (guardHits.get(reason) ?? 0) + 1)
+      if (action !== undefined) guardActions.set(reason, action)
     },
     guardHits: () => Object.fromEntries(guardHits),
+    guardHitActions: () => Object.fromEntries(guardActions),
   }
 }

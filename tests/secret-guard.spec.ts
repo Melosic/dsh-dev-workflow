@@ -28,6 +28,16 @@ const SLACK_TOKEN = `xoxb-${'1234567890'.repeat(2)}`
 const PRIVATE_KEY = '-----BEGIN RSA PRIVATE KEY-----'
 /** A high-entropy string with no known prefix. */
 const RANDOM_TOKEN = 'kZ9vQ2mX8pT4rL6nW1yB5cD7fH3jS0aGeU'
+/** A registry token, built to the shape npm issues. */
+const NPM_TOKEN = `npm_${'c'.repeat(36)}`
+/** The same, for GitLab. */
+const GITLAB_PAT = `glpat-${'d'.repeat(20)}`
+/** And for a GitHub fine-grained PAT, whose prefix differs from the classic family. */
+const FINE_GRAINED_PAT = `github_pat_${'e'.repeat(24)}`
+/** Three base64url segments whose header decodes to an opening brace, as a JWT's do. */
+const JWT = `eyJ${'f'.repeat(10)}.${'g'.repeat(10)}.${'h'.repeat(10)}`
+/** An opaque value handed to an Authorization header. */
+const BEARER = `Bearer ${'i'.repeat(24)}`
 
 /**
  * Classify one arguments object under the default rules.
@@ -108,6 +118,41 @@ describe('src/guard/secret-guard.ts', () => {
     expect(findSecret(GITHUB_PAT, { genericHighEntropy: false })).toBe('GitHub token')
     expect(findSecret(SLACK_TOKEN, { genericHighEntropy: false })).toBe('Slack token')
     expect(findSecret('ordinary prose', { genericHighEntropy: false })).toBeUndefined()
+  })
+
+  it('recognises the registry and header shapes as well', () => {
+    // The prefixes are what make a shape recognisable without a heuristic: each
+    // one is issued by exactly one service, so a match names the service too.
+    expect(findSecret(NPM_TOKEN, { genericHighEntropy: false })).toBe('npm token')
+    expect(findSecret(GITLAB_PAT, { genericHighEntropy: false })).toBe('GitLab token')
+    expect(findSecret(FINE_GRAINED_PAT, { genericHighEntropy: false })).toBe(
+      'GitHub fine-grained token',
+    )
+    expect(findSecret(JWT, { genericHighEntropy: false })).toBe('JWT')
+    expect(findSecret(BEARER, { genericHighEntropy: false })).toBe('Bearer token')
+    expect(classify({ command: `curl -H "Authorization: ${BEARER}" https://x` })?.params).toEqual({
+      pattern: 'Bearer token',
+    })
+  })
+
+  it('keeps the classes apart, so each shape names its own service', () => {
+    // A fine-grained PAT also satisfies the substring a classic one looks for
+    // only if the classic rule is read carelessly; order decides which name is
+    // reported, and the specific prefix must win.
+    expect(findSecret(FINE_GRAINED_PAT, { genericHighEntropy: false })).not.toBe('GitHub token')
+    // A Slack token in a header is still a Slack token: the value's own shape
+    // is the stronger claim, so the header rule must not take it over.
+    expect(findSecret(`Authorization: Bearer ${SLACK_TOKEN}`, { genericHighEntropy: false })).toBe(
+      'Slack token',
+    )
+  })
+
+  it('does not treat the word Bearer, or short values, as a credential', () => {
+    expect(findSecret('Bearer', { genericHighEntropy: false })).toBeUndefined()
+    expect(findSecret('Authorization: Bearer', { genericHighEntropy: false })).toBeUndefined()
+    expect(findSecret('Bearer abc123', { genericHighEntropy: false })).toBeUndefined()
+    expect(findSecret('npm run build', { genericHighEntropy: false })).toBeUndefined()
+    expect(findSecret('glpat-', { genericHighEntropy: false })).toBeUndefined()
   })
 
   it('leaves high-entropy detection off unless it is asked for', () => {

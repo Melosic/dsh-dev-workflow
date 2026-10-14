@@ -4,8 +4,14 @@
 
 对应的代码是 `src/triggers/`（三个约定触发器：提交前、PR 前、发版前）、`src/guard/`（五道守卫）与
 `src/commands/dev-workflow.ts`（手动路径）。它们共用 `src/checks.ts` 与
-`src/tools/check-commit-message.ts` 的判定逻辑、`src/shell.ts` 的命令行解析，所以
-「自动检查」和 `/dev-workflow check` 给出的结论必然一致。
+`src/tools/check-commit-message.ts` 的判定逻辑、`src/shell.ts` 的命令行解析。
+
+**两者的结论一致，但覆盖面不同**，这一点必须说清楚：
+
+- `/dev-workflow check` 没有提交信息可判——它检查的是**工作区**，而自动检查检查的是**这次提交**。
+  要判消息规则得显式带上：`/dev-workflow check --message "feat(cli): add a flag"`。不带参数时，
+  输出里有一行明说「提交信息规则未包含」。
+- 读不到仓库或读不到 git 时，自动检查把这件事写进它的结论（一条 warning），而不是安静地少跑几条规则。
 
 ## 拦在哪个事件上
 
@@ -13,23 +19,34 @@
 agent 调用 bash / pwsh 工具
         │
         ▼
-tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听器
-        │
-        ├─ 先 await next()：上游门禁的 allow / deny / ask / cancel 原样返回，不抢话
+tools/pre-execute  ← waterfall 门禁，本插件在此最多挂八个监听器
         │
         ├─ 监听器 A（pre-commit）：命令是 git commit → 校验提交信息与文档同步
         ├─ 监听器 B（pre-pr）：命令是 gh pr create → 校验标题与描述
         ├─ 监听器 C（pre-release）：命令是 git tag / npm publish → 校验发版
         ├─ 监听器 D（git-guard）：危险 git 操作 → 按策略 deny / ask
-        ├─ 监听器 E（command-guard）：危险 shell 命令 → 按策略 deny / ask
-        ├─ 监听器 F（file-guard）：参数里有敏感路径 → deny
-        └─ 监听器 G（secret-guard）：参数里有凭据形状 → deny
+        ├─ 监听器 E（outward-guard）：对外可见动作 → 按策略 deny / ask
+        ├─ 监听器 F（command-guard）：危险 shell 命令 → 按策略 deny / ask
+        ├─ 监听器 G（file-guard）：参数里有敏感路径 → deny
+        └─ 监听器 H（secret-guard）：参数里有凭据形状 → deny
 
-前三个命中时返回 { kind: 'ask', displayReason: { en, zh } }；后四个按各自策略返回。
+前三个命中时返回 { kind: 'ask', displayReason: { en, zh } }；后五个按各自策略返回。
 ```
 
-三者都**先 `await next()` 再自查**：上游（例如 auto-review、权限门禁）已经拒绝或取消了这次调用时，
-本插件绝不改判，而是把上游的决定原样透传；本插件只在「调用已经合法、正要去执行」这个位置补充检查。
+**waterfall 的顺序在这里是有语义的，不是摆设。** 监听器按注册顺序由外到内包成一层层：先注册的
+在外层，它 `await next()` 的返回值是内层的决定，而它自己的返回值是最终决定。三个约定触发器注册在
+最外层，也就是说**它们先看到命令、最后决定结果**。
+
+由此产生两条规则，缺一条就会出问题：
+
+1. **上游更严的决定不被改判。** `next()` 返回 `deny` 或 `cancel` 时原样透传——别人已经拒绝或取消了，
+   本插件不替它松口。（`ask` 不算「更严」：它也只是一个待回答的问题。）
+2. **上游的 `ask` 不构成「跳过检查」的理由。** 这正是曾经的 bug：触发器在 `next().kind !== 'allow'`
+   时直接返回，于是内层的 outward-guard 先对 `gh pr create` 抛出泛泛一问，PR 标题与描述的三段检查
+   一行都没跑；用户批准那一问之后命令直接执行。现在触发器先完成自己那份判定，再把发现**并入
+   内层那一问**：`reason` 里带上完整清单，`displayReason` 里追加一行说明「回答另一道守卫的问题
+   同时也回答了本项检查」。既不重复提问，也不让发现被吞掉。
+
 `tools/pre-execute` 是 DSH 官方在派发任何工具调用之前走的 waterfall 钩子
 （`@deepseek-ai/dsh-tools` 的 `prepareExecution`），其 `next()` 会继续调用链上后面的监听器，
 默认返回 `{ kind: 'allow' }`。
@@ -46,6 +63,8 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 
 由此产生的能力边界，与提交前检查一致：插件只看**被调用的命令文本**，看不懂脚本内部
 （agent 执行一个内部会发版的脚本时看不到），也不看用户自己终端里的操作。
+`sh -c "..."` 这类把脚本放在一个词里的写法会被**递归解析**（见下面的词法一层），
+纯动态拼装仍是边界。
 
 三个约定触发器之外的决策规则也用 `ask` 而不是 `deny`：提交信息或 PR 描述不规范是作者可以明知的
 取舍，插件给的是「要不要照常执行」的选择，而不是否决权。**只有配置里显式写了 `'deny'`
@@ -53,9 +72,9 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 
 八道门是独立的：`enableOwnTrigger` 管三个约定触发器，五道守卫各由自己的 `enabled` 管，
 其中一个出问题不影响其余。注册顺序是「约定（提交 → PR → 发版）→ 破坏性 git → 对外动作 →
-危险命令 → 敏感文件 → 密钥」：更靠前的守卫先写审计记录，而各级决策仍按「更严者胜」汇总，
-顺序不影响最终结果。**对外动作排在破坏性 git 之后、机器级破坏之前**：它管的也是 git
-（外加 `gh` 与包管理器），但拦的是「别人会看见」，不是「本机会丢东西」。
+危险命令 → 敏感文件 → 密钥」。**顺序决定谁先看到命令、谁最后拍板**（见上），但不改变各级
+决策的汇总方式：命中先计数、再审计，同一道守卫内部按「更严者胜」取一条。**对外动作排在破坏性
+git 之后**：它管的也是 git（外加 `gh` 与包管理器），但拦的是「别人会看见」，不是「本机会丢东西」。
 
 ## 什么算「一次提交」
 
@@ -66,38 +85,60 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
    `&&` / `||` / `;` / `|` / 换行作为分隔）。
 2. `segments()` 按这些运算符切段，每段独立判断——所以
    `pnpm test && git commit -m "..."` 里的提交部分照样被识别。
-3. `gitInvocations()` 在每段里跳过前导的 `VAR=value` 赋值和 `env`，取程序名的 basename，
-   匹配 `git` / `git.exe`；再跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，
+3. `programInvocations()` 在每段里跳过前导的 `VAR=value` 赋值与包装词（`sudo`、`doas`、`env`、
+   `nohup`、`command`、`exec`、`time`、`npx`，以及它们自己的取值选项，如 `sudo -u root`），
+   取程序名的 basename；`sh -c "<命令>"` 这类把脚本藏在一个词里的写法会**递归解析**内部的命令行。
+4. `gitInvocations()` 在 `git` 的调用里跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，
    取出子命令与它的参数。
-4. `commitArguments()` 解析提交信息：`-m` / `--message` / `--message=` / `-mXXX`
+5. `commitArguments()` 解析提交信息：`-m` / `--message` / `--message=` / `-mXXX`
    （多个 `-m` 按 git 的语义用空行拼接），以及 `-F` / `--file` / `--file=` / `-FXXX`。
+   **短选项按字母拆开**：`-am "msg"`、`-avm "msg"`、`-qm "msg"` 与 `-m "msg"` 是同一件事——
+   只按词首匹配 `-m` 会把人类最常用的 `git commit -am` 整条漏掉。
+6. `quoteCommandWords()` 是第 1 步的"带出处"版本：每个词额外记住**它是不是 shell 原样保留的文本**
+   （单引号里的就是，双引号里有 `$`/反引号的不是），判定需要这份信息才能区分「信息里含 `$(...)`」
+   与「信息本身是一段字面文本」。
 
-两条刻意的保守规则：
+几条刻意的保守规则：
 
 - **引号里的 `git commit` 不算提交。** 词法处理已经把它归到同一 token 里，
   不会被当成命令名。
-- **提交信息里含 `$(...)` 或反引号时不判定。** 这种值要在 shell 里展开，
-  插件看不到 git 最终收到的字面量，与其对一段 git 永远不会收到的文本报错，不如不开口。
+- **提交信息的值含 `$(...)`、`${...}` 或反引号时不判定，但要说明未判定。** 这种值要在 shell 里
+  展开，插件看不到 git 最终收到的字面量，与其对一段 git 永远不会收到的文本报错，不如不开口；
+  「不开口」和「查过且通过」必须能区分，所以结论里会带一条 warning 说这条规则没跑。
+  反过来，**单引号包住的值是字面文本**：`-m '$msg'` 提交的就是 `$msg` 四个字符，照常判定。
+- **裸 `$msg`（PowerShell / shell 变量）同样不判定**，理由相同。
+- **`-F` 指向的文件在判定时刻读，可能还不存在。** `echo x > m && git commit -F m` 里文件是
+  同一条命令的后半段写的，判定发生在执行之前，所以读不到——这时报「信息不可读」而不是沉默。
+- **`git commit --amend` 且命令行没写信息时，读一次 `git log -1 --format=%B`。** 用 amend 修
+  提交信息恰恰是最需要检查的路径，读不到就不查等于放走了它。
 
 `git commit -F -`（从标准输入读）同样放弃判定：信息还没产生。
 
 ## 检查什么
 
-`evaluate()` 把两个已有工具合在一起跑，输入是「提交信息 + 工作区变更文件集」：
+`evaluate()` 把两个已有工具合在一起跑，输入是「提交信息 + 本次提交的变更文件集 + 工作区里
+其它未提交的改动」：
 
 | 来源 | 判定 |
 | --- | --- |
 | `checkCommitMessage` | Conventional Commits：类型、格式、标题长度、句尾句号、`!` 与 `BREAKING CHANGE:` 页脚是否配套 |
 | 变更文件集 | 跨模块提交、缺少 scope 的软警告 |
 | `checkDocSync` | 成对文件（README、locale、SKILL）只改一半 → 报错；改了代码没动文档 / CHANGELOG → 警告 |
-| `rules.requireChangelogOnFeat` | `feat` 提交且变更集里没有 `config.docs.changelog` → 阻塞 |
+| `rules.requireChangelogOnFeat` | `feat` 提交且**本次提交或分支已有** `config.docs.changelog` → 不阻塞 |
 
 最后一条把 `config.rules.requireChangelogOnFeat` 与 `checkDocSync` 的同类警告区分开：
 `feat` 要求 CHANGELOG 是硬规则（阻塞），其它类型的 CHANGELOG 缺失只是建议（警告）。
 同一次判定里两者只出现一条，不重复提示同一件事。
 
-工作区变更集来自 `git status --porcelain=v1 --untracked-files=all`，
-通过 `ctx.get('subprocess')` 运行——**每次判定只跑一次 git**。
+**判定的是"这次提交"，不是"整个工作区"。** 文件集取自 `git diff --cached --name-only -z`——
+暂存区里的才是这条 `git commit` 将要记录的内容。这个区别不是学术性的：重度用户的工作区里
+总有别的改动，按工作区判定会把无关提交拦下来，甚至让一个「文档只改了一半挂在工作区」的状态
+阻塞仓库里其它所有提交。工作区（`git status --porcelain=v1`）仍然读，但**只用来区分两种镜像
+情况**：配对的另一半完全没动 → 报错；另一半正在暂存区或工作区里编辑 → 降为 warning
+（「分支推出前把这一对补完」）。
+
+`/dev-workflow check` 读的才是工作区——那是它的用途。两者各自的取舍写在上面的对比里。
+**每次判定最多跑两次 git**：一次读暂存集，一次读工作区（后者只在需要判断镜像时跑）。
 
 ## 什么算「一次 PR 创建」
 
@@ -109,11 +150,17 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 `--body-file` 指向的文件在**判定时刻**读取（相对路径按会话 cwd 解析）；
 `-F -`（从标准输入读）不读——和 `git commit -F -` 同理，内容还没产生。
 
+**`--fill` 和描述由 shell 组装的情况会明说，而不是当作「查过且通过」。** 前者命令行里没有标题，
+`squash` 合并后它却会成为主干上的提交信息，所以结论里记一条 warning；后者（`-b "$(cat pr.md)"`）
+的正文只有字面片段可查，三段规则不跑，同样记一条 warning——否则这条路径会**每次都被误拦**
+（把 `$(cat pr.md)` 当成正文，每个段落都被判成缺失）。两者的写法差异被保留：单引号里的正文是
+字面文本，照常查。
+
 ## PR 检查什么
 
 | 规则 | 判定 |
 | --- | --- |
-| 标题 | 直接复用 `checkCommitMessage({ message: title })` 的结论。**squash merge 后 PR 标题就是 main 上的提交信息**，因此它必须满足与提交信息完全相同的规范——用同一份实现，结论不会漂移 |
+| 标题 | 复用提交信息的判定函数（`evaluateMessage`），也就是**同一套配置、同一套规则**。**squash merge 后 PR 标题就是 main 上的提交信息**，因此它必须满足与提交信息完全相同的规范；`commitCheck.enabled` / `onFailure` 对标题同样生效，一处关掉或降级在三个入口一致 |
 | 描述三段 | PR 模板要求的 `## What` / `## Why` / `## How to verify`，**缺段或段内为空都算缺失**——一个只有标题的空盒子并不比没有好 |
 | 检查清单 | 在模板要求的那三段**之内**遗留的 `- [ ]` 未勾选行逐项计数（描述整体为空时这条不触发，只提示） |
 | 关联 Issue | 标题与描述里没有 `#<数字>` 时**只警告**：本地无法判断是否真的存在对应 Issue，不该因此阻塞 |
@@ -134,29 +181,52 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 
 - `git tag <name>`：跳过 `-a` / `-s` 等无值选项与 `-m` / `-F` / `-u` 等带值选项，
   取第一个非选项词为 tag 名；`-l` / `--list` / `-d` / `--delete` / `-v` / `--verify`
-  是**读**操作，直接不算发版。
-- `npm publish` / `pnpm publish` / `npx npm publish`：读 `--tag` / `--tag=`。**没有写 dist-tag
+  是**读**操作，直接不算发版。tag 名同样带出处：`git tag "v$(cat VERSION)"` 的**真实**名字
+  看不到，此时版本规则不跑并记一条 warning，而不是拿 `v$(cat VERSION)` 去比 SemVer。
+- **包管理器扩到 npm / pnpm / yarn / bun**，读 `--tag` / `--tag=`。**没有写 dist-tag
   时记为 `latest`**，因为 npm 确实会把预发布版本也发布到 `latest`——把默认值当成事实，
   预发布规则才拦得住它。
+- **`pnpm --filter <pkg> publish` 读的是被发布那个包的 `package.json`**（相对会话 cwd 解析）。
+  读不到就记一条 warning 说比对的是当前目录的版本——拿主包版本去比 tag 是个错误的答案，
+  比「读不到」更糟。
+- **`npm version <kind>` 要认。** 它一条命令完成「改版本号 + 提交 + 打 tag」，既不是 `git tag`
+  也不是 publish；不认它等于给出了一条最省事的绕过路径。识别到就记一条 warning 说明它越过了
+  提交与 tag 两道检查。
 - **`--dry-run`（或短选项 `-n`）不算发版。** 它不上传任何东西，而 `docs/PUBLISHING.md`
   自己就推荐用它核对打包结果——把一次演习拦下来并报「预发布版发到 latest」是纯误报。
 - 前面的 `npx` 属于被剥离的包装词（见 `src/shell.ts` 的 `TRANSPARENT`），所以
-  `npx npm publish` 认得出是发布；但 `sh -c "npm publish"` 里引号包着的整段脚本认不出，
-  那是动态解析的范畴。
+  `npx npm publish` 认得出是发布。
+
+### 我们看不见什么
+
+这张清单是**承诺**，不是免责：以下路径本插件不拦，如果你用它发版，拦不住是已知的。
+
+| 路径 | 为什么看不见 |
+| --- | --- |
+| `nx release`、`lerna publish`、`changesets` | 各自的工具链完成 bump / tag / publish，命令行上看不出最终动作 |
+| `sh -c "npm publish"` 里被引号包住的整段脚本 | 递归解析能处理多数写法，但纯动态拼装（`eval`、变量展开的脚本）读不出 |
+| 脚本文件里的发版（`./release.sh`） | 只看被调用的命令文本，不看脚本内部 |
+| CI / 其它机器上的发布 | 插件只在 DSH 会话内运行 |
+| `gh release create`、`git push --follow-tags` 的 tag 部分 | `gh release create` 不在识别集里；`push` 会按「推送」拦下，但不会额外判 tag |
 
 ## 发版检查什么
 
-| 规则 | 判定 |
-| --- | --- |
-| SemVer | 版本号须匹配 `MAJOR.MINOR.PATCH`，可带 `-rc.1` 之类的预发布后缀 |
-| tag 与 manifest 一致 | 去掉 `v` 前缀后，tag 名与 `package.json` 的 `version` 必须相同：两者不一致意味着「发布出来的版本」和「tag 名」不是同一个 |
-| 预发布不推 latest | 版本带预发布后缀而 dist-tag 是 `latest` → 阻塞，提示改用 `--tag next` |
-| CHANGELOG 有 `[Unreleased]` | 没有 `## [Unreleased]` 段 → 阻塞（Keep a Changelog 要求它常驻顶部） |
-| CHANGELOG 分类合法 | `[Unreleased]` 段里的 `###` 标题须是 Added / Changed / Deprecated / Removed / Fixed / Security 之一 |
-| `[Unreleased]` 不为空 | **`[Unreleased]` 与 `[<version>]` 两段都为空**才算空：发布流程的第二步就是把条目从前者移入后者，所以 tag 创建的那一刻，合法状态可能落在任何一段里 |
+| 规则 | 判定 | 可否配置 |
+| --- | --- | --- |
+| SemVer | 版本号须匹配 `MAJOR.MINOR.PATCH`，可带 `-rc.1` 之类的预发布后缀 | `releaseCheck.semver` 关闭即跳过；模式本身是文件级设置 `releaseCheck.versionPattern` |
+| tag 与 manifest 一致 | 去掉 `v` 前缀后，tag 名与 `package.json` 的 `version` 必须相同：两者不一致意味着「发布出来的版本」和「tag 名」不是同一个 | 同上，随版本规则一起开关 |
+| 预发布不推 latest | 版本带预发布后缀而 dist-tag 是 `latest` → 阻塞，提示改用 `--tag next` | `releaseCheck.prereleaseTag` |
+| CHANGELOG 有 `[Unreleased]` | 没有 `## [Unreleased]` 段 → 阻塞（Keep a Changelog 要求它常驻顶部） | `releaseCheck.changelog` |
+| CHANGELOG 分类合法 | `[Unreleased]` 段里的 `###` 标题须是 Added / Changed / Deprecated / Removed / Fixed / Security 之一 | `releaseCheck.changelogCategories` |
+| `[Unreleased]` 不为空 | **`[Unreleased]` 与 `[<version>]` 两段都为空**才算空：发布流程的第二步就是把条目从前者移入后者，所以 tag 创建的那一刻，合法状态可能落在任何一段里 | 同 `changelog` |
+
+**版本条目按两种写法查。** `## [1.0.0]`、`## 1.0.0` 与 `## v1.0.0 - 2026-01-01` 都是常见写法，
+查表时带上/去掉 `v` 前缀都试一遍——不这么做，写 `## v1.0.0` 的仓库会在每次 tag 时被告知
+「这个版本没有记录」，而它明明写了。
 
 版本号取自 tag（无 tag 时才退回 `package.json`）。`package.json` 与 CHANGELOG 在
 **判定时刻**从会话 cwd 读取；读不到就不跑对应规则，只跑能跑的——门禁不会因此变成空操作。
+**规则全部可在配置里单独关掉**（`releaseCheck.*`，默认沿用上表），这样想放宽一条不必整关检查。
 
 ## 守卫危险 git 命令
 
@@ -165,14 +235,14 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 
 | 命令形态 | 策略键 | 默认 |
 | --- | --- | --- |
-| `push --force` / `-f` / `+refspec` | `forcePush` | `ask` |
+| `push --force` / `-f` / `+refspec` / **`--mirror`** | `forcePush` | `ask` |
 | `reset --hard` | `hardReset` | `ask` |
-| `rebase` | `rebase` | `ask` |
+| `rebase`（`--continue` / `--abort` / `--skip` 除外） | `rebase` | `ask` |
 | `commit --amend` | `amend` | `ask` |
 | `branch -D` / `--delete --force` | `branchDelete` | `ask` |
 | `push --delete` / `-d <remote> <branch>` | `branchDelete` | `ask` |
 | `clean -f` / `-fd` | `cleanForce` | `ask` |
-| `checkout -- <path>` | `checkoutDiscard` | `ask` |
+| `checkout -- <path>` / `checkout .` / `restore <path>` / `restore .` | `checkoutDiscard` | `ask` |
 | `--no-verify`（任何子命令） | `noVerify` | `ask` |
 
 识别规则里几处刻意的地方：
@@ -183,11 +253,18 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
   plain `--force` 压过 lease 并真的覆盖远端。只有不带 `--force` / `-f` / `+refspec` 时，
   lease 才让这条命令通过。反过来，裸 `--force` 的理由里会附带一行「建议改用
   `--force-with-lease`」。
+- **`--mirror` 归入强推。** 它让远端与本机 refs 完全一致，等于隐含着「覆盖 + 删除本机没有的
+  ref」；不认它的话，用户一旦把 `outwardGuard.push` 放宽（几乎必然），它就成了绕过 forcePush 的口子。
+- **`rebase --continue` / `--abort` / `--skip` 放过。** 这三个是冲突恢复与安全回退，不是改写历史的
+  起点；每次都问会把工具疲劳推向「一律允许」。带 `--exec` 的不放过：那会在每个 commit 上跑命令。
+- **`checkout .`、`restore <path>`、`restore .` 都算丢弃改动**（`git restore` 是 `checkout --` 的
+  现代替代写法）；`restore --staged` 不算，它把改动退回工作区，什么也没丢。
 - **短选项按字母匹配。** `-fd` 含 `f`，`-D` 含 `D`；`--force` 这类长选项不参与短选项匹配。
 - **`reset --soft` / `clean -n` / `branch -d` / `checkout main` 都不拦。** 它们不丢工作。
 - **`--no-verify` 与操作同时出现时，操作胜出。** `git push --no-verify --force` 报的是
   force push：`--no-verify` 只是修饰符，真正会丢东西的是那个操作。同等级的策略下先入列者
-  胜出，所以判定循环把 `--no-verify` 放在子命令判定之后。
+  胜出，所以判定循环把 `--no-verify` 放在子命令判定之后——但它**仍会被计数与审计**，
+  状态行里两项都在。
 
 判定链与每项默认值的理由（为什么 `noVerify` 是 `ask` 而非 `deny` 等）见
 [docs/CONFIGURATION.md](CONFIGURATION.md) 的 `gitGuard` 表与
@@ -216,9 +293,13 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
   之别、以及 `--dry-run` / `-n` 不算发版，都走 `detectRelease()` 与 `detectPullRequest()`——
   「什么算一次发版」只能有一个答案，否则门禁和检查会对同一行命令各说各话。
 - **`--dry-run` 演习一律放过。** 它不碰远端也不上传，没有需要用户同意的事。
-- **能力边界与触发器相同。** 只看命令行词法，所以 `sh -c "git push"` 里引号包着的整段脚本认不出。
+- **能力边界与触发器相同。** 只看命令行词法：`sh -c "git push"` 会被递归解析出内部的命令，
+  但纯动态拼装（`eval`、变量展开的脚本）读不出——那是 `docs/SECURITY.md` 里声明过的边界。
 - **它是唯一一道拦「本机没事」的守卫，所以默认全是 `ask` 而非 `deny`。** 要的是同意，
   不是阻拦：用户点头，命令原样放行。
+- **`gitGuard.rememberApproved` 对它同样生效。** 开关住在 `gitGuard` 里，git 与对外动作两道
+  守卫共用同一个批准记忆：本会话内批准过一次同样的 push / tag / publish，就不会被问第二次。
+  默认关闭——一次同意不等于整个会话的授权。
 
 ## 机器与文件的三道守卫
 
@@ -238,25 +319,37 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 - **`file-guard` 与 `secret-guard` 不只看 shell 命令。** 它们扫描**每一次**工具调用的参数：
   凭据写进源码文件与敲进命令行一样是泄漏，`read` 一个 `.env` 与 `cat` 它一样是读取。
   `command-guard` 则只认 `command` 字段，因为只有它看的是一行命令。
-- **路径从每个工具真实的参数字段里取**（`file_path` / `path` / `pattern` / `include`），
-  而不是靠工具名猜。判定只看字符串，**从不打开文件**——这一道自己读文件去判断该不该读，
-  就正好是它要防的事。
+- **路径从每个工具真实的参数字段里取**（`read` / `edit` / `write` 的 `file_path`；`glob` 的
+  `pattern` / `path`；`grep` 的 `path` / `include`），而不是靠工具名猜。**`grep` 的 `pattern`
+  不在其中**：那是搜索表达式，不是路径——把它当路径会让 `grep -rn "credentials" .`
+  这次「查一下树里有没有密钥」的搜索被硬拒，恰好挡住本插件鼓励的工作流。判定只看字符串，
+  **从不打开文件**——这一道自己读文件去判断该不该读，就正好是它要防的事。
+- **包装词会被剥掉。** `sudo cat .env` 与 `cat .env` 一样命中；两道守卫共用
+  `src/shell.ts` 的一层词法，不各写一套。
 
 `command-guard` 的识别细节（什么算危险目标、为什么 `rm -rf node_modules` 放行）见
 [docs/SECURITY.md](SECURITY.md#command-guard-保护什么)。
 
 **五道守卫共用 `src/guard/shared.ts` 的 `createGuard()`。** 它负责接线、命中计数、审计回调
-与档位决策；每道守卫只提供一个 `detect(exec)`。因此「先 `await next()`、透传上游决定、
-`signal.aborted` 时返回 `cancel`、同级先入列者胜」这些规则只有一份实现。
+与档位决策；每道守卫只提供一个 `detect(exec)`（识别多项时再提供一个 `detectAll`）。
+因此「透传上游决定、`signal.aborted` 时返回 `cancel`、同级先入列者胜」这些规则只有一份实现。
+
+**命中先计数、再审计，且全部计数。** 一行命令命中多项时，每一项都进状态行与审计记录
+（`git push -f --no-verify` 计两项），只有**决策**从最严的那条取。被配置放宽到 `allow`
+的命中同样计数与审计——「识别到了但放行」正是审计日志存在的意义。
 
 ## 提示的语言
 
 审批提示按**客户端的 locale** 选择文案，而客户端 locale 未必等于插件自己的
 `config.locale`。因此 `displayReason` 同时给出 `en` 和 `zh` 两份，并且每一份都是
-**用它自己的翻译器重新跑一遍 `evaluate()`** 得到的——只要外面那层包装是英文、
+**用它自己的翻译器重新跑一遍判定**得到的——只要外面那层包装是英文、
 里面的问题清单还是中文，就等于没翻。
 
 中文键必须是字面 `zh`：客户端会把 locale 小写化再回退到 `en`，写 `zh-CN` 永远匹配不上。
+
+内层守卫已经在提问时，外层触发器的发现会**并入那一问**：`displayReason` 两份都追加一行
+「另一道守卫已就这次调用发问，回答它同时也回答了本项检查」并列出清单，`reason` 里带上完整
+findings，让模型看到的是同一份事实。
 
 ## 状态模型：同一会话同一问题只提示一次
 
@@ -266,15 +359,21 @@ tools/pre-execute  ← waterfall 门禁，本插件在此最多挂七个监听�
 - `targetId`：提交检查用提交信息（或命令文本）的 FNV-1a 指纹；
   文档检查用变更文件集合的指纹；PR 检查用标题（无标题时退回描述，再退回命令文本）的指纹；
   发版检查用版本号（无版本号时退回命令文本）。
-- 单个会话最多记 512 个 target，超出后淘汰最旧的，避免长会话无界增长。
+- 单个会话最多记 512 个 target，超出后淘汰**最久未使用**的（重新记入会把 key 移到队尾），
+  避免长会话无界增长。
 - 插件重启后状态清空。
 - 跨会话允许重新提示：同一个问题在另一个会话里会再问一次。
 
-**先记后问**：命中问题时先把 target 记入状态，再返回 `ask`。这样作者被问过一次、
-选择照常执行之后，同样的对象不会再被拦第二遍——审批回调没有提供「作者选了哪一个」
-的通道，所以只能在问之前记下。
+**只在问题真的问出去之后才记入。** 记的动作发生在 `settleAbout()` 里，条件是它返回的决定
+就是 `ask`——也就是说：
 
-`/dev-workflow status` 会显示最近一次检查结果和守卫命中次数，这两项同样来自这个状态。
+- **批准后执行**：同样的对象不会被拦第二遍（这是「同一会话同一问题只提示一次」想要的效果）。
+- **拒绝**：target **不**进状态，同样的命令再跑一次**还会被问**。一次拒绝是对那一次尝试的回答，
+  不是对那个对象的回答；把它降级成提醒就等于把否决权变成了一次性通知。
+- **`never` 策略下插件自拒**（`unaskable` 把 `ask` 变成 `deny`）：同样不记，因为没有人被问到。
+
+`/dev-workflow status` 会显示最近一次检查结果和守卫命中次数（含每项最后生效的档位），
+这些同样来自这个状态。
 
 ## 降级路径
 
@@ -305,11 +404,21 @@ PR 与发版两个断点的核对结论见上文「为什么三个触发器都�
 | 场景 | 行为 |
 | --- | --- |
 | agent 通过 `bash` / `pwsh` 工具执行 `git commit` | 检查并提示 |
-| 提交信息含 `$(...)`、反引号，或 `-F -` 从 stdin 读 | 放弃判定，不提示 |
+| 提交信息是字面文本（含单引号里的 `$msg`） | 照常判定 |
+| 提交信息含 `$(...)`、`${...}`、裸 `$var` 或反引号，或 `-F -` 从 stdin 读 | 放弃判定，但结论里带一条 warning 说明消息规则未跑 |
+| `git commit -am "..."`（短选项簇） | 与 `-m "..."` 同样解析并判定 |
+| `git commit --amend` 且命令行没写信息 | 读一次 `git log -1 --format=%B` 后判定 |
+| `-F` 指向的文件由同一条命令稍后写入 | 判定时读不到 → 报「信息不可读」而非沉默 |
 | agent 通过 `bash` / `pwsh` 执行 `gh pr create` | 检查标题与描述并提示 |
+| `gh pr create --fill` / 命令行没给标题 | 标题规则不跑，记一条 warning 说明「填充后的标题无法校验」 |
 | PR 描述由 `--body-file -` 从 stdin 读 | 跳过描述规则，标题照常检查 |
-| agent 通过 `bash` / `pwsh` 执行 `git tag` / `npm publish` | 检查发版并提示 |
+| PR 描述由 shell 组装（`-b "$(cat pr.md)"`） | 跳过描述规则并记 warning，不再把 `$(cat pr.md)` 当正文误拦 |
+| agent 通过 `bash` / `pwsh` 执行 `git tag` / `npm publish` / `yarn publish` / `bun publish` | 检查发版并提示 |
+| `npm version patch` | 记一条 warning：它一步完成 bump + commit + tag，越过了提交与 tag 两道检查 |
+| `pnpm --filter <pkg> publish` | 读被发布包的 manifest；读不到则说明比对的是当前目录版本 |
+| tag 名由 shell 组装（`git tag "v$(cat VERSION)"`） | 版本规则不跑并记 warning |
 | 读不到 `package.json` 或 CHANGELOG | 只跑能跑的规则，不提示缺文件本身 |
+| 仓库读不到改动文件集（非仓库 / PATH 无 git） | 文档规则不跑，**结论里带一条 warning** 说明原因；消息规则照常跑 |
 | agent 通过 `bash` / `pwsh` 执行危险 git 命令 | 按 `gitGuard` 策略 deny / ask |
 | agent 用其它非 shell 路径提交、建 PR 或发版（如某个工具内部代办） | 不提示 |
 | 命令写在脚本里、由 agent 执行该脚本 | 看不到——插件只看被调用的命令文本本身 |
@@ -318,29 +427,33 @@ PR 与发版两个断点的核对结论见上文「为什么三个触发器都�
 | 本会话审批策略为 `never`（如 `danger-full-access` 预设） | 不再返回没人会回答的 `ask`：插件自己 `deny`，理由追加 `approval.disabled` 说明没有人被问到、两条放行路径，以及「设为『允许』会一直生效直到改回『询问』」的代价 |
 | `mode: 'off'` | 监听器根本不注册，零常驻成本、零介入 |
 | `enableOwnTrigger: false` / 某个守卫 `enabled: false` | 对应的监听器不注册（前者管三个约定触发器），其余照常工作 |
-| 运行时没有 `subprocess` 服务 | `git` 读不到工作区，提交判定退化为只检查提交信息本身；守卫不受影响（它不需要读仓库） |
+| 运行时没有 `subprocess` 服务 | `git` 读不到改动文件集，提交判定只跑消息规则并说明原因；守卫不受影响（它不需要读仓库） |
 
-第五行与第六行是这套机制与 husky 的分工：**插件管会话内，husky 管会话外。**
-作者在自己的终端里 `git commit` 时，唯一能拦住的仍然是 `.husky/` 里的钩子；
-插件的价值在于让 agent 在提交之前就知道规范，而不是代替 git 钩子。
+「插件管会话内，husky 管会话外」是这套机制与 git 钩子的分工：作者在自己的终端里
+`git commit` 时，唯一能拦住的仍然是 `.husky/` 里的钩子；插件的价值在于让 agent 在提交之前
+就知道规范，而不是代替 git 钩子。
 
-第七行的行为来自 DSH 本身（`serviceAsk` 在缺少 approval 时把 `ask` 变成 deny），
+缺少 `approval` 服务时行为来自 DSH 本身（`serviceAsk` 在缺少 approval 时把 `ask` 变成 deny），
 **不是本插件主动选择的**：如果宿主没有审批能力，我们宁可挡住，也不假装问过。
 
-第八行是本插件**主动**补的那一半。`never` 下 `decide()` 会在提问前返回 `rejected`，
+`never` 策略下由本插件**主动**补上诚实的那一半。`decide()` 会在提问前返回 `rejected`，
 dispatcher 再把它说成「用户拒绝了工具」——用户什么都没看到。结果无法更好（操作都是被拒），
 但理由可以更诚实，至少让用户知道没有人被问到、以及在哪里放行。实现是
-`src/approval-policy.ts` 的 `unaskable()`，七个监听器共用；读不到策略或没有会话时一律
+`src/approval-policy.ts` 的 `unaskable()`，八个监听器共用；读不到策略或没有会话时一律
 维持 `ask`，因为「不知道」不该被猜成「不会有人回答」。
 
 ## 手动路径
 
-`/dev-workflow check` 走同一套判定，只是不需要等待提交：
+`/dev-workflow check` 走同一套判定，只是判定对象是工作区而不是提交：
 
-- 取当前工作区的变更文件集，跑 `evaluate()`，把结果渲染成 `⚠` / `✖` 清单。
+- 取当前工作区的变更文件集，跑 `evaluate()`，把结果渲染成 `✖`（先）与 `⚠`（后）清单。
+- 带上 `--message "type: subject"` 时连消息规则一起跑；不带时输出里有一行明说
+  「提交信息规则未包含」——两者的结论要能对比，就不能让一处安静地少查几条。
 - 同时把结果记入状态，所以随后的自动检查能看到「最近一次检查结果」。
 
-`/dev-workflow on | off` 切换的是**注册本身**：`off` 会把两个工具、技能 provider、
-命令和全部事件监听器注销（`mode: 'off'` 时则一开始就不注册），
-所以关掉之后常驻增量为零，而不只是「安静地不回答」。详见
+`/dev-workflow on | off` 切换的是**注册本身**：`off` 会把两个工具、技能 provider
+和全部事件监听器注销，**但保留 `/dev-workflow` 这条命令**——它是唯一的回头路，
+自己注销掉就等于把门锁死。`mode: 'off'` 时则一开始就不注册任何东西。
+所以关掉之后常驻增量只剩命令本身，而不只是「安静地不回答」；回显会写明怎么恢复，
+`status` 会区分「运行期 off（未落盘）」与「配置里 off」。详见
 [docs/TOKEN-BUDGET.md](TOKEN-BUDGET.md)。

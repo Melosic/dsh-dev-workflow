@@ -105,6 +105,11 @@ including an administrator.
 - **Subject**: imperative mood ("add", not "added"), no trailing period, and at
   most 50 characters. Write the subject in English, so it matches the `type` and
   `scope`, which are English by definition.
+- The thresholds and the accepted `type` list are **configuration**, not constants
+  of this document: `commitCheck.subjectMaxLength`, `commitCheck.types` and
+  `commitCheck.requireScope` can be changed from the settings panel, and the gate
+  then enforces what they say. Run `/dev-workflow status` to see the values in
+  effect before treating a number here as the rule.
 - **Body**: wrap at 72 characters and explain *why*. Do not restate what the
   diff already shows. A body or footer may be English or Chinese, but one
   project should pick one and stay with it.
@@ -426,14 +431,22 @@ unprompted:
 - **Before a commit** — check the commit message against Conventional Commits,
   whether `CHANGELOG.md` needs an `[Unreleased]` entry, and whether the changed
   files took their documentation with them.
-- **Before a branch, pull request, or release** — check the branch name, the
-  pre-commit checklist, and the release steps.
+- **Before a pull request** — check the title with the commit-message rules (under
+  squash merge it becomes the commit on the main branch) and the description
+  against the template's `What` / `Why` / `How to verify` sections.
+- **Before a release** — check the version, the tag against `package.json`, and
+  whether the changelog carries the release.
+- **No trigger watches branch creation.** Branch naming is a convention this
+  document asks for, not something the plugin enforces — `rules.branchPattern` is
+  declared but no check reads it yet, so a badly named branch is not blocked.
 - **Otherwise stay quiet.** Do not volunteer the specification, do not read its
   full text, and do not interrupt unrelated work. The resident cost stays at one
   summary line.
 - If the user ignores a hint, let the action proceed. Do not repeat it: **the
-  same hint about the same problem in the same session is raised once.** A
-  repeated warning is noise, and noise trains people to click through warnings.
+  same hint about the same problem in the same session is raised once — and only
+  after the question was really put to the user.** A refusal is not remembered, so
+  the same command is judged again on the next attempt. A repeated warning is
+  noise, and noise trains people to click through warnings.
 - Every hint must be actionable: name the problem, show the expected form, and
   offer the concrete fix. "Invalid commit message" is not a hint; "the subject is
   63 characters — Conventional Commits suggests 50 or fewer" is.

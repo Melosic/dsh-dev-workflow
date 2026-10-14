@@ -59,6 +59,12 @@ export interface DevWorkflowCommandOptions {
   readonly active: () => boolean
   /** Turn the plugin on or off. */
   readonly setActive: (on: boolean) => void
+  /**
+   * Whether the plugin is off because the user asked for it, rather than because
+   * `mode` is off. The two read the same from the inside and differently from the
+   * outside: one is undone by `/dev-workflow on`, the other is not.
+   */
+  readonly runtimeOff: () => boolean
   /** Session-scoped memory behind the status line. */
   readonly state: WorkflowState
   /** A git runner bound to one working directory. */
@@ -69,6 +75,22 @@ export interface DevWorkflowCommandOptions {
 const SUBCOMMANDS = ['on', 'off', 'status', 'check'] as const
 
 /**
+ * The commit message a `check` invocation states, when it states one.
+ *
+ * `/dev-workflow check --message "feat: x"` judges the message rules too, which
+ * is what makes this door agree with the trigger. The flag is spelled out rather
+ * than implied: a check that silently judged the *last* commit's message would
+ * be answering a question nobody asked.
+ * @param rawInput - everything after the command name.
+ * @returns the message, or `undefined` when the invocation states none.
+ */
+function messageArgument(rawInput: string): string | undefined {
+  const match = /(?:^|\s)(?:--message|-m)(?:=|\s+)(.*)$/s.exec(rawInput)
+  const value = match?.[1]?.trim() ?? ''
+  return value.length === 0 ? undefined : value
+}
+
+/**
  * Render the status report: what the plugin is doing, in which language, what it
  * last found, and how often a guard has fired.
  * @param options - the live plugin state.
@@ -76,7 +98,16 @@ const SUBCOMMANDS = ['on', 'off', 'status', 'check'] as const
  */
 function statusLines(options: DevWorkflowCommandOptions): string[] {
   const t = options.t
-  const lines = [options.active() ? t('command.toggle.status.on') : t('command.toggle.status.off')]
+  const lines = [
+    options.active()
+      ? t('command.toggle.status.on')
+      : options.runtimeOff()
+        ? // Off without `mode` being off: the panel would still say "on", because
+          // the configuration does. Saying which of the two is in effect is what
+          // keeps the runtime state and the stored state from disagreeing.
+          t('command.toggle.status.runtime_off')
+        : t('command.toggle.status.off'),
+  ]
   lines.push(
     t('command.toggle.status.locale', {
       locale: options.locale(),
@@ -117,8 +148,13 @@ function statusLines(options: DevWorkflowCommandOptions): string[] {
 
 /**
  * Check the working tree on demand, with the same rules the trigger applies.
+ *
+ * Two facts keep this report from reading as "everything passed" when the
+ * trigger would have found more: the message rules need a message, which this
+ * door does not have, and a degraded git answer is stated rather than dropped —
+ * the trigger says the same thing in the same words.
  * @param options - the live plugin state.
- * @param invocation - the command invocation, for its agent and cancellation.
+ * @param invocation - the command invocation, for its agent, words and cancellation.
  * @returns the settlement for the UI.
  */
 async function runCheck(
@@ -127,6 +163,7 @@ async function runCheck(
 ): Promise<CommandResult> {
   const t = options.t
   const cwd = invocation.agent?.session.header.cwd ?? process.cwd()
+  const message = messageArgument(invocation.rawInput)
   const listed = await listChangedFiles(options.git(cwd), invocation.signal)
   if (!listed.ok) {
     return {
@@ -135,7 +172,19 @@ async function runCheck(
     }
   }
 
-  const outcome = evaluate({ files: listed.files }, options.config, t)
+  const outcome = evaluate(
+    message === undefined ? { files: listed.files } : { files: listed.files, message },
+    options.config,
+    t,
+  )
+  // The commit rules are the ones this door cannot apply on its own, so the
+  // report says which of the two it was rather than leaving the difference to
+  // the reader.
+  outcome.warnings.push(
+    message === undefined
+      ? t('command.toggle.check.no_message')
+      : t('command.toggle.check.message', { message }),
+  )
   options.state.record({ kind: 'doc', ok: outcome.ok, summary: summarize(outcome, t) })
   const [body] = renderCheck(outcome, t, 'command.toggle.check.clean')
   return {
@@ -188,9 +237,13 @@ export function createDevWorkflowCommand(
       }
       if (requested === 'on' || requested === 'off') {
         options.setActive(requested === 'on')
+        // Computed once and reported whole: two calls would recount the guard
+        // tally, and the first line is not the answer the user asked for anyway —
+        // an `off` that does not say how to come back is a one-way door.
+        const lines = statusLines(options)
         return {
           kind: 'success',
-          text: [statusLines(options)[0] ?? '', statusLines(options)[1] ?? ''].join('\n'),
+          text: [lines[0] ?? '', t(`command.toggle.${requested}_done`)].join('\n'),
         }
       }
       return runCheck(options, invocation)

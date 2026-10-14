@@ -45,6 +45,7 @@ export interface ApprovalPolicyReporter {
  * @param t - translator for the plugin's own locale.
  * @param approval - the seam, or the getter that answers `undefined` without one.
  * @param session - the session the question would resolve under.
+ * @param disabledKey - the locale key naming the way out, which differs by source.
  * @returns the refusal, or `decision` unchanged when the question stands.
  */
 export function unaskable(
@@ -52,6 +53,7 @@ export function unaskable(
   t: Translate,
   approval: (() => ApprovalPolicyReporter | undefined) | undefined,
   session: unknown,
+  disabledKey = 'approval.disabled',
 ): PreToolDecision {
   if (decision.kind !== 'ask') return decision
   const service = approval?.()
@@ -62,5 +64,5 @@ export function unaskable(
   // order to decide; only the account of who was asked is missing from what the
   // dispatcher would have said. The bilingual `displayReason` is dropped with
   // the question it belonged to.
-  return { kind: 'deny', reason: `${decision.reason}\n${t('approval.disabled')}` }
+  return { kind: 'deny', reason: `${decision.reason}\n${t(disabledKey)}` }
 }

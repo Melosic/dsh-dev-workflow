@@ -12,6 +12,28 @@ import { renderCheck } from '../src/tools/result.js'
 import { makeExec, makeFailingGit, makeGit } from './harness.js'
 
 const t = createTranslator('en-US')
+
+/**
+ * Run a registered tool the way the host would, from the test's point of view.
+ *
+ * The harness stores tool definitions behind its own interface, so the two casts
+ * here are the seam between that fixture and the tool's real signature: the
+ * context is what the host supplies, and the outcome is whatever the tool
+ * returns (a `CheckResult` for the check tools).
+ * @param tool - a tool as the registry received it.
+ * @returns what the tool's handler resolved to.
+ */
+async function runTool(tool: {
+  execute: (args: Record<string, unknown>, exec: never) => Promise<unknown>
+}): Promise<{ ok: boolean; errors: string[]; warnings: string[]; error?: string }> {
+  const args: Record<string, unknown> = {}
+  return (await tool.execute(args, makeExec('git status') as never)) as {
+    ok: boolean
+    errors: string[]
+    warnings: string[]
+    error?: string
+  }
+}
 const config = Config({})
 
 describe('src/tools/check-commit-message.ts', () => {
@@ -227,7 +249,7 @@ describe('src/tools/check-doc-sync.ts', () => {
       config: () => config,
       git: () => makeGit(() => ['src/a.ts']),
     })
-    const value = await tool.execute({}, makeExec('git status'))
+    const value = await runTool(tool)
     expect(value).toMatchObject({ ok: true, errors: [] })
     expect(value.warnings).toHaveLength(2)
   })
@@ -238,7 +260,7 @@ describe('src/tools/check-doc-sync.ts', () => {
       config: () => config,
       git: () => makeFailingGit(),
     })
-    const value = await tool.execute({}, makeExec('git status'))
+    const value = await runTool(tool)
     expect(value.ok).toBe(false)
     expect(value.error).toBe(t('error.not_a_git_repository', { detail: 'fatal: nope' }))
   })
@@ -335,9 +357,11 @@ describe('src/tools/result.ts', () => {
     ])
   })
 
-  it('renders warnings before errors, marked', () => {
+  it('renders errors before warnings, marked', () => {
+    // One order for the whole plugin: an approval prompt and a check result list
+    // the blocking finding first.
     expect(renderCheck({ ok: false, errors: ['bad'], warnings: ['hmm'] }, t, 'x')).toEqual([
-      { type: 'text', text: '⚠ hmm\n✖ bad' },
+      { type: 'text', text: '✖ bad\n⚠ hmm' },
     ])
   })
 })

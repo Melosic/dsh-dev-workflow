@@ -5,9 +5,10 @@ on:
     branches: [main]
   pull_request:
 
-# Early phases run a single Node version. GitHub Actions is free for public
-# repositories, so the limit is review turnaround rather than minutes: Node 22
-# is added to the matrix once the plugin is stable, not before.
+# Early phases run a single Node version, and it is the current LTS rather than
+# the declared floor: Node 20 reached end of life in April 2026, so a matrix that
+# only proves the plugin works there proves it works nowhere anyone deploys it.
+# `engines.node` still states the floor the code needs.
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -25,7 +26,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -36,6 +37,12 @@ jobs:
       # conditional on the sources actually being there.
       - name: Typecheck
         run: pnpm typecheck
+
+      # The specs are not published and do not enter the build, but a type error
+      # in them is still a broken check: it should fail here rather than surface
+      # as an assertion failing in a way nobody can explain.
+      - name: Typecheck tests
+        run: pnpm typecheck:tests
 
       - name: Lint
         run: pnpm lint

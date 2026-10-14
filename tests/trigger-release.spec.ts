@@ -11,7 +11,7 @@ import {
   detectRelease,
   evaluateRelease,
 } from '../src/triggers/pre-release.js'
-import { makeExec } from './harness.js'
+import { askOf, makeExec } from './harness.js'
 
 const t = createTranslator('en-US')
 
@@ -234,7 +234,7 @@ describe('src/triggers/pre-release.ts', () => {
     const { listener } = trigger()
     const directory = project('0.1.0', EMPTY_CHANGELOG)
     const decision = await fire(listener, 'git tag v0.2.0', { cwd: directory })
-    const display = (decision as { displayReason: { en: string; zh: string } }).displayReason
+    const display = askOf(decision).displayReason
 
     expect(display.en).toContain(
       createTranslator('en-US')('trigger.pre_release.ask').split('\n')[0],

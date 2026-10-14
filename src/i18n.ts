@@ -46,9 +46,16 @@ function dictionary(locale: Locale): Record<string, string> {
  */
 export function resolveLocale(setting: LocaleSetting): Locale {
   if (setting !== 'auto') return setting
-  const runtime = Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase()
-  return runtime.startsWith('zh') ? 'zh-CN' : 'en-US'
+  // The interpreter's locale does not change while the process runs, and `auto`
+  // is the default, so this is on the path of every translated line.
+  runtimeLocale ??= Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase().startsWith('zh')
+    ? 'zh-CN'
+    : 'en-US'
+  return runtimeLocale
 }
+
+/** The resolved `auto` locale, computed once per process. */
+let runtimeLocale: Locale | undefined
 
 /**
  * Build the translator for one locale.

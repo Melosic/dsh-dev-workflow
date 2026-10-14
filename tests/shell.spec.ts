@@ -1,0 +1,159 @@
+import { describe, expect, it } from 'vitest'
+import {
+  programInvocations,
+  programWords,
+  quoteCommandWords,
+  segments,
+  shellArgument,
+  shellWordIsLiteral,
+  skipWrappers,
+  subcommandWords,
+  tokenize,
+  wordInvocations,
+} from '../src/shell.js'
+
+// The lexer every guard and trigger reads a command line with. Until this spec
+// existed, each behaviour was only exercised through the five callers that
+// happened to describe it, which is how a command line could be read one way by
+// the git guard and a different way by the file guard.
+//
+// The cases are written as the shapes a shell really accepts, including the ones
+// that used to read as a *different* command: a nested `sh -c`, a substitution
+// spliced into the token stream, and a Windows path whose separators are not
+// escapes.
+
+describe('tokenize', () => {
+  it('splits words, keeps operators as their own tokens', () => {
+    expect(tokenize('git commit -m "a b" && npm test')).toEqual([
+      'git',
+      'commit',
+      '-m',
+      'a b',
+      '&&',
+      'npm',
+      'test',
+    ])
+  })
+
+  it('resolves quotes and escapes', () => {
+    expect(tokenize(`echo 'one two' three\\ four`)).toEqual(['echo', 'one two', 'three four'])
+  })
+
+  it('keeps a backslash that escapes nothing, so a Windows path survives', () => {
+    // `\U` is not an escape in any shell; treating it as one turned the path
+    // into `C:Usersx.env`, and every path rule downstream then missed it.
+    expect(tokenize('type C:\\Users\\x\\.env')).toEqual(['type', 'C:\\Users\\x\\.env'])
+    expect(tokenize('cat "C:\\Users\\x\\.env"')).toEqual(['cat', 'C:\\Users\\x\\.env'])
+  })
+
+  it('splices a command substitution into the stream', () => {
+    expect(tokenize('echo $(git push --force)')).toEqual(['echo', 'git', 'push', '--force', ';'])
+  })
+
+  it('keeps ${name} whole, because it is one word to the shell', () => {
+    expect(tokenize('echo ${HOME}/*')).toEqual(['echo', '${HOME}/*'])
+  })
+
+  it('reads a nested substitution', () => {
+    expect(tokenize('echo $(echo $(id))')).toEqual(['echo', 'echo', 'id', ';', ';'])
+  })
+})
+
+describe('segments', () => {
+  it('cuts on every operator the shell chains commands with', () => {
+    expect(segments(tokenize('a && b || c ; d | e'))).toEqual([['a'], ['b'], ['c'], ['d'], ['e']])
+  })
+})
+
+describe('skipWrappers', () => {
+  it('peels stacked wrappers, not just the first', () => {
+    expect(programWords(['nohup', 'doas', 'git', 'push'])).toEqual(['git', 'push'])
+  })
+
+  it('steps over an option that takes a value', () => {
+    expect(programWords(['sudo', '-u', 'root', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['sudo', '--user=root', 'rm', '-rf', '/'])).toEqual(['rm', '-rf', '/'])
+  })
+
+  it('steps over assignments', () => {
+    expect(programWords(['env', 'FOO=1', 'git', 'status'])).toEqual(['git', 'status'])
+  })
+
+  it('leaves an unwrapped command alone', () => {
+    expect(skipWrappers(['git', 'status'])).toBe(0)
+  })
+})
+
+describe('shellArgument', () => {
+  it('reads the script a shell was asked to run', () => {
+    expect(shellArgument(['sh', '-c', 'rm -rf /'])).toBe('rm -rf /')
+    expect(shellArgument(['bash', '-c', 'git push'])).toBe('git push')
+  })
+
+  it('is undefined for a program that runs no script', () => {
+    expect(shellArgument(['git', 'push'])).toBeUndefined()
+  })
+})
+
+describe('programInvocations', () => {
+  it('reports the program inside a shell it delegates to', () => {
+    expect(programInvocations('sh -c "git push --force origin main"')).toEqual([
+      { program: 'git', args: ['push', '--force', 'origin', 'main'] },
+    ])
+  })
+
+  it('reports one invocation per chained command', () => {
+    expect(programInvocations('git tag v1 && npm publish')).toEqual([
+      { program: 'git', args: ['tag', 'v1'] },
+      { program: 'npm', args: ['publish'] },
+    ])
+  })
+
+  it('reads through a wrapper', () => {
+    expect(programInvocations('sudo -u root git push --force')).toEqual([
+      { program: 'git', args: ['push', '--force'] },
+    ])
+  })
+})
+
+describe('quoteCommandWords', () => {
+  it('marks a single-quoted word literal, even when it looks like a substitution', () => {
+    const [word] = quoteCommandWords("'$(cat x)'")
+    expect(word?.value).toBe('$(cat x)')
+    expect(word === undefined ? false : shellWordIsLiteral(word)).toBe(true)
+  })
+
+  it('marks a double-quoted word with a substitution as not literal', () => {
+    const words = quoteCommandWords('"$(cat x)"')
+    expect(words.every((word) => !shellWordIsLiteral(word))).toBe(true)
+  })
+
+  it('treats a bare variable as not literal', () => {
+    const words = quoteCommandWords('git commit -m $msg')
+    const message = words[3]
+    expect(message?.value).toBe('$msg')
+    expect(message === undefined ? true : shellWordIsLiteral(message)).toBe(false)
+  })
+
+  it('keeps prose that merely contains a backtick literal in single quotes', () => {
+    const [word] = quoteCommandWords("'Run `/dev-workflow status`'")
+    expect(word === undefined ? false : shellWordIsLiteral(word)).toBe(true)
+  })
+})
+
+describe('wordInvocations', () => {
+  it('carries the quoting of each argument alongside it', () => {
+    const found = wordInvocations(quoteCommandWords(`git commit -m "Add the thing"`))
+    const word = found[0]?.args[2]
+    expect(word?.value).toBe('Add the thing')
+    expect(word === undefined ? false : shellWordIsLiteral(word)).toBe(true)
+  })
+})
+
+describe('subcommandWords', () => {
+  it('finds the subcommand after git\u2019s own value options', () => {
+    const words = quoteCommandWords('git -C /repo commit -m x')
+    const found = subcommandWords(words.slice(1))
+    expect(found?.subcommand).toBe('commit')
+  })
+})

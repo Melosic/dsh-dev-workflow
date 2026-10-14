@@ -5,6 +5,7 @@ import { createTranslator } from '../src/i18n.js'
 import { createWorkflowState } from '../src/state.js'
 import type { WorkflowState } from '../src/state.js'
 import { createGitGuard } from '../src/guard/git-guard.js'
+import type { GuardHit } from '../src/guard/shared.js'
 import type { ApprovalOutcome, ApprovalRequest, ApprovalService } from '../src/guard/approval.js'
 import { allow, makeExec } from './harness.js'
 
@@ -70,6 +71,12 @@ async function run(
   const seam = makeApproval(options.answers ?? [], options.asked, options.policy)
   const asked = seam.asked
   const audit: string[] = []
+  const auditSink = (hit: GuardHit) => {
+    audit.push(hit.reason)
+  }
+  // The sink also reports what a call settled as; this suite only counts hits.
+  auditSink.settled = () => {}
+  auditSink.failures = () => 0
   const guard = createGitGuard({
     config: () =>
       Config({
@@ -78,7 +85,7 @@ async function run(
     t: () => t,
     state,
     log: () => {},
-    audit: (hit) => audit.push(hit.reason),
+    audit: auditSink,
     approval: options.approval ?? seam.approval,
   })
   const decision = await guard(
@@ -291,8 +298,11 @@ describe('src/guard/approval.ts', () => {
 
     for (const { decision, asked } of [denied, remembered]) {
       expect(decision.kind).toBe('deny')
-      expect(decision.reason).toContain(t('security.guard.force_push'))
-      expect(decision.reason).toContain(t('approval.disabled'))
+      // Narrowed by the assertion above: a refusal is the one shape that carries
+      // a reason and no question.
+      const refusal = decision as { kind: 'deny'; reason: string }
+      expect(refusal.reason).toContain(t('security.guard.force_push'))
+      expect(refusal.reason).toContain(t('approval.disabled'))
       // The point of the fix: no question is sent into a policy that refuses it.
       expect(asked).toEqual([])
     }

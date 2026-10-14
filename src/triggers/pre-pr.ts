@@ -3,10 +3,10 @@ import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { CheckResult } from '../tools/result.js'
-import { checkCommitMessage } from '../tools/check-commit-message.js'
-import { fingerprint } from '../checks.js'
-import { commandOf, programInvocations } from '../shell.js'
-import { askAbout, readText } from './shared.js'
+import { evaluateMessage, fingerprint, summarize } from '../checks.js'
+import { commandOf, quoteCommandWords, shellWordIsLiteral, wordInvocations } from '../shell.js'
+import type { CommandWord } from '../shell.js'
+import { readText, settleAbout } from './shared.js'
 import type { TriggerOptions } from './shared.js'
 
 // The second automatic check: before the agent opens a pull request, judge the
@@ -49,8 +49,12 @@ const GH_VALUE_OPTIONS = new Set([
 export interface PullRequestCommand {
   /** The title, when the command line states it. */
   readonly title?: string
+  /** Whether the title was a single-quoted word, so it is what `gh` will send. */
+  readonly titleLiteral?: boolean
   /** The description, when the command line states it. */
   readonly body?: string
+  /** Whether the description was a single-quoted word. */
+  readonly bodyLiteral?: boolean
   /** Path given to `--body-file`, as written on the command line. */
   readonly bodyFile?: string
 }
@@ -59,32 +63,37 @@ export interface PullRequestCommand {
 export interface PullRequestInput {
   /** The pull request title. */
   readonly title?: string
+  /** Whether the title is literal text; omitted means it is. */
+  readonly titleLiteral?: boolean
   /** The pull request description. */
   readonly body?: string
+  /** Whether the description is literal text; omitted means it is. */
+  readonly bodyLiteral?: boolean
 }
 
 /**
  * Read what a `gh pr create` command line says.
- * @param args - the words after `create`.
+ * @param args - the words after `create`, each saying how it was written.
  * @returns the stated title, description, and body file, if any.
  */
-function pullRequestArguments(args: readonly string[]): PullRequestCommand {
-  let title: string | undefined
-  let body: string | undefined
+function pullRequestArguments(args: readonly CommandWord[]): PullRequestCommand {
+  let title: CommandWord | undefined
+  let body: CommandWord | undefined
   let bodyFile: string | undefined
 
-  const assign = (name: string, value: string | undefined): void => {
+  const assign = (name: string, value: CommandWord | undefined): void => {
     if (value === undefined) return
     if (name === '--title' || name === '-t') title = value
     else if (name === '--body' || name === '-b') body = value
-    else if (name === '--body-file' || name === '-F') bodyFile = value
+    else if (name === '--body-file' || name === '-F') bodyFile = value.value
   }
 
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index] ?? ''
+    const token = args[index]?.value ?? ''
     const equals = token.startsWith('--') ? token.indexOf('=') : -1
     if (equals !== -1) {
-      assign(token.slice(0, equals), token.slice(equals + 1))
+      const value = token.slice(equals + 1)
+      assign(token.slice(0, equals), { value, literal: false })
       continue
     }
     if (!GH_VALUE_OPTIONS.has(token)) continue
@@ -95,8 +104,8 @@ function pullRequestArguments(args: readonly string[]): PullRequestCommand {
   }
 
   return {
-    ...(title === undefined ? {} : { title }),
-    ...(body === undefined ? {} : { body }),
+    ...(title === undefined ? {} : { title: title.value, titleLiteral: shellWordIsLiteral(title) }),
+    ...(body === undefined ? {} : { body: body.value, bodyLiteral: shellWordIsLiteral(body) }),
     ...(bodyFile === undefined ? {} : { bodyFile }),
   }
 }
@@ -108,9 +117,9 @@ function pullRequestArguments(args: readonly string[]): PullRequestCommand {
  *   request.
  */
 export function detectPullRequest(command: string): PullRequestCommand | undefined {
-  for (const { program, args } of programInvocations(command)) {
+  for (const { program, args } of wordInvocations(quoteCommandWords(command))) {
     if (program !== 'gh' && program !== 'gh.exe') continue
-    if (args[0] !== 'pr' || args[1] !== 'create') continue
+    if (args[0]?.value !== 'pr' || args[1]?.value !== 'create') continue
     return pullRequestArguments(args.slice(2))
   }
   return undefined
@@ -174,6 +183,21 @@ function uncheckedBoxes(body: string): number {
 }
 
 /**
+ * Whether an otherwise-clean outcome still holds something worth a question.
+ *
+ * Only one warning is not a finding: the note that `--fill` left no title for
+ * this check to read. It belongs in the record — the reader of a status report
+ * should know the title was never judged — but not in an approval prompt.
+ * @param outcome - what the check found.
+ * @param t - translator, to recognise the note in the language in effect.
+ * @returns whether the prompt has anything to carry.
+ */
+function worthAsking(outcome: CheckResult, t: Translate): boolean {
+  const note = t('trigger.pre_pr.warn.filled')
+  return outcome.errors.length > 0 || outcome.warnings.some((line) => line !== note)
+}
+
+/**
  * Judge the text of one pull request against the workflow rules.
  *
  * The title is judged with the commit-message rules because squash merge makes
@@ -194,20 +218,42 @@ export function evaluatePullRequest(
   const warnings: string[] = []
 
   if (input.title !== undefined) {
-    const title = checkCommitMessage({ message: input.title }, config, t)
+    // The title is judged with the commit-message rules — and with that check's
+    // own configuration, because under squash merge this title *is* a commit
+    // message. A repository that turned the check off or downgraded it to a
+    // warning meant it for this text too.
+    const title = evaluateMessage(input.title, undefined, config, t)
     errors.push(...title.errors)
     warnings.push(...title.warnings)
+    if (!(input.titleLiteral ?? true)) {
+      warnings.push(t('trigger.pre_pr.warn.title_literal'))
+    }
   }
 
   if (input.body !== undefined) {
-    const missing = missingSections(input.body)
-    if (missing.length > 0) {
-      errors.push(t('trigger.pre_pr.error.description', { sections: missing.join(', ') }))
+    // A description assembled by the shell is not text this check can read;
+    // judging the literal pieces of `-b "$(cat pr.md)"` would report every
+    // section as missing and repeat the report on every attempt.
+    if (!(input.bodyLiteral ?? true)) {
+      warnings.push(t('trigger.pre_pr.warn.body_literal'))
+    } else {
+      const missing = missingSections(input.body)
+      if (missing.length > 0) {
+        errors.push(t('trigger.pre_pr.error.description', { sections: missing.join(', ') }))
+      }
+      const unchecked = uncheckedBoxes(input.body)
+      if (unchecked > 0) {
+        errors.push(t('trigger.pre_pr.error.checklist', { count: unchecked }))
+      }
     }
-    const unchecked = uncheckedBoxes(input.body)
-    if (unchecked > 0) {
-      errors.push(t('trigger.pre_pr.error.checklist', { count: unchecked }))
-    }
+  }
+
+  // `gh pr create --fill` takes the title and description from the commits, so
+  // the command line states neither and nothing here can judge them. Saying that
+  // is the point: silently reporting "clean" would make the check look like it
+  // passed. Under squash merge the filled title is what lands on `main`.
+  if (input.title === undefined && input.body === undefined) {
+    warnings.push(t('trigger.pre_pr.warn.filled'))
   }
 
   const described = `${input.title ?? ''}\n${input.body ?? ''}`
@@ -227,8 +273,13 @@ export function createPrePrTrigger(
   options: TriggerOptions,
 ): (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision> {
   return async (exec, next) => {
+    // The gates behind this one decide first; a cancelled or refused call is not
+    // this check's to settle. What that answer does not do is skip the check:
+    // `gh pr create` is exactly the command the outward guard asks about, so
+    // settling the question from behind it would mean the pull request rules
+    // never ran.
     const downstream = await next()
-    if (downstream.kind !== 'allow') return downstream
+    if (downstream.kind === 'cancel' || downstream.kind === 'deny') return downstream
 
     const agent = exec.agent
     if (agent === undefined) return downstream
@@ -253,33 +304,49 @@ export function createPrePrTrigger(
       body = await readText(path)
     }
 
+    // A description read from a file is text this check holds, so it is literal
+    // whatever the command line said about where it came from.
+    const stated = pullRequest.body !== undefined
+    const literal = stated ? (pullRequest.bodyLiteral ?? true) : true
     const input: PullRequestInput = {
-      ...(pullRequest.title === undefined ? {} : { title: pullRequest.title }),
-      ...(body === undefined ? {} : { body }),
+      ...(pullRequest.title === undefined
+        ? {}
+        : { title: pullRequest.title, titleLiteral: pullRequest.titleLiteral ?? true }),
+      ...(body === undefined ? {} : { body, bodyLiteral: literal }),
     }
     const outcome = evaluatePullRequest(input, options.config(), t)
     options.state.record({
       kind: 'pr',
       ok: outcome.ok,
-      summary: outcome.errors[0] ?? t('command.toggle.check.clean'),
+      summary: summarize(outcome, t),
     })
 
-    if (outcome.ok) return downstream
+    // `--fill` is not a finding: it is this check stating that the command line
+    // carries no title to judge. Asking the user to approve that statement would
+    // be a prompt with nothing in it, so the statement is recorded and the call
+    // proceeds. Every other warning is a finding and goes to the prompt.
+    if (outcome.ok && !worthAsking(outcome, t)) return downstream
 
-    // Remember before asking, exactly as the pre-commit trigger does: the prompt
-    // offers no channel to record the answer afterwards.
     const target = fingerprint(pullRequest.title ?? body ?? command)
+    // Asked once and not answered? `settleAbout` records the check only once the
+    // question really reaches the user, so a rejection is not turned into a
+    // one-time reminder.
     if (options.state.seen(sessionId, 'pr', target)) return downstream
-    options.state.remember(sessionId, 'pr', target)
 
-    return askAbout({
-      reasonKey: 'trigger.pre_pr.reason',
-      askKey: 'trigger.pre_pr.ask',
-      outcome,
-      t,
-      assess: (translator) => evaluatePullRequest(input, options.config(), translator),
-      approval: options.approval,
-      session: agent.session,
-    })
+    return settleAbout(
+      downstream,
+      {
+        reasonKey: 'trigger.pre_pr.reason',
+        askKey: 'trigger.pre_pr.ask',
+        detailKey: 'trigger.pre_pr.detail',
+        settledBy: 'trigger.pre_pr.settled_by',
+        outcome,
+        t,
+        assess: (translator) => evaluatePullRequest(input, options.config(), translator),
+        approval: options.approval,
+        session: agent.session,
+      },
+      () => options.state.remember(sessionId, 'pr', target),
+    )
   }
 }

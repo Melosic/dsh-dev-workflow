@@ -152,7 +152,9 @@ describe('src/guard/outward-guard.ts', () => {
   it('stands down when the policy is allow', async () => {
     const { decision, state } = await run('git push origin main', { guard: { push: 'allow' } })
     expect(decision.kind).toBe('allow')
-    expect(state.guardHits()).toEqual({})
+    // Counted all the same: the tally records what the guard recognised, not
+    // what it decided to do about it.
+    expect(state.guardHits()).toEqual({ 'security.guard.outward_push': 1 })
   })
 
   it('never weakens a refusal by another gate into a question', async () => {
