@@ -68,6 +68,10 @@
 - **file-guard 认不出套在 shell 里的读取。** `cat .env` 会被拒，`sh -c "cat .env"` 却放行——
   程序名看到的是 `sh`。现在与 command-guard 用同一条规则拆开 shell 包装，把 `-c` 后面的
   命令行当作独立命令重新判定；`bash -lc`、套一层的 `sh -c "sudo cat .env"` 同样覆盖。
+- **搜索类命令把自己的搜索词当成了要打开的文件。** `grep -rn "credentials" .` 会被拒，
+  而这恰好是「查一下密钥有没有进仓库」的那条命令——把规则逼到要么关掉要么绕过。现在
+  `grep`/`rg`/`sed`/`awk`/`findstr`/`Select-String` 的第一个自由词按表达式处理，其后的
+  词仍按路径判定（`grep -rn "add .env" .env` 依然被拒）。
 
 ## [0.3.0] - 2026-10-15
 

@@ -139,6 +139,26 @@ describe('src/guard/file-guard.ts', () => {
     expect(detectFile({ command: 'git status' }, 'bash', Config({}))).toBeUndefined()
   })
 
+  it('reads the search term of grep as an expression, not as a path', () => {
+    // Looking for a sensitive name is the check that finds it in the tree.
+    // Refusing the search would only get the rule switched off.
+    expect(detectFile({ command: 'grep -rn "credentials" .' }, 'bash', Config({}))).toBeUndefined()
+    expect(detectFile({ command: 'grep -rn .env .gitignore' }, 'bash', Config({}))).toBeUndefined()
+    expect(detectFile({ command: 'rg "api[_-]?key" src' }, 'bash', Config({}))).toBeUndefined()
+    expect(
+      detectFile({ command: 'sed -n "s/x/y/p" README.md' }, 'bash', Config({})),
+    ).toBeUndefined()
+  })
+
+  it('still refuses a search term whose files include a sensitive one', () => {
+    // Only the first free word is an expression; the files after it are reads.
+    expect(rule(detectFile({ command: 'grep -rn "add .env" .env' }, 'bash', Config({})))).toBe(
+      '.env',
+    )
+    expect(rule(detectFile({ command: 'grep API .env' }, 'bash', Config({})))).toBe('.env')
+    expect(rule(detectFile({ command: 'sed -n 1p .env' }, 'bash', Config({})))).toBe('.env')
+  })
+
   it('matches a directory pattern against its contents only', () => {
     expect(matchesPattern('secrets/a.json', 'secrets/')).toBe(true)
     expect(matchesPattern('config/secrets/a.json', 'secrets/')).toBe(true)
