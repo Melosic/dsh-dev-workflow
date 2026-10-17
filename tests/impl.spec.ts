@@ -332,6 +332,10 @@ describe('src/checks.ts', () => {
       t('command.toggle.check.clean'),
     )
     expect(summarize({ ok: false, errors: ['boom'], warnings: [] }, t)).toBe('boom')
+    // A summary that named one of three problems would read as "one problem".
+    expect(summarize({ ok: false, errors: ['boom', 'bang', 'bust'], warnings: [] }, t)).toBe(
+      `boom ${t('command.toggle.check.more', { count: 2 })}`,
+    )
   })
 
   it('digests the same value to the same short hash', () => {

@@ -25,14 +25,23 @@ const REFUSED = 'command.guard.denied'
 /** Dictionary key appended when the configured policy asks about the call. */
 const CONFIRM = 'command.guard.confirm_required'
 
-/** Targets where a recursive forced delete removes a filesystem, not a directory. */
+/**
+ * Targets where a recursive forced delete removes a filesystem, not a directory.
+ *
+ * Written in lower case because {@link normalizeTarget} folds the word before
+ * comparing: every entry here is a spelling a shell compares case-insensitively,
+ * on one platform or the other.
+ */
 const DANGEROUS_TARGETS = new Set([
   '/',
   '/*',
   '//',
   '~',
-  '$HOME',
-  '${HOME}',
+  '$home',
+  '${home}',
+  '$env:userprofile',
+  '%userprofile%',
+  '%homepath%',
   '.',
   '..',
   '*',
@@ -51,10 +60,64 @@ const DANGEROUS_TARGETS = new Set([
  * what a predicate picked out. A filesystem root leaves no such room — no filter
  * makes deleting from `/` or `~` a scoped act.
  */
-const ROOT_TARGETS = new Set(['/', '/*', '//', '~', '$HOME', '${HOME}', '/.', '/..'])
+const ROOT_TARGETS = new Set([
+  '/',
+  '/*',
+  '//',
+  '~',
+  '$home',
+  '${home}',
+  '$env:userprofile',
+  '%userprofile%',
+  '%homepath%',
+  '/.',
+  '/..',
+])
 
-/** A single component under root, e.g. `/etc`: a whole system directory. */
-const SYSTEM_DIRECTORY = /^\/[A-Za-z0-9_.-]+\/?$/
+/** A single component under root, e.g. `/etc` or `C:/Users`: a whole system directory. */
+const SYSTEM_DIRECTORY = /^(\/|[a-z]:\/)[A-Za-z0-9_.-]+\/?$/i
+
+/** A drive's root: `C:`, `C:/`, `C:\` all name the same place to a shell. */
+const DRIVE_ROOT = /^[a-z]:$/i
+
+/** A drive letter on its own, as `format` and `Format-Volume` take one. */
+const DRIVE_LETTER = /^[a-z]:?$/i
+
+/**
+ * Programs whose job is to remove a tree, on either platform.
+ *
+ * `del`, `rd` and `Remove-Item` are cmd and PowerShell's own spellings; a command
+ * line that reaches this guard may come from either shell, and the Windows names
+ * are not a rarity on a Windows host — they are the ordinary way to delete there.
+ */
+const TREE_DELETERS = new Set([
+  'rm',
+  'rmdir',
+  'rd',
+  'del',
+  'erase',
+  'remove-item',
+  'ri',
+  'delete-item',
+  'srm',
+])
+
+/**
+ * The programs that read `/s` as a switch rather than as the path `/s`.
+ *
+ * Only cmd's builtins do. `rm` takes `/s` as a directory name, so applying the
+ * cmd reading to it would make `rm -r /etc` look like an option and pass.
+ */
+const CMD_STYLE = new Set(['del', 'erase', 'rd', 'rmdir', 'format'])
+
+/** Programs that wipe a whole volume from its name alone, taking no target. */
+const VOLUME_WIPERS = new Set([
+  'format',
+  'format-volume',
+  'clear-disk',
+  'initialize-disk',
+  'diskpart',
+])
 
 /** The classic shell fork bomb, which is a syntax rather than an invocation. */
 const FORK_BOMB = /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*;?\s*\}\s*;?\s*:/
@@ -205,11 +268,30 @@ function hitsFor(segment: readonly string[], action: GuardAction, depth: number)
   const words = programWords(segment)
   const program = words[0]
   if (program === undefined) return []
-  const name = baseName(program)
+  // PowerShell capitalises its verbs and nouns (`Remove-Item`), while cmd is
+  // case-insensitive outright. Comparing every program name lowercased is the
+  // only spelling-independent way to recognise the same act on either platform.
+  const name = baseName(program).toLowerCase()
   const args = words.slice(1)
   const hits: GuardHit[] = []
 
-  if (name === 'rm' && destroyTarget(args) !== undefined) hits.push(hit('rm -rf', action))
+  // The same act has a name per platform: `rm -rf`, cmd's `rd /s /q`, and
+  // PowerShell's `Remove-Item -Recurse`. All of them take a target, and a target
+  // that names a whole filesystem position is the hit. Only cmd's own builtins
+  // read `/s` as a switch, which is why the program decides the option style.
+  const cmdStyle = CMD_STYLE.has(name)
+  if (TREE_DELETERS.has(name) && destroyTarget(args, cmdStyle) !== undefined) {
+    hits.push(hit('rm -rf', action))
+  }
+
+  // A volume wiper takes no target: the volume it acts on comes from the drive
+  // letter, or from the only disk there is. `format C:` and `Format-Volume` are
+  // the same act as erasing the filesystem.
+  if (VOLUME_WIPERS.has(name)) {
+    const named = args.some((arg) => !isOption(arg, name === 'format') && DRIVE_LETTER.test(arg))
+    const removal = args.some((arg) => /^-(remove|remove-data|removedata|force|full)$/i.test(arg))
+    if (named || removal || name === 'diskpart') hits.push(hit('mkfs', action))
+  }
 
   // `mkfs`, `mkfs.ext4`, `mkfs.xfs`: one family, recognised by prefix.
   if (name === 'mkfs' || name.startsWith('mkfs.')) hits.push(hit('mkfs', action))
@@ -280,34 +362,105 @@ function isRootTarget(target: string): boolean {
 
 /**
  * Whether deleting this target is a destructive act rather than an ordinary one.
- * @param target - a non-option word from an `rm` command.
+ * @param target - a non-option word from a delete command.
  * @returns whether the target is a filesystem root or a whole system directory.
  */
 export function isDangerousTarget(target: string): boolean {
-  const value = target.replace(/\\/g, '/')
-  // `rm -rf $HOME/` and `rm -rf ~/` name the same directories as the forms
-  // without the trailing slash, so normalise it before comparing. A run of
-  // slashes is the root itself, however it was spelled.
-  const normalized = /^\/+$/.test(value) ? '/' : value.replace(/\/+$/, '')
-  if (DANGEROUS_TARGETS.has(normalized)) return true
-  // `rm -rf ~/*`, `rm -rf /*` and `rm -rf $HOME/*` remove the contents of the
-  // directory the forms above name. Matching the whole word would miss every
-  // one of them, so the part before the wildcard is what is compared.
-  if (normalized.endsWith('/*')) {
-    const parent = normalized.slice(0, -2)
-    if (parent === '' || DANGEROUS_TARGETS.has(parent)) return true
-  }
-  return SYSTEM_DIRECTORY.test(value)
+  const normalized = normalizeTarget(target)
+  if (namesWholePlace(normalized)) return true
+  // `rm -rf ~/*`, `rm -rf /*` and `rm -rf C:/*` remove the contents of the
+  // directory the forms above name, which is the same act on the same tree.
+  // Matching the whole word would miss every one of them, so the part before
+  // the wildcard is what is compared.
+  if (!normalized.endsWith('/*')) return false
+  const parent = normalized.slice(0, -2)
+  return parent === '' || namesWholePlace(parent)
 }
 
 /**
- * The target of a recursive forced delete, when there is one.
- * @param args - the words after `rm`.
- * @returns the first destructive target, or `undefined` for an ordinary delete.
+ * Normalise a path-like word so that the spellings a shell treats as the same
+ * place compare equal.
+ *
+ * A run of separators is the root however it was written, and a trailing
+ * separator names the same directory as the form without it. Both platforms'
+ * separators are folded to `/` because the command line may come from either.
+ * @param target - the word as written.
+ * @returns the spelling used for comparison.
  */
-function destroyTarget(args: readonly string[]): string | undefined {
-  if (!hasShortOption(args, 'rR') && !args.includes('--recursive')) return undefined
-  return args.find((arg) => !arg.startsWith('-') && isDangerousTarget(arg))
+function normalizeTarget(target: string): string {
+  // Folded to lower case as well: the Windows variable spellings this compares
+  // (`$env:USERPROFILE`, `%USERPROFILE%`) are case-insensitive in the shell that
+  // expands them, and every path-like entry is case-insensitive on that platform.
+  const value = target.replace(/\\/g, '/').toLowerCase()
+  return /^\/+$/.test(value) ? '/' : value.replace(/\/+$/, '')
+}
+
+/**
+ * Whether a normalised target names a whole filesystem position rather than a
+ * place inside one.
+ * @param normalized - the output of {@link normalizeTarget}.
+ * @returns whether no delete from it can be scoped.
+ */
+function namesWholePlace(normalized: string): boolean {
+  if (DANGEROUS_TARGETS.has(normalized)) return true
+  // `C:`, `C:/` and `C:\` are one place to every shell on Windows; a recursive
+  // delete aimed at any of them takes the drive.
+  if (DRIVE_ROOT.test(normalized)) return true
+  return SYSTEM_DIRECTORY.test(normalized)
+}
+
+/**
+ * Whether a word is an option rather than a target.
+ *
+ * `-r` is an option on every platform. `\/s` is one only to cmd's own programs:
+ * to `rm` it is the path `/s`, so reading it as a switch would make `rm -r /etc`
+ * pass. Which program is asking is therefore part of the question.
+ * @param word - one argument.
+ * @param cmdStyle - whether the program is a cmd builtin, where `/` begins a switch.
+ * @returns whether the argument names an option.
+ */
+function isOption(word: string, cmdStyle: boolean): boolean {
+  if (word.startsWith('-')) return word.length > 1
+  if (!cmdStyle) return false
+  // A bare `/` is a target, not a switch, which is why a run of letters is
+  // required — and why `del /f /s /q C:\` reads as four switches and a target.
+  return /^\/[a-z]+$/i.test(word)
+}
+
+/**
+ * Whether a delete command was asked to recurse, in either platform's spelling.
+ * @param args - the words after the program.
+ * @param cmdStyle - whether the program is a cmd builtin, where `/s` is a switch.
+ * @returns whether the whole tree under each target is in scope.
+ */
+function wantsRecursion(args: readonly string[], cmdStyle: boolean): boolean {
+  if (hasShortOption(args, 'rR')) return true
+  // PowerShell spells its switches out and capitalises them: `-Recurse`,
+  // `-Recurse:$true`. Comparing the lowercased word is what covers both shells.
+  if (args.some((arg) => /^-(recurse|r)(:|$)/i.test(arg))) return true
+  if (args.some((arg) => arg.toLowerCase() === '--recursive')) return true
+  return cmdStyle && args.some((arg) => /^\/s$/i.test(arg))
+}
+
+/**
+ * The target of a recursive delete, when there is one to judge.
+ * @param args - the words after the deleting program.
+ * @param cmdStyle - whether the program is a cmd builtin, where `/` begins a switch.
+ * @returns the outcome: the destructive target found, `'unknown'` when the delete
+ * recursively takes a set the line never spells out, or `undefined` for an
+ * ordinary delete.
+ */
+function destroyTarget(args: readonly string[], cmdStyle: boolean): string | 'unknown' | undefined {
+  if (!wantsRecursion(args, cmdStyle)) return undefined
+  const targets = args.filter((arg) => !isOption(arg, cmdStyle))
+  if (targets.length === 0) {
+    // `rm -rf $(cat list)` puts the target in a substitution, which is read as a
+    // command of its own — so this segment names no operand at all. A recursive
+    // delete with nothing to delete is either a mistake or a target the line does
+    // not show, and a question costs less than a silent delete.
+    return 'unknown'
+  }
+  return targets.find((arg) => isDangerousTarget(arg))
 }
 
 /**

@@ -22,6 +22,7 @@
   "command.toggle.kind.release": "版本发布",
   "command.toggle.check.header": "对工作区执行开发工作流检查：",
   "command.toggle.check.clean": "没有发现阻塞性问题。",
+  "command.toggle.check.more": "（另有 {count} 个阻塞性问题。）",
   "command.toggle.check.no_message": "本次检查未包含提交信息规则：加上 --message \"type: subject\" 才会一起判定。",
   "command.toggle.check.message": "提交信息规则按以下文本判定：{message}",
   "command.guard.dangerous_warning": "这条命令做了无法撤销的事：{pattern}。",

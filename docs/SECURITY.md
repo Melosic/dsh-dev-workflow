@@ -84,16 +84,25 @@ file-guard 管**不该被读**的路径，secret-guard 管**发出即泄漏**的
 
 | 形状 | 为什么危险 |
 | --- | --- |
-| `rm -rf /`、`rm -fr /*`、`rm -Rf ~`、`rm -rf .` | 递归强制删除落在文件系统根或整个家目录上，没有回收站 |
+| `rm -rf /`、`rm -fr /*`、`rm -Rf ~`、`rm -rf .`、`rm -rf ~/*`、`rm -rf //` | 递归删除落在文件系统根或整个家目录上（含它们的内容），没有回收站 |
+| `rm -rf C:\`、`rm -rf C:/*` | 同一个动作的 Windows 写法；`C:`、`C:/`、`C:\` 是同一个位置 |
+| `del /f /s /q C:\`、`rd /s /q C:\`、`Remove-Item -Recurse -Force C:\` | cmd 与 PowerShell 的递归删除，目标同样是盘根 |
+| `Remove-Item -Recurse -Force $env:USERPROFILE`、`%USERPROFILE%` | 家目录，两种平台的取值语法都按大小写不敏感比较 |
+| `format C:`、`Format-Volume`、`Clear-Disk -RemoveData`、`diskpart` | 整卷擦除，不经过文件系统，也不可逆 |
 | `mkfs` / `mkfs.ext4` / `mkfs.xfs` | 这个程序存在的唯一目的就是抹掉一个文件系统 |
 | `dd if=… of=/dev/sda`、`dd if=/dev/sda` | 裸写（或裸读）块设备，写错盘号即不可逆 |
 | `cat image.iso > /dev/sda` | 重定向直写块设备，同上 |
 | `:(){ :|:& };:` | fork 炸弹，拖垮整机会话 |
 | `chmod -R 777 /`、`chmod -R 777 /etc` | 递归开放系统目录权限，等于取消权限模型 |
 
-**普通删除放行**：`rm build.log`、`rm -rf node_modules`、`rm -rf ./dist`、`rm -rf /tmp/build`
-都不命中——判定看的是**目标**（根、家目录、`.`、`..`、`*`，或 `/` 下单段系统目录），
-不是 `-rf` 本身。判定的实现直接复用 `src/shell.ts` 的词法切分，不另写一层 shell 解析。
+**普通删除放行**：`rm build.log`、`rm -rf node_modules`、`rm -rf ./dist`、`rm -rf /tmp/build`、
+`Remove-Item -Recurse ./build` 都不命中——判定看的是**目标**（根、家目录、`.`、`..`、`*`，
+或 `/` 下单段系统目录），不是 `-rf` 本身。判定的实现直接复用 `src/shell.ts` 的词法切分，
+不另写一层 shell 解析。
+
+**目标被替换占位时宁可问一次。** `rm -rf $(cat list)` 的目标不在命令行上，
+词法层会把它拆成独立的命令段，因此这一段递归删除**一个操作数都没有**——那既可能是笔误，
+也可能是目标没露出来。这种情况同样命中，理由与根目录删除相同：一次问答比一次静默删除便宜。
 
 **命令行全文不进任何输出。** 理由里只有命中的形状名（如 `rm -rf`），这是命令里唯一
 可以安全复述的部分。同理 `echo "rm -rf /"` 这类只是**提到**命令的调用不会命中——

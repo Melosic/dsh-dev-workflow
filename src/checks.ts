@@ -86,37 +86,60 @@ function commitArguments(args: readonly CommandWord[]): CommitCommand {
   let unreadable: string | undefined
 
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index]?.value ?? ''
-    const next = args[index + 1]
+    const word = args[index]
+    const token = word?.value ?? ''
     if (token === '--amend') amend = true
     if (!token.startsWith('-') || token === '--' || token === '-') continue
-    // A long option names itself; a short cluster is read letter by letter, so
-    // `-am "msg"` and `-m "msg"` are the same command. The first letter that
-    // takes a value consumes the rest of the cluster, or the next word.
-    const letters = token.startsWith('--') ? [] : [...token.slice(1)]
-    const names = letters.length > 0 ? letters : [token]
-    for (let position = 0; position < names.length; position += 1) {
-      const name = names[position] ?? ''
-      const rest = letters.length > 0 ? token.slice(2 + position) : undefined
-      // A value inside the cluster is part of the option word, so the shell
-      // never saw it as a word of its own; it is literal text only if the word
-      // it was cut out of was — which it was not.
-      const inline: CommandWord | undefined =
-        rest !== undefined && rest.length > 0 ? { value: rest, literal: false } : next
-      if (name === 'm' || name === '--message') {
-        if (rest === undefined || rest.length === 0) index += 1
-        if (inline === undefined) break
-        if (isLiteral(inline)) messages.push(inline.value)
-        else unreadable = inline.value
-        break
+
+    // A long option names itself and may carry its value after `=`, which is how
+    // `--message="…"` and `--file=…` are usually written. Reading only the bare
+    // spelling let both forms name a message the check never saw.
+    if (token.startsWith('--')) {
+      const equals = token.indexOf('=')
+      const name = equals === -1 ? token : token.slice(0, equals)
+      if (name !== '--message' && name !== '--file') continue
+      let value: CommandWord | undefined
+      if (equals === -1) {
+        index += 1
+        value = args[index]
+      } else {
+        // Attached text inherits the quoting of the word it was cut from, so a
+        // substitution still reads as one: `--message=$(cat m)` is unreadable.
+        value = { value: token.slice(equals + 1), literal: word?.literal ?? false }
       }
-      if (name === 'F' || name === '--file') {
-        if (rest === undefined || rest.length === 0) index += 1
+      if (value === undefined) break
+      if (name === '--message') {
+        if (isLiteral(value)) messages.push(value.value)
+        else unreadable = value.value
+      } else {
         // Kept even when the word is not literal text: the caller has to be able
         // to say that a message was named but could not be read.
-        if (inline !== undefined) file = inline.value
-        break
+        file = value.value
       }
+      continue
+    }
+
+    // A short cluster is read letter by letter, so `-am "msg"` and `-m "msg"` are
+    // the same command. The first letter that takes a value consumes the rest of
+    // the cluster, or the next word.
+    const letters = [...token.slice(1)]
+    for (let position = 0; position < letters.length; position += 1) {
+      const name = letters[position] ?? ''
+      const rest = token.slice(2 + position)
+      // A value attached to the letter is part of this word, and inherits its
+      // quoting: `-mfeat: x` is text git will record, `-m$(cat m)` is not.
+      const inline: CommandWord | undefined =
+        rest.length > 0 ? { value: rest, literal: word?.literal ?? false } : args[index + 1]
+      if (name !== 'm' && name !== 'F') continue
+      if (rest.length === 0) index += 1
+      if (inline === undefined) break
+      if (name === 'm') {
+        if (isLiteral(inline)) messages.push(inline.value)
+        else unreadable = inline.value
+      } else {
+        file = inline.value
+      }
+      break
     }
   }
 
@@ -287,13 +310,20 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
 
 /**
  * Reduce an outcome to the one line the status surface shows.
+ *
+ * The status line has room for one sentence, and the first error is the one the
+ * author has to fix first — but a count is appended when there are more, because
+ * a summary that silently reports one of three problems reads as "one problem".
  * @param outcome - what a check found.
- * @param t - translator for the all-clear line.
- * @returns the first blocking problem, or the all-clear line.
+ * @param t - translator for the all-clear and the count lines.
+ * @returns the first blocking problem, with a count when others were also found.
  */
 export function summarize(outcome: CheckResult, t: Translate): string {
-  if (outcome.ok) return t('command.toggle.check.clean')
-  return outcome.errors[0] ?? t('command.toggle.check.clean')
+  const first = outcome.errors[0]
+  if (first === undefined) return t('command.toggle.check.clean')
+  const others = outcome.errors.length - 1
+  if (others === 0) return first
+  return `${first} ${t('command.toggle.check.more', { count: others })}`
 }
 
 /**
