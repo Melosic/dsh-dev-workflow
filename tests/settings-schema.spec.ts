@@ -75,11 +75,8 @@ const REQUIRED = [
 const READONLY = [
   'codePaths',
   'docs.docsDir',
-  'docs.adrDir',
   'docs.changelog',
   'docs.exclude',
-  'rules.branchPattern',
-  'rules.commitPattern',
   'releaseCheck.versionPattern',
   'docs.mirrors',
   'audit.path',
@@ -212,17 +209,16 @@ describe('client.js schema agreement', () => {
     }
   })
 
-  it('marks exactly the unwired advanced fields as not in effect', () => {
-    // A read-only row is a claim that the value is real; a row nothing reads is
-    // a claim the panel would otherwise make by omission. The documentation
-    // names the same three fields, so this list is the pairing.
-    const unwired = ['docs.adrDir', 'rules.branchPattern', 'rules.commitPattern']
+  it('marks no field as not in effect', () => {
+    // Every row the panel shows is now read by something. The query stays so a
+    // field that goes stale again gets caught here instead of shipping a claim
+    // the panel makes by omission.
     const marked = description.advanced
       .filter((entry) => entry.inactive === true)
       .map((entry) => keyOf(entry.path))
 
-    expect(marked.toSorted()).toEqual(unwired.toSorted())
-    expect(description.advanced.length).toBeGreaterThan(marked.length)
+    expect(marked).toEqual([])
+    expect(description.advanced.length).toBeGreaterThan(0)
   })
 
   it('ships both locales with the same keys', () => {

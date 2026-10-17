@@ -61,7 +61,7 @@ asar 内随宿主出货的官方包。这些包没有被引入依赖，但**本�
 
 | 规范 | 作者 / 维护者 | 被引用之处 |
 | --- | --- | --- |
-| [Conventional Commits 1.0.0](https://www.conventionalcommits.org/) | Conventional Commits 社区 | `src/config.ts` 的 `rules.commitPattern` 与 `src/tools/check-commit-message.ts` 的全部规则 |
+| [Conventional Commits 1.0.0](https://www.conventionalcommits.org/) | Conventional Commits 社区 | `src/tools/check-commit-message.ts` 的全部规则与 `src/config.ts` 的 `COMMIT_TYPES` |
 | [Semantic Versioning 2.0.0](https://semver.org/) | Tom Preston-Werner | SKILL.md 的「Releases」章、`package.json` 的 `version`、`CHANGELOG.md` 的版本标题 |
 | [Keep a Changelog 1.1.0](https://keepachangelog.com/) | Olivier Lacan | 本仓库的 [CHANGELOG.md](CHANGELOG.md) 与 SKILL.md 的「CHANGELOG Maintenance」整章 |
 
