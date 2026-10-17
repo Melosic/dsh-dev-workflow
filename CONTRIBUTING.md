@@ -120,12 +120,12 @@ docs(readme): document the /dev-workflow command
 ## PR 流程
 
 1. 从最新的 `main` 切出符合命名规范的分支。
-2. 提交前本地跑通：`pnpm lint && pnpm typecheck && pnpm test && pnpm format:check`。
+2. 提交前本地跑通：`pnpm lint && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test && pnpm format:check`。
 3. 推送分支并开 PR，说明动机（为什么）与做法（是什么），而不只是列出改了哪些文件。
    一个 PR 只做一件事；改动超过 500 行就拆，或在正文里写清「哪几块、从哪读起」。
    合并是 squash，分支上的几个关注点在 `main` 上只会剩下一个提交、一条信息，
    所以拆分要在开 PR 之前做——合并之后再想还原几乎不可能。
-4. 等待 CI 通过。CI 会校验：typecheck、lint、test、构建、locale key 对齐、
+4. 等待 CI 通过。CI 会校验：typecheck（源码 / 测试 / 面板）、lint、test、构建、locale key 对齐、
    `cordis.patch.yml` 存在于 `files` 字段。
 5. 合并策略：**squash merge**，保持 `main` 历史线性、每个合并对应一个完整意图。
 

@@ -13,8 +13,13 @@
 // a draft the way the official `SettingsForm` does.
 window.__ModuleLoader__.load({
   id: '@melosic/dsh-dev-workflow',
-  factory: (require) => {
-    const React = require('react')
+  // The parameter is called `req`, not `require`: TypeScript reads a call to an
+  // identifier named `require` in a JS file as a CommonJS import, so a
+  // parameter of that name looks unused and the real return type of the
+  // declared `ModuleRequire` is never applied. The loader passes it
+  // positionally, so the name is free.
+  factory: (req) => {
+    const React = req('react')
     const h = React.createElement
     const { useEffect, useState } = React
 
@@ -961,9 +966,9 @@ window.__ModuleLoader__.load({
       )
       const nodes = React.useRef([])
       const onKeyDown = (event) => {
-        const enabled = options
-          .map((option, position) => position)
-          .filter((position) => options[position].disabled !== true)
+        const enabled = [...options.keys()].filter(
+          (position) => options[position].disabled !== true,
+        )
         if (enabled.length === 0) return
         const current = enabled.indexOf(index)
         let next
@@ -1394,6 +1399,15 @@ window.__ModuleLoader__.load({
 
     const inject = ['slots', 'locale', 'configForms', 'remote', 'remote.settings']
 
+    /**
+     * Annotated against the Host's own `Context` on purpose: the augmentations
+     * from the client packages are what make `configForms`, `locale`, `remote`
+     * and `slots` real members here. Drop the annotation and the body silently
+     * becomes unchecked `any`, which is how a renamed host method survives
+     * until a user opens a blank panel.
+     *
+     * @param {import('@deepseek-ai/cordis').Context} ctx
+     */
     function apply(ctx) {
       const t = ctx.locale.bind(LOCALE)
       ctx.effect(

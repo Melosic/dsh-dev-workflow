@@ -44,6 +44,12 @@ jobs:
       - name: Typecheck tests
         run: pnpm typecheck:tests
 
+      # `client.js` is hand-written browser JS that no build compiles, so
+      # without this step a renamed Host service would first show up as a blank
+      # panel. The declarations come from the pinned client packages.
+      - name: Typecheck client
+        run: pnpm typecheck:client
+
       - name: Lint
         run: pnpm lint
 
