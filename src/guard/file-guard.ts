@@ -1,5 +1,5 @@
 import type { Config } from '../config.js'
-import { commandOf, programWords, segments, tokenize } from '../shell.js'
+import { baseName, commandOf, programWords, segments, shellArgument, tokenize } from '../shell.js'
 import { createGuard } from './shared.js'
 import type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 
@@ -166,12 +166,18 @@ function argumentPaths(name: string, args: unknown): string[] {
 function commandPaths(command: string): string[] {
   const found: string[] = []
   for (const segment of segments(tokenize(command))) {
-    // `sudo cat .env` reads the same file as `cat .env`; the wrapper is dropped
-    // here for the same reason the other guards drop it.
     const words = programWords(segment)
+    // `sh -c 'cat .env'` reads the same file as `cat .env`. The script is a
+    // command line in its own right, so it is read as one rather than as
+    // arguments of `sh` — the same unwrapping the command guard does.
+    const script = shellArgument(words)
+    if (script !== undefined) {
+      found.push(...commandPaths(script))
+      continue
+    }
     const program = words[0]
     if (program === undefined) continue
-    if (!READERS.has((program.split(/[\\/]/).pop() ?? program).toLowerCase())) continue
+    if (!READERS.has(baseName(program).toLowerCase())) continue
     found.push(...words.slice(1).filter((word) => !word.startsWith('-') && /^\S+$/.test(word)))
   }
   return found
