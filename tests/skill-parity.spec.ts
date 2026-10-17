@@ -61,13 +61,13 @@ const chinese = headings(readFileSync(FILES.zh, 'utf8'))
 
 describe('skills/dsh-dev-workflow', () => {
   it('exposes the same number of headings in both languages', () => {
-    expect(english).toHaveLength(28)
-    expect(chinese).toHaveLength(28)
+    expect(english).toHaveLength(35)
+    expect(chinese).toHaveLength(35)
     expect(chinese.length).toBe(english.length)
   })
 
   it('exposes the same number of headings at each level', () => {
-    const expected = { '#': 1, '##': 10, '###': 17 }
+    const expected = { '#': 1, '##': 12, '###': 22 }
     expect(levelCounts(english)).toEqual(expected)
     expect(levelCounts(chinese)).toEqual(expected)
   })

@@ -202,11 +202,14 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 相应地，**本插件不是安全边界**。它降低事故概率，不能阻止一个决意绕过的操作者
 （关掉插件、换终端、直接调 git 都能绕过）。把它当护栏，不要当门锁。
 
-还有一类绕过不需要离开会话：**在命令里再包一层解释器或包装程序**——`sh -c "git push
---force"`、`node -e "require('fs').readFileSync('.env')"`、`python -c "…"`。守卫看的是
-**参数文本**，不做动态解析，所以它认不出解释器内部那句。`sudo` / `env` / `npx` 这类
-**裸包装词**已由 `src/shell.ts` 的 `TRANSPARENT` 剥离（`sudo git push --force` 照样命中），
-但引号里的整段脚本不在同一范畴：那需要真正的 shell 语义，属于已知边界。
+还有一类绕过不需要离开会话：**在命令里再包一层解释器**——`node -e "require('fs').readFileSync('.env')"`、
+`python -c "…"`。守卫看的是**参数文本**，不做动态解析，所以它认不出解释器内部那句。
+
+shell 那一层则恢复了一部分：`sudo` / `env` / `npx` 这类**裸包装词**由 `src/shell.ts` 的
+`TRANSPARENT` 剥离（`sudo git push --force` 照样命中），`sh -c "git push --force"` 里的
+`-c` 参数会被再次当作命令行解析（`SHELLS`：`sh`、`bash`、`zsh`、`dash`、`ksh`、`ash`），
+`$(...)` 与反引号里的命令同样递归解析。但**解释器本身仍是不透明的**——那需要真正的运行时
+语义，属于已知边界。
 
 ## 依赖与供应链
 

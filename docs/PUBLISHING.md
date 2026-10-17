@@ -107,7 +107,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && p
 ```
 
 `ci:checks` 输出 `locale keys aligned (112 keys); bundle patch declared and shipped;
-skill headings aligned (28 sections); published entry points present (8 checked);
+skill headings aligned (35 sections); published entry points present (8 checked);
 mirrored pairs consistent (3 groups); CHANGELOG records 0.3.0;
 no numbered development phases cited.`——这就是全部七项结构守卫。（括号里的数字都是当前值，
 脚本按实际内容算出，不硬编码；换句话说这些数字会随内容变，不要拿这里出现的具体数字去断言
