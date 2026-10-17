@@ -189,6 +189,19 @@ describe('src/triggers/pre-pr.ts', () => {
     expect(outcome.warnings).toContain(t('trigger.pre_pr.warn.issue'))
   })
 
+  // The note is advisory, so it must not become a question. Under a `never`
+  // approval policy a question with nothing in it is refused, which turned this
+  // one into a blocked pull request the moment the description named no issue.
+  it('does not ask about a missing issue reference alone', async () => {
+    const { listener } = trigger()
+    const body = GOOD_BODY.replace(' Closes #7.', '')
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(body)}`,
+    )
+    expect(decision.kind).toBe('allow')
+  })
+
   it('passes a compliant pull request without a word', async () => {
     const { listener, state } = trigger()
     const decision = await fire(
