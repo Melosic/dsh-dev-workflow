@@ -119,6 +119,18 @@ describe('src/guard/file-guard.ts', () => {
     expect(rule(detectFile({ command: 'grep AWS .env' }, 'bash', Config({})))).toBe('.env')
   })
 
+  it('reads the command inside a shell wrapper', () => {
+    // `sh -c 'cat .env'` reads the same file as `cat .env`. The script is a
+    // command line of its own, so it is unwrapped rather than read as arguments
+    // of `sh` — the same rule the command guard applies.
+    expect(rule(detectFile({ command: 'sh -c "cat .env"' }, 'bash', Config({})))).toBe('.env')
+    expect(rule(detectFile({ command: 'bash -lc "cat .env"' }, 'bash', Config({})))).toBe('.env')
+    expect(rule(detectFile({ command: 'sh -c "sudo cat .env"' }, 'bash', Config({})))).toBe('.env')
+    expect(
+      detectFile({ command: 'sh -c "cat docs/readme.md"' }, 'bash', Config({})),
+    ).toBeUndefined()
+  })
+
   it('passes a shell command that only mentions the name', () => {
     expect(
       detectFile({ command: 'echo "add .env to gitignore"' }, 'bash', Config({})),

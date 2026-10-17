@@ -11,6 +11,23 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **command-guard 只认 Unix 写法，Windows 上的删除与擦盘全部放行。** 程序名以前按原样比较，
+  而 PowerShell 写 `Remove-Item -Recurse`（大写、开关拼全），cmd 写 `rd /s /q`、`del /f /s /q`，
+  卷擦除是 `format C:` 或 `Format-Volume`——这些一个都不命中。现在程序名统一按小写比较；
+  `/s` 这类 cmd 开关只在 cmd 自家内建命令上生效（`rm -r /etc` 里的 `/etc` 仍是路径，
+  写作 `/s` 也不会被当成开关）；`C:`、`C:/`、`C:\`、`C:/*`、`rm -rf //` 归一化为同一位置；
+  `$env:USERPROFILE` / `%USERPROFILE%` 按大小写不敏感比较。
+- 递归删除**一个操作数都没留下**时不再静默放行。`rm -rf $(cat list)` 的目标在替换占位里，
+  词法层把它拆成独立命令段后，`rm` 这一段看起来「没有目标」——这既可能是笔误，也可能是
+  目标没露出来，现在按可疑处理并给出同样的理由。命令行全文依旧不进任何输出。
+- `summarize()` 只返回第一条错误，于是同时发现三个问题的检查在状态行上读起来像一个。
+  现在多出的条数会跟在后面。
+- **file-guard 认不出套在 shell 里的读取。** `cat .env` 会被拒，`sh -c "cat .env"` 却放行——
+  程序名看到的是 `sh`。现在与 command-guard 用同一条规则拆开 shell 包装，把 `-c` 后面的
+  命令行当作独立命令重新判定；`bash -lc`、套一层的 `sh -c "sudo cat .env"` 同样覆盖。
+
 ## [0.3.0] - 2026-10-15
 
 ### Added
