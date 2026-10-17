@@ -53,6 +53,36 @@
 - 文档里关于 shell 边界的表述落后于实现：`sh -c` 的内部命令行与 `$(...)`、反引号里的命令
   早已递归解析，`ARCHITECTURE.md` 与 `SECURITY.md` 仍写成「认不出」。真正的不透明处是解释器
   内部（`node -e`、`python -c`），文档改为指向这一点。
+- **command-guard 只认 Unix 写法，Windows 上的删除与擦盘全部放行。** 程序名以前按原样比较，
+  而 PowerShell 写 `Remove-Item -Recurse`（大写、开关拼全），cmd 写 `rd /s /q`、`del /f /s /q`，
+  卷擦除是 `format C:` 或 `Format-Volume`——这些一个都不命中。现在程序名统一按小写比较；
+  `/s` 这类 cmd 开关只在 cmd 自家内建命令上生效（`rm -r /etc` 里的 `/etc` 仍是路径，
+  写作 `/s` 也不会被当成开关）；`C:`、`C:/`、`C:\`、`C:/*`、`rm -rf //` 归一化为同一位置；
+  `$env:USERPROFILE` / `%USERPROFILE%` 按大小写不敏感比较。
+- 递归删除**一个操作数都没留下**时不再静默放行。`rm -rf $(cat list)` 的目标在替换占位里，
+  词法层把它拆成独立命令段后，`rm` 这一段看起来「没有目标」——这既可能是笔误，也可能是
+  目标没露出来，现在按可疑处理并给出同样的理由。命令行全文依旧不进任何输出。
+- `summarize()` 只返回第一条错误，于是同时发现三个问题的检查在状态行上读起来像一个。
+  现在多出的条数会跟在后面。
+- **file-guard 认不出套在 shell 里的读取。** `cat .env` 会被拒，`sh -c "cat .env"` 却放行——
+  程序名看到的是 `sh`。现在与 command-guard 用同一条规则拆开 shell 包装，把 `-c` 后面的
+  命令行当作独立命令重新判定；`bash -lc`、套一层的 `sh -c "sudo cat .env"` 同样覆盖。
+- **`pnpm -r publish` 与 `pnpm --filter pkg publish` 完全看不见。** 识别发版时只把命令的
+  第一个词当子命令，而 pnpm 允许全局选项写在子命令前面：`--filter` 顶到前面时被当成子命令，
+  于是发布既没有触发预发检查，也没有触发 outward 守卫——`-r` 会把工作区里每个包都推上去。
+  现在子命令取第一个自由词，会跳过选项及其取值。
+- **git-guard 只认 `checkout --` 一种写法。** `git restore <path>` 是同一损失的新写法、
+  也是现在最常敲的形态，此前完全放行；`git checkout -f <branch>` 与
+  `git switch --discard-changes <branch>` 不再停在冲突上而是直接丢弃本地改动，同样没被拦。
+  现在 `restore` 的第一个自由词按路径判定（`--staged` 与 `--source` 仍然放行），
+  强制切换按丢弃改动处理。
+- **「PR 没引用 issue」这条建议会变成一次阻拦。** 它是提醒性质的，却和有实质发现的问题
+  一起进了审批提问；审批策略为 `never` 时，一个没有内容的提问会被直接拒掉，于是「描述里
+  没写 `Closes #12`」就能挡住整个 `gh pr create`。现在它和 `--fill` 那条一样只进状态记录。
+- **搜索类命令把自己的搜索词当成了要打开的文件。** `grep -rn "credentials" .` 会被拒，
+  而这恰好是「查一下密钥有没有进仓库」的那条命令——把规则逼到要么关掉要么绕过。现在
+  `grep`/`rg`/`sed`/`awk`/`findstr`/`Select-String` 的第一个自由词按表达式处理，其后的
+  词仍按路径判定（`grep -rn "add .env" .env` 依然被拒）。
 
 ## [0.3.0] - 2026-10-15
 

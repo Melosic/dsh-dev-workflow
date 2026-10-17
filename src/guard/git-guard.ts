@@ -77,19 +77,37 @@ const REBASE_RECOVERY = new Set(['--continue', '--abort', '--skip'])
 /**
  * The file or tree a `checkout`/`restore` is pointed at, when it names one.
  *
- * Only the words after `--` are read as paths, exactly as git reads them, plus
- * the one reserved spelling that needs no separator: a plain `.` restores the
- * whole working tree. Reading any bare word as a path instead would turn a
- * branch switch into an alarm, and the names that matter are the ones a person
- * types.
+ * `restore` only ever takes paths, so its first free word is the target:
+ * `git restore src/app.ts` throws the edits away exactly as
+ * `git checkout -- src/app.ts` does, and it is the modern spelling people
+ * actually type. `checkout` takes branches too, so a bare word is read as a
+ * path only after `--` (or as the reserved `.`), because reading any bare word
+ * as a path would turn a branch switch into an alarm.
  * @param args - the words after the subcommand.
+ * @param takesPaths - whether every free word is a path (`restore`).
  * @returns the target word, or `undefined` when the command names no path.
  */
-function restoreTarget(args: readonly string[]): string | undefined {
+function restoreTarget(args: readonly string[], takesPaths: boolean): string | undefined {
   const separator = args.indexOf('--')
   if (separator !== -1) return args[separator + 1]
   const plain = args.find((word) => !word.startsWith('-'))
+  if (plain === undefined) return undefined
+  if (takesPaths) return plain
   return plain === '.' || plain === './' ? plain : undefined
+}
+
+/**
+ * Whether a `checkout` or `switch` was told to overwrite uncommitted edits.
+ *
+ * `git checkout -f <branch>` and `git switch --discard-changes <branch>` do not
+ * stop at a conflict the way the plain form does: they throw the local changes
+ * away and continue. That is the same loss as `git checkout .`, reached from
+ * the branch-switching side.
+ * @param args - the words after the subcommand.
+ * @returns whether the switch is forced.
+ */
+function forcedSwitch(args: readonly string[]): boolean {
+  return args.includes('--force') || args.includes('--discard-changes') || hasShortOption(args, 'f')
 }
 
 /**
@@ -153,13 +171,17 @@ export function detectAllGuards(command: string, config: Config): GuardHit[] {
       // discarding whatever was edited in those files, and `restore <path>` is
       // the modern spelling of the same loss. `restore --staged` moves changes
       // back to the working tree and discards nothing, so it is not a hit.
-      const target = restoreTarget(args)
-      if (target !== undefined && discardsWork(args)) {
+      // A forced branch switch throws the local edits away the same way.
+      const target = restoreTarget(args, subcommand === 'restore')
+      const discards = discardsWork(args) && (target !== undefined || forcedSwitch(args))
+      if (discards) {
         hits.push({
           reason: 'security.guard.checkout_discard',
           action: guard.checkoutDiscard.get(),
         })
       }
+    } else if (subcommand === 'switch' && forcedSwitch(args)) {
+      hits.push({ reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() })
     }
 
     // `--no-verify` is a property of the invocation rather than of one

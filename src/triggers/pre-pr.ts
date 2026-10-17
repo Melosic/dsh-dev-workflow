@@ -185,16 +185,20 @@ function uncheckedBoxes(body: string): number {
 /**
  * Whether an otherwise-clean outcome still holds something worth a question.
  *
- * Only one warning is not a finding: the note that `--fill` left no title for
- * this check to read. It belongs in the record — the reader of a status report
- * should know the title was never judged — but not in an approval prompt.
+ * Two warnings are not findings: the note that `--fill` left no title for this
+ * check to read, and the note that the description names no issue. Both are
+ * advisory — the first states what could not be judged, the second asks for
+ * something the check has no way to know exists. They belong in the record, so a
+ * status report shows them, but a question containing only those has nothing to
+ * ask: under a `never` approval policy it would be refused outright and turn an
+ * advisory note into a blocked pull request.
  * @param outcome - what the check found.
- * @param t - translator, to recognise the note in the language in effect.
+ * @param t - translator, to recognise the notes in the language in effect.
  * @returns whether the prompt has anything to carry.
  */
 function worthAsking(outcome: CheckResult, t: Translate): boolean {
-  const note = t('trigger.pre_pr.warn.filled')
-  return outcome.errors.length > 0 || outcome.warnings.some((line) => line !== note)
+  const notes = new Set([t('trigger.pre_pr.warn.filled'), t('trigger.pre_pr.warn.issue')])
+  return outcome.errors.length > 0 || outcome.warnings.some((line) => !notes.has(line))
 }
 
 /**

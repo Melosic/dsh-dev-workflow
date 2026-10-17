@@ -172,6 +172,18 @@ describe('src/guard/git-guard.ts', () => {
     expect(classify('git checkout -- src/a.ts')).toMatchObject({
       reason: 'security.guard.checkout_discard',
     })
+    // `git restore <path>` is the modern spelling of `checkout -- <path>`, and
+    // it is what people actually type.
+    expect(classify('git restore src/a.ts')).toMatchObject({
+      reason: 'security.guard.checkout_discard',
+    })
+    // A forced switch throws the local edits away instead of stopping at them.
+    expect(classify('git checkout -f main')).toMatchObject({
+      reason: 'security.guard.checkout_discard',
+    })
+    expect(classify('git switch --discard-changes main')).toMatchObject({
+      reason: 'security.guard.checkout_discard',
+    })
   })
 
   it('leaves the harmless neighbours of those operations alone', () => {
@@ -181,6 +193,10 @@ describe('src/guard/git-guard.ts', () => {
     expect(classify('git branch --delete topic')).toBeUndefined()
     expect(classify('git checkout main')).toBeUndefined()
     expect(classify('git checkout --')).toBeUndefined()
+    // Moving changes back to the working tree discards nothing.
+    expect(classify('git restore --staged src/a.ts')).toBeUndefined()
+    // Recovering a file from another commit is how a mistake is undone.
+    expect(classify('git restore --source=HEAD~1 src/a.ts')).toBeUndefined()
     expect(classify('echo "git reset --hard"')).toBeUndefined()
     expect(classify('git status --porcelain')).toBeUndefined()
   })

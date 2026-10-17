@@ -1,5 +1,5 @@
 import type { Config } from '../config.js'
-import { commandOf, programWords, segments, tokenize } from '../shell.js'
+import { baseName, commandOf, programWords, segments, shellArgument, tokenize } from '../shell.js'
 import { createGuard } from './shared.js'
 import type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 
@@ -73,6 +73,18 @@ const READERS = new Set([
   'gc',
   'select-string',
 ])
+
+/**
+ * Readers whose first non-option word is an expression rather than a path:
+ * the search term of `grep`/`rg`/`findstr`, the script of `sed`/`awk`, the
+ * `-Pattern` value of `Select-String`.
+ *
+ * Without this, `grep -rn "credentials" .` refuses itself — the guard reads the
+ * search term as a file it is about to open, which blocks exactly the check
+ * that tells you whether a secret is in the tree. The remaining words are
+ * still read as paths, so `grep -rn "add .env" .env` is still refused.
+ */
+const EXPRESSION_FIRST = new Set(['sed', 'awk', 'grep', 'rg', 'findstr', 'select-string'])
 
 /**
  * Whether one path is covered by one configured pattern.
@@ -156,23 +168,39 @@ function argumentPaths(name: string, args: unknown): string[] {
  *
  * Only the words of a known reader are considered, so a command that merely
  * mentions the name of a sensitive file in an unrelated argument is not a hit.
- * An argument this cannot split is left out: `grep -rn "credentials and keys" .`
- * names a search expression rather than a file, and reading it as a path would
- * refuse the very search that shows whether a secret is in the tree. The
- * dangerous spellings this gives up are the ones SECURITY.md already lists.
+ * For the readers whose first free word is an expression rather than a path
+ * (`grep`, `rg`, `sed`, `awk`, `findstr`, `Select-String`), that word is
+ * skipped: `grep -rn "credentials" .` is the search that shows whether a secret
+ * is in the tree, and reading its pattern as a path refuses the check that
+ * finds the problem. The dangerous spellings this gives up are the ones
+ * SECURITY.md already lists.
  * @param command - the command line.
  * @returns the candidate paths.
  */
 function commandPaths(command: string): string[] {
   const found: string[] = []
   for (const segment of segments(tokenize(command))) {
-    // `sudo cat .env` reads the same file as `cat .env`; the wrapper is dropped
-    // here for the same reason the other guards drop it.
     const words = programWords(segment)
+    // `sh -c 'cat .env'` reads the same file as `cat .env`. The script is a
+    // command line in its own right, so it is read as one rather than as
+    // arguments of `sh` — the same unwrapping the command guard does.
+    const script = shellArgument(words)
+    if (script !== undefined) {
+      found.push(...commandPaths(script))
+      continue
+    }
     const program = words[0]
     if (program === undefined) continue
-    if (!READERS.has((program.split(/[\\/]/).pop() ?? program).toLowerCase())) continue
-    found.push(...words.slice(1).filter((word) => !word.startsWith('-') && /^\S+$/.test(word)))
+    const name = baseName(program).toLowerCase()
+    if (!READERS.has(name)) continue
+    const free = words.slice(1).filter((word) => !word.startsWith('-'))
+    // `grep 'credentials' .` searches for a word; `grep .env .` reads a file.
+    // The first free word is the expression, so it is dropped before the rest
+    // is read as paths. It is dropped from the raw list, not from the filtered
+    // one: an expression containing a space is not a path either way, and
+    // shifting after that filter would eat the real one.
+    if (EXPRESSION_FIRST.has(name)) free.shift()
+    found.push(...free.filter((word) => /^\S+$/.test(word)))
   }
   return found
 }

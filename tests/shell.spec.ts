@@ -46,8 +46,18 @@ describe('tokenize', () => {
     expect(tokenize('cat "C:\\Users\\x\\.env"')).toEqual(['cat', 'C:\\Users\\x\\.env'])
   })
 
-  it('splices a command substitution into the stream', () => {
-    expect(tokenize('echo $(git push --force)')).toEqual(['echo', 'git', 'push', '--force', ';'])
+  it('splices a command substitution in as its own command', () => {
+    // The boundary on both sides is what makes the inner words a command of
+    // their own. With only the closing one, `cat $(rm -rf /)` read as one
+    // command whose program was `cat` and whose arguments looked harmless.
+    expect(tokenize('echo $(git push --force)')).toEqual([
+      'echo',
+      ';',
+      'git',
+      'push',
+      '--force',
+      ';',
+    ])
   })
 
   it('keeps ${name} whole, because it is one word to the shell', () => {
@@ -55,7 +65,7 @@ describe('tokenize', () => {
   })
 
   it('reads a nested substitution', () => {
-    expect(tokenize('echo $(echo $(id))')).toEqual(['echo', 'echo', 'id', ';', ';'])
+    expect(tokenize('echo $(echo $(id))')).toEqual(['echo', ';', 'echo', ';', 'id', ';', ';'])
   })
 })
 
@@ -90,6 +100,14 @@ describe('shellArgument', () => {
     expect(shellArgument(['bash', '-c', 'git push'])).toBe('git push')
   })
 
+  it('reads it out of a clustered flag too', () => {
+    // `bash -lc` and `sh -ec` are how a script is run in CI; only the bare `-c`
+    // used to be recognised, so the command string went unread and every check
+    // behind it saw a shell that runs nothing.
+    expect(shellArgument(['bash', '-lc', 'rm -rf /'])).toBe('rm -rf /')
+    expect(shellArgument(['sh', '-ec', 'git push --force'])).toBe('git push --force')
+  })
+
   it('is undefined for a program that runs no script', () => {
     expect(shellArgument(['git', 'push'])).toBeUndefined()
   })
@@ -99,6 +117,21 @@ describe('programInvocations', () => {
   it('reports the program inside a shell it delegates to', () => {
     expect(programInvocations('sh -c "git push --force origin main"')).toEqual([
       { program: 'git', args: ['push', '--force', 'origin', 'main'] },
+    ])
+  })
+
+  it('reports the program inside a shell started with a clustered flag', () => {
+    expect(programInvocations(`bash -lc 'git push --force origin main'`)).toEqual([
+      { program: 'git', args: ['push', '--force', 'origin', 'main'] },
+    ])
+  })
+
+  it('reports the program inside a substitution, whoever it is an argument to', () => {
+    // The absorbing case: `cat $(rm -rf /)` ran a delete, and reading it as one
+    // command whose program is `cat` made every guard miss it.
+    expect(programInvocations('cat $(rm -rf /)')).toEqual([
+      { program: 'cat', args: [] },
+      { program: 'rm', args: ['-rf', '/'] },
     ])
   })
 
@@ -138,6 +171,26 @@ describe('quoteCommandWords', () => {
   it('keeps prose that merely contains a backtick literal in single quotes', () => {
     const [word] = quoteCommandWords("'Run `/dev-workflow status`'")
     expect(word === undefined ? false : shellWordIsLiteral(word)).toBe(true)
+  })
+
+  it('keeps both halves of a name whose tail is a substitution', () => {
+    // `git tag v$(cat VERSION)` names one tag: `v` is readable, the rest is not.
+    // Reporting the fragment as the whole name would judge a tag that does not
+    // exist, and dropping the substitution's words into the argument list would
+    // invent two more.
+    const words = quoteCommandWords('git tag v$(cat VERSION)')
+    const tag = words[2]
+    expect(tag?.value).toBe('v$(cat VERSION)')
+    expect(tag === undefined ? true : shellWordIsLiteral(tag)).toBe(false)
+    expect(words.map((word) => word.value)).toEqual([
+      'git',
+      'tag',
+      'v$(cat VERSION)',
+      ';',
+      'cat',
+      'VERSION',
+      ';',
+    ])
   })
 })
 

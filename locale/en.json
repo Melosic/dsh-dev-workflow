@@ -22,6 +22,7 @@
   "command.toggle.kind.release": "release",
   "command.toggle.check.header": "Development-workflow check of the working tree:",
   "command.toggle.check.clean": "No blocking problem found.",
+  "command.toggle.check.more": "(and {count} further blocking problem(s).)",
   "command.toggle.check.no_message": "The commit-message rules were not part of this check: pass --message \"type: subject\" to include them.",
   "command.toggle.check.message": "The commit-message rules were judged against: {message}",
   "command.guard.dangerous_warning": "This command does something that cannot be undone: {pattern}.",
