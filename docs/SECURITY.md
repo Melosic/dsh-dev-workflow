@@ -214,18 +214,23 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 相应地，**本插件不是安全边界**。它降低事故概率，不能阻止一个决意绕过的操作者
 （关掉插件、换终端、直接调 git 都能绕过）。把它当护栏，不要当门锁。
 
-还有一类绕过不需要离开会话：**在命令里再包一层解释器或包装程序**——`sh -c "git push
---force"`、`node -e "require('fs').readFileSync('.env')"`、`python -c "…"`。守卫看的是
-**参数文本**，不做动态解析，所以它认不出解释器内部那句。`sudo` / `env` / `npx` 这类
-**裸包装词**已由 `src/shell.ts` 的 `TRANSPARENT` 剥离（`sudo git push --force` 照样命中），
-但引号里的整段脚本不在同一范畴：那需要真正的 shell 语义，属于已知边界。
+还有一类绕过不需要离开会话：**在命令里再包一层解释器**——`node -e "require('fs').readFileSync('.env')"`、
+`python -c "…"`。守卫看的是**参数文本**，不做动态解析，所以它认不出解释器内部那句。
+
+shell 那一层则恢复了一部分：`sudo` / `env` / `npx` 这类**裸包装词**由 `src/shell.ts` 的
+`TRANSPARENT` 剥离（`sudo git push --force` 照样命中），`sh -c "git push --force"` 里的
+`-c` 参数会被再次当作命令行解析（`SHELLS`：`sh`、`bash`、`zsh`、`dash`、`ksh`、`ash`），
+`$(...)` 与反引号里的命令同样递归解析。但**解释器本身仍是不透明的**——那需要真正的运行时
+语义，属于已知边界。
 
 ## 依赖与供应链
 
 - **运行期零依赖**：`dependencies` 为空。全部能力来自宿主提供的服务与 Node 内建模块。
-- DSH 域内包用**显式版本范围** `>=0.2.0-rc.2`（下界即实测基线，当前不写上界），
+- DSH 域内包用**显式版本范围** `>=0.2.0-rc.2`（下界即实测可用过的最低版本，当前不写上界），
   不用 `^` / `~`：0.x 版本的次版本号可以包含破坏性变更，`^0.2.0` 的语义在这里会误导人。
-  范围写法的完整推导与「不写上界的代价」见 [docs/PUBLISHING.md](PUBLISHING.md)。
+  `devDependencies` 另把三个包钉在一个精确的实测基线（当前 `0.2.1-rc.2`），那是 CI 跑的版本，
+  不是支持范围——把下界跟着抬，会让仍在旧版本上的用户被静默禁用。
+  范围写法的完整推导、「不写上界的代价」与两者为何分离，见 [docs/PUBLISHING.md](PUBLISHING.md)。
 - 插件通过 `cordis.patch.yml` 声明为 bundle patch，`scripts/ci-checks.mjs` 校验它
   既被 `package.json` 的 `dsh.bundle.patch` 声明，又列入 `files`——避免「发布出去的包缺了
   挂载点」这类只在用户机器上暴露的问题。

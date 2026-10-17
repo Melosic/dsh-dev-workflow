@@ -155,3 +155,11 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   所以漏传参数在测试里表现为断言失败，而不是运行时崩溃——出现 `{...}` 优先怀疑漏参数。
 - **`ask` 在没有 `approval` 服务的 profile 里会退化成拒绝。** 这是宿主行为，不是插件缺陷；
   排查「为什么问了却没弹窗」时先确认 profile 是否装了审批能力。
+- **DSH 版本有两处，方向不能一致漂移。** `peerDependencies` 的下界是「支持到多老」，
+  `devDependencies` 的三个精确版本是「CI 跑在哪」。测试跑通一个新版本**不是**抬下界的理由：
+  下界一抬，还留在旧版本上的用户会被 `preflight()` 静默禁用（见 `docs/PUBLISHING.md` 第 6 条），
+  而 `latest` 渠道往往比 `next` 渠道落后一截。升级开发基线的最小步骤写在 `docs/PUBLISHING.md` 第 4 条。
+- **`.npmrc` 的 `minimumReleaseAge=1440` 会挡住刚发布不到一天的版本。** 它只拦**解析**
+  （`pnpm add` / `pnpm install` 无 frozen），不拦 `pnpm install --frozen-lockfile` 的下载，
+  所以 CI 不受影响。本地要装新版本时在命令行加 `--config.minimumReleaseAge=0`，不要改仓库
+  里那份 `.npmrc`——它对所有贡献者生效，且故意留着以躲开刚发布的破坏性版本。

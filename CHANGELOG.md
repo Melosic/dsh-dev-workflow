@@ -11,8 +11,48 @@
 
 ## [Unreleased]
 
+### Added
+
+- **技能补上「谁在做什么」与「守卫到哪儿为止」两块。** 规范现在开头有一节说明三种角色
+  （插件自动执行 / AI 助手必须遵守 / 人类做决定）与三份文档的分工（`AGENTS.md` 常驻、
+  `CONTRIBUTING.md` 面向贡献者、`SKILL.md` 随包发布），并新增「工具与守卫的边界」一节：
+  守卫看的是工具参数而不是运行中的进程，各守卫可配置的粒度并不相同。
+  这两处此前只存在于代码注释与 `SECURITY.md` 里，模型读技能时看不到。
+- 提交信息一节补 scope 对照表与一组「同一变更两种写法」的示例；PR 一节补「评审者这一侧」
+  （读标题与 *Why*、按声明意图读 diff、警惕同提交里被削弱的断言）；发布一节补「发版中断在
+  半路」的三种恢复路径与「发布说明就是 CHANGELOG 段落，不要另写一份」；CHANGELOG 一节补
+  「并发编辑」（条目加在分类顶部，冲突时两边都留）。
+
+### Changed
+
+- **技能结构由 28 个章节扩到 35 个。** 新增两节 `## How to Read This Document`、
+  `## Tool and Guard Boundaries`，以及五个子节；中英两份仍保持章节数量、层级与顺序一致
+  （`tests/skill-parity.spec.ts` 与 `scripts/ci-checks.mjs` 同时校验）。`docs/TOKEN-BUDGET.md`
+  的按需成本表随之更新为实测值。
+- **开发基线升到 DSH `0.2.1-rc.2`，支持下界仍留在 `0.2.0-rc.2`。** `devDependencies` 现在
+  精确钉住 `@deepseek-ai/dsh`、`@deepseek-ai/dsh-skill`、`@deepseek-ai/dsh-tools` 的
+  `0.2.1-rc.2`，让 `pnpm typecheck`、`pnpm typecheck:tests`、`pnpm test` 跑在一个确定版本上。
+  `peerDependencies` 的下界**没有**跟着抬：`0.2.1-rc.2` 在 `next` 渠道，`latest` 渠道仍是
+  `0.2.0-rc.2`，抬下界会让仍在默认渠道上的用户被 `preflight()` 静默禁用。两者为何分离、
+  以后怎么升级，写进了 `docs/PUBLISHING.md` 第 4 条与 `docs/DEVELOPMENT.md`。
+- **DSH `0.2.1-rc.2` 的 API 差异已核对，无需改代码。** 三个包只用到 `dsh-skill` 的
+  `BUNDLED_SKILL_RANK` 与 `dsh-tools` 的 `defineTool`，`dsh-tools` 的类型变更是增量式；
+  面板用的 `configForms` 公共 API 两版逐字相同，`ConfigFormSnapshot` 删掉的 `mode` 字段
+  本插件从未读取（`status` 的 `unavailable` 终点已有渲染分支）。
+  顺带补的是文档里两处会把「实测基线」与「支持下界」混为一谈的表述。
+
 ### Fixed
 
+- **规范里三处自相矛盾的说法。** 分支保护禁止一切强推，而安全操作要求用
+  `--force-with-lease`；分支模型要求 `git merge main` 不用 rebase，而 rebase 在破坏性命令表里
+  被整体列为危险；分支命名被写得像门禁，但并无任何检查读取它。现在分别写明
+  适用边界：lease 写法只用于非保护分支，rebase 只重写「别人已基于其工作」的历史时才算危险，
+  分支命名明确标为约定。
+- 技能里「五道守卫可逐条配置」的说法不准确：`commandGuard` 只有一个档位覆盖所有不可逆形态，
+  `fileGuard` / `secretGuard` 是固定 `deny`。按实际粒度重写。
+- 文档里关于 shell 边界的表述落后于实现：`sh -c` 的内部命令行与 `$(...)`、反引号里的命令
+  早已递归解析，`ARCHITECTURE.md` 与 `SECURITY.md` 仍写成「认不出」。真正的不透明处是解释器
+  内部（`node -e`、`python -c`），文档改为指向这一点。
 - **command-guard 只认 Unix 写法，Windows 上的删除与擦盘全部放行。** 程序名以前按原样比较，
   而 PowerShell 写 `Remove-Item -Recurse`（大写、开关拼全），cmd 写 `rd /s /q`、`del /f /s /q`，
   卷擦除是 `format C:` 或 `Format-Volume`——这些一个都不命中。现在程序名统一按小写比较；

@@ -32,6 +32,12 @@
 // 7. The version in package.json, the CHANGELOG entry for it, and the git tags
 //    are one fact written down three times. A release that updates two of them
 //    ships a package whose changelog has no entry for it.
+// 8. A change past 500 lines gets a warning, not a failure. Merging is squash,
+//    so whatever a pull request contains lands as one commit with one message:
+//    a branch holding four unrelated concerns loses that structure the moment it
+//    merges, and the message describes the first concern only. The number is a
+//    warning because at that size splitting is expensive and a hard gate only
+//    teaches people to re-cut the branch instead of the change.
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -66,6 +72,35 @@ function changedFiles() {
   return []
 }
 
+/**
+ * Lines added plus lines removed against the base branch, or undefined when no
+ * base resolves (same reason `changedFiles` reports nothing: there is nothing
+ * to compare against).
+ * @returns the changed line count, or undefined without a base ref.
+ */
+function diffSize() {
+  for (const base of ['origin/main', 'main']) {
+    try {
+      const output = execFileSync('git', ['diff', '--numstat', `${base}...HEAD`], {
+        cwd: new URL('.', root),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      // Binary files report `-` for both columns and contribute no lines.
+      return output
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .reduce((total, line) => {
+          const [added, removed] = line.split('\t')
+          return total + (Number(added) || 0) + (Number(removed) || 0)
+        }, 0)
+    } catch {
+      // No such ref, or no git at all: try the next base.
+    }
+  }
+  return undefined
+}
+
 /** Flatten to dot paths so a nested dict cannot hide a missing key. */
 function keyPaths(value, prefix = '') {
   return Object.entries(value).flatMap(([key, child]) => {
@@ -77,6 +112,9 @@ function keyPaths(value, prefix = '') {
 }
 
 const failures = []
+const warnings = []
+/** Rule 8's threshold: the skill's own guidance, past which a change is split. */
+const CHANGE_SIZE_LIMIT = 500
 
 const locales = ['locale/en.json', 'locale/zh.json']
 const keySets = locales.map((file) => new Set(keyPaths(readJson(file))))
@@ -261,10 +299,22 @@ if (!new RegExp(`^##\\s+\\[?v?${escaped}\\]?\\b`, 'm').test(changelog)) {
   failures.push(`CHANGELOG.md: no section for the released version ${pkg.version}`)
 }
 
+// 8. Change size, as described above. Skipped silently when no base resolves,
+//    which is the same blind spot rules 6 and 7 have.
+const size = diffSize()
+if (size !== undefined && size > CHANGE_SIZE_LIMIT) {
+  warnings.push(
+    `${size} changed lines against the base branch (over ${CHANGE_SIZE_LIMIT}). ` +
+      `A squash merge lands this as one commit; split it, or say in the description ` +
+      `which concern is which`,
+  )
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`error: ${failure}`)
   process.exit(1)
 }
+for (const warning of warnings) console.warn(`warning: ${warning}`)
 
 console.log(
   `locale keys aligned (${en.size} keys); bundle patch declared and shipped; ` +
@@ -272,5 +322,6 @@ console.log(
     `published entry points present (${shipped.length} checked); ` +
     `mirrored pairs consistent (${mirrors.length} groups); ` +
     `CHANGELOG records ${pkg.version}; ` +
-    `no numbered development phases cited.`,
+    `no numbered development phases cited` +
+    (size === undefined ? '.' : `; ${size} changed lines.`),
 )
