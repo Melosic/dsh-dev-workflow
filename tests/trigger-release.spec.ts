@@ -120,6 +120,14 @@ describe('src/triggers/pre-release.ts', () => {
       tag: 'v0.2.0',
       publishTag: 'latest',
     })
+    // pnpm takes global options before the subcommand, and `-r` publishes every
+    // package in the workspace: both are a publish, not an option-only line.
+    expect(detectRelease('pnpm --filter pkg publish')).toEqual({
+      publishTag: 'latest',
+      filter: 'pkg',
+    })
+    expect(detectRelease('pnpm -r publish')).toEqual({ publishTag: 'latest' })
+    expect(detectRelease('pnpm -w publish --tag next')).toEqual({ publishTag: 'next' })
 
     for (const command of [
       'git tag',

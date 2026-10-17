@@ -179,6 +179,48 @@ function tagWord(args: readonly CommandWord[]): CommandWord | undefined {
 }
 
 /**
+ * Options that take a separate value, so the word after one is not the
+ * subcommand.
+ *
+ * `pnpm --filter pkg publish` puts an option and its value in front of
+ * `publish`; reading the first word as the subcommand therefore saw `--filter`
+ * and reported no release at all. `-r publish` is a recursive publish — it
+ * pushes every package in the workspace — and was missed the same way.
+ */
+const MANAGER_VALUE_OPTIONS = new Set([
+  '-C',
+  '--dir',
+  '-F',
+  '--filter',
+  '--reporter',
+  '--config.confirmModulesPurge',
+  '--prefix',
+  '--registry',
+  '--location',
+  '--loglevel',
+  '--userconfig',
+])
+
+/**
+ * The first free word of a package manager invocation.
+ *
+ * Everything before it is a global option: a flag, or a flag plus the word it
+ * consumes. The index is returned rather than the word so the caller can slice
+ * the arguments that belong to the subcommand.
+ * @param args - the words after the program name.
+ * @returns the index of the subcommand, or `undefined` when there is none.
+ */
+function subcommandIndex(args: readonly string[]): number | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index] ?? ''
+    if (word === '--') return index + 1
+    if (!word.startsWith('-')) return index
+    if (MANAGER_VALUE_OPTIONS.has(word)) index += 1
+  }
+  return undefined
+}
+
+/**
  * Read the dist-tag a `publish` invocation states.
  * @param args - the words after `publish`.
  * @returns the dist-tag, or `undefined` when the invocation states none.
@@ -261,19 +303,27 @@ export function detectRelease(command: string): ReleaseCommand | undefined {
     if (!PACKAGE_MANAGERS.has(program)) continue
     const wordsAfter = args.map((word) => word.value)
 
-    if (wordsAfter[0] === 'version') {
-      versionBump = versionBumpOf(wordsAfter.slice(1))
+    // pnpm and npm both accept global options before the subcommand
+    // (`pnpm --filter pkg publish`), so the subcommand is the first free word
+    // rather than the first word.
+    const start = subcommandIndex(wordsAfter)
+    if (start === undefined) continue
+    const subcommand = wordsAfter[start]
+    const rest = wordsAfter.slice(start + 1)
+
+    if (subcommand === 'version') {
+      versionBump = versionBumpOf(rest)
       continue
     }
 
-    if (wordsAfter[0] !== 'publish') continue
+    if (subcommand !== 'publish') continue
     // `--dry-run` (and its `-n` short form) is the rehearsal `docs/PUBLISHING.md`
     // itself recommends: nothing is uploaded, so nothing is released.
     if (wordsAfter.includes('--dry-run') || hasShortOption(wordsAfter, 'n')) break
     // npm defaults the dist-tag to `latest`, and does not except pre-releases
     // from that default. Recording the default is what makes the pre-release
     // rule below able to fire on a publish that stated nothing.
-    publishTag = publishTagOf(wordsAfter.slice(1)) ?? 'latest'
+    publishTag = publishTagOf(rest) ?? 'latest'
     filter = filterOf(wordsAfter)
     break
   }
