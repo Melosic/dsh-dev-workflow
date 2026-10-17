@@ -23,7 +23,9 @@ Cordis 与 Schemastery 是上游项目、被该 monorepo vendor 进来的（各�
 | `@deepseek-ai/schemastery` | `vendor/schemastery` | Shigma \<shigma10826@gmail.com\> | MIT | `src/config.ts` 的配置面声明与默认值校验 |
 
 五个包都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包用显式下界
-`>=0.2.0-rc.2`，当前不写上界）。理由与取舍见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
+`>=0.2.0-rc.2`，当前不写上界）。`devDependencies` 里另把 DSH 域内三个包钉在实测基线
+`0.2.1-rc.2`，让 CI 跑在一个确定版本上——下界与开发基线是两个问题，理由与取舍见
+[docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
 ## 作为实现范式被研读的官方包
 

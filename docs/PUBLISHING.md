@@ -199,6 +199,18 @@ DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `pre
    运行时才暴露，而不是在加载时被 `preflight()` 干净地禁用。这个选择是在「`0.3.0` 尚不存在、
    上限纯属猜测」与「未来不兼容会静默加载」之间取的偏向前者；等 `0.3` 真正发布并重新实测之后，
    应当把上界补回来。
+
+   **下界与 CI 基线是两件事。** 下界说明「最老支持到哪」，`devDependencies` 里那三个精确版本
+   说明「CI 每次真正跑在哪」。两者会分开漂移：`latest` 渠道仍是 `0.2.0-rc.2`，而新的候选版本
+   先在 `next` 渠道发布，所以本插件当前把开发基线钉在 `0.2.1-rc.2`，同时把下界留在
+   `0.2.0-rc.2`——若为了跑测试就把下界抬到 `rc.2` 系列，所有还在 `latest` 上的用户会**被静默
+   禁用**（见第 6 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
+
+   升级开发基线时的最小动作：改 `package.json` 的 `devDependencies` 三个精确版本 → 跑
+   `pnpm install`（`.npmrc` 的 `minimumReleaseAge` 会挡住 24 小时内的新版本，此时加
+   `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm test`
+   → 再决定下界动不动。`minimumReleaseAge` 只拦**解析**，不拦 `--frozen-lockfile` 的下载，
+   所以 CI 不需要任何额外参数。下界若确实要抬，按第 8 条先查真实版本列表。
 5. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
    不读 `peerDependenciesMeta`。把某个 DSH 包标成 optional 不会让它跳过校验。
 6. **不兼容的后果是「被禁用」而非「安装失败」。** `preflight()` 把该行 `row.disabled = true`
