@@ -22,6 +22,15 @@
   （读标题与 *Why*、按声明意图读 diff、警惕同提交里被削弱的断言）；发布一节补「发版中断在
   半路」的三种恢复路径与「发布说明就是 CHANGELOG 段落，不要另写一份」；CHANGELOG 一节补
   「并发编辑」（条目加在分类顶部，冲突时两边都留）。
+- **`client.js` 进入类型检查（`pnpm typecheck:client`），CI 与 `prepublishOnly` 都会跑。**
+  面板是手写的浏览器 JS，此前不在任何 tsconfig 里——宿主改了方法名，编译期毫无反应，
+  要等用户打开一个空白面板才知道。新配置 `tsconfig.client.json`（`allowJs` + `checkJs`）配上
+  `client-env.d.ts` 里的宿主类型导入，把 `ctx.configForms`、`ctx.locale`、`ctx.remote`、
+  `ctx.slots` 的真实声明带进程序，`apply` 的参数按宿主 `Context` 标注后，改名或删字段就是编译错误。
+  连带发现并修正三处：`ctx.slots` 的声明来自 `@deepseek-ai/dsh-client-ui-renderer` 而非
+  `dsh-client-ui-slots`（后者只提供类型，服务由 renderer 挂载），本插件的
+  `settings.devWorkflow` 命名空间需要自行并入宿主 `LocaleNamespaceMap`，`typecheck:tests`
+  之外还要有这一份才能覆盖到浏览器侧。
 
 ### Changed
 

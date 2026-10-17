@@ -208,7 +208,7 @@ DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `pre
 
    升级开发基线时的最小动作：改 `package.json` 的 `devDependencies` 三个精确版本 → 跑
    `pnpm install`（`.npmrc` 的 `minimumReleaseAge` 会挡住 24 小时内的新版本，此时加
-   `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm test`
+   `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test`
    → 再决定下界动不动。`minimumReleaseAge` 只拦**解析**，不拦 `--frozen-lockfile` 的下载，
    所以 CI 不需要任何额外参数。下界若确实要抬，按第 8 条先查真实版本列表。
 5. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
