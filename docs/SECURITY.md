@@ -27,7 +27,7 @@ file-guard 管**不该被读**的路径，secret-guard 管**发出即泄漏**的
 | `git commit --amend` | `amend` | `ask` | 改写已发布的提交 |
 | `git branch -D` / `--delete --force` / `push --delete` | `branchDelete` | `ask` | 丢掉只存在于该分支的提交 |
 | `git clean -f` | `cleanForce` | `ask` | 永久删除未跟踪文件 |
-| `git checkout -- <path>` | `checkoutDiscard` | `ask` | 丢弃未暂存的改动 |
+| `git checkout -- <path>` / `checkout .` / `restore <path>` | `checkoutDiscard` | `ask` | 丢弃未暂存的改动 |
 | `--no-verify` | `noVerify` | `ask` | 跳过保护仓库的钩子 |
 
 判定细节与实测用例见 [docs/TRIGGERS.md](TRIGGERS.md)。
@@ -122,9 +122,12 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 | `.npmrc` | 常含 `_authToken` |
 | `secrets/` | 该目录及其下一切 |
 
-路径来自每个工具真实的参数字段（`file_path`、`path`、`pattern`、`include`），以及 shell
+路径来自每个工具真实的参数字段（`file_path`，`grep` 的 `path`/`include`，`glob` 的 `pattern`/`path`，
+以及 shell
 命令里**已知读取程序**（`cat`、`grep`、`rg`、`Get-Content` 等）的操作数——所以
-`cat .env` 会被拦，而 `echo "add .env to gitignore"` 不会。
+`cat .env` 会被拦，而 `echo "add .env to gitignore"` 不会。`grep` 的第一个自由词是**搜索表达式**
+而不是路径（`grep -rn credentials .` 是在找那个词，不是要读名为 `credentials` 的文件），
+所以它不参与路径匹配；路径只看它后面的其余操作数。
 
 **这一道默认 `deny` 而不是 `ask`，与其他守卫不同。** 审批提示必须展示那条路径本身，
 而那正是这条规则要挡住的东西——一个会问「要读取 `/repo/.env` 吗」的守卫，已经把路径
