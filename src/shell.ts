@@ -64,13 +64,25 @@ const WRAPPER_VALUE_OPTIONS = new Set([
 ])
 
 /**
+ * The word that asks a shell for a command string: `-c`, or the same letter
+ * inside a cluster such as `-lc` or `-ec`.
+ */
+const SHELL_COMMAND_FLAG = /^-[A-Za-z]*c[A-Za-z]*$/
+
+/**
  * The argument of a shell's `-c`, when the words are one.
  * @param words - one command's words, wrapper included.
  * @returns the command line after `-c`, or `undefined` when there is none.
  */
 export function shellArgument(words: readonly string[]): string | undefined {
   const start = words.length > 0 && SHELLS.has(baseName(words[0] ?? '')) ? 1 : 0
-  if (words[start] !== '-c') return undefined
+  const flag = words[start] ?? ''
+  // `sh -lc 'rm -rf /'` is the login-shell spelling of the same thing and it is
+  // how a script is run in CI: only the bare word `-c` used to be recognised, so
+  // everything after it went unread. The command string is the next word
+  // whichever letters share the flag, because a shell reads it from its first
+  // non-option argument rather than from the rest of the option word.
+  if (!SHELL_COMMAND_FLAG.test(flag)) return undefined
   const script = words[start + 1]
   return script === undefined || script === '' ? undefined : script
 }
@@ -297,10 +309,17 @@ export function tokenize(command: string, depth = 0): string[] {
     // `echo $(git push --force)` runs what is inside the substitution, so it is
     // read as a command of its own — at the cost of also reading text that only
     // interpolates. Unbalanced text stays a word, as it would in a shell.
+    //
+    // The boundary goes *before* the spliced words as well as after them: the
+    // substitution is a command in its own right, so `cat $(rm -rf /)` must not
+    // read as one command whose program is `cat` and whose arguments look
+    // harmless. Only the closing `;` used to be pushed, which left the inner
+    // words attached to whatever command preceded them.
     if ((char === '$' && next === '(') || char === '`') {
       const substituted = commandSubstitution(command, index)
       if (depth < MAX_SUBSTITUTION_DEPTH && !substituted.text.includes('\n')) {
         flush()
+        tokens.push(';')
         tokens.push(...tokenize(substituted.text, depth + 1))
         tokens.push(';')
         index = substituted.end - 1
@@ -440,8 +459,21 @@ export function quoteCommandWords(command: string, depth = 0): CommandWord[] {
       opaque = true
       const substituted = commandSubstitution(command, index)
       if (depth < MAX_SUBSTITUTION_DEPTH && !substituted.text.includes('\n')) {
-        words.push({ value: command.slice(index, substituted.end), literal: false })
+        // The text already read belongs to the same shell word: `git tag
+        // v$(cat VERSION)` names one tag whose first half is knowable and whose
+        // second half is not. Keeping the two halves together is what lets the
+        // caller say "a name was given but cannot be read", which is a warning,
+        // instead of judging the fragment `v` as the whole name.
+        words.push({
+          value: `${value}${command.slice(index, substituted.end)}`,
+          literal: false,
+        })
+        // Same boundary {@link tokenize} keeps: the substitution runs as a
+        // command of its own, so its words are not arguments of the command in
+        // front of it.
+        words.push({ value: ';', literal: true })
         words.push(...quoteCommandWords(substituted.text, depth + 1))
+        words.push({ value: ';', literal: true })
         value = ''
         started = false
         opaque = false
@@ -555,9 +587,7 @@ export function programInvocations(command: string): ProgramInvocation[] {
     // `sh -c "…"` has already become the words `-c`, `…` — one flag to step over.
     // `shellArgument` still accepts the unpeeled `sh -c …` spelling.
     const rest = words.slice(index + 1)
-    const script =
-      shellArgument(rest) ??
-      (SHELLS.has(baseName(program)) && rest[0] === '-c' ? rest[1] : undefined)
+    const script = shellArgument(rest)
     if (script !== undefined) {
       found.push(...programInvocations(script))
       continue

@@ -72,6 +72,61 @@ describe('src/guard/command-guard.ts', () => {
     }
   })
 
+  it('recognises the same delete written for cmd or PowerShell', () => {
+    // A Windows host reaches this guard with Windows spellings. The act is the
+    // same one the Unix forms name, so the recognition has to be too.
+    for (const command of [
+      'del /f /s /q C:\\',
+      'rd /s /q C:\\',
+      'rmdir /s /q C:\\Users',
+      'Remove-Item -Recurse -Force C:\\',
+      'Remove-Item -Recurse -Force C:\\Users',
+      'Remove-Item -Recurse -Force C:\\*',
+      'Remove-Item -Recurse -Force $env:USERPROFILE',
+      'Remove-Item -Recurse -Force %USERPROFILE%',
+      'Remove-Item -Recurse -Force ~',
+      'rm -rf C:\\',
+      'rm -rf C:/Users/*',
+      'format C:',
+      'Format-Volume -DriveLetter C',
+      'Clear-Disk -Number 0 -RemoveData',
+    ]) {
+      expect(classify(command)?.reason, command).toBe('command.guard.dangerous_warning')
+    }
+  })
+
+  it('passes a Windows delete that names one directory', () => {
+    expect(classify('Remove-Item -Recurse -Force ./build')).toBeUndefined()
+    expect(classify('Remove-Item -Recurse ./build')).toBeUndefined()
+    expect(classify('del C:\\Users\\x\\.env')).toBeUndefined()
+    expect(classify('rd /s /q C:\\Users\\x\\build')).toBeUndefined()
+  })
+
+  it('recognises a delete whose spelling hides the root', () => {
+    // Each of these names the same places the plain forms do; the guard has to
+    // see through the spelling rather than through the word.
+    for (const command of [
+      'rm -rf //',
+      'rm -rf ~/*',
+      'rm -rf $HOME/*',
+      'rm -rf /*',
+      'rm -rf /etc/*',
+      'rm -rf ./*',
+      'rm -r /etc',
+      'rm -rf C:/*',
+      'rm -rf D:\\*',
+    ]) {
+      expect(classify(command)?.reason, command).toBe('command.guard.dangerous_warning')
+    }
+  })
+
+  it('recognises a delete whose target came from a substitution', () => {
+    // The substituted words join the command line as arguments; a target built
+    // that way is still the target.
+    expect(classify('rm -rf $(echo /)')?.reason).toBe('command.guard.dangerous_warning')
+    expect(classify('rm -rf `echo ~`')?.reason).toBe('command.guard.dangerous_warning')
+  })
+
   it('recognises a filesystem being reformatted', () => {
     expect(classify('mkfs.ext4 /dev/sda1')?.reason).toBe('command.guard.dangerous_warning')
     expect(classify('mkfs /dev/sda1')?.reason).toBe('command.guard.dangerous_warning')
