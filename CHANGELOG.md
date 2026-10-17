@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-18
+
 ### Added
 
 - **技能补上「谁在做什么」与「守卫到哪儿为止」两块。** 规范现在开头有一节说明三种角色
@@ -107,6 +109,14 @@
   而这恰好是「查一下密钥有没有进仓库」的那条命令——把规则逼到要么关掉要么绕过。现在
   `grep`/`rg`/`sed`/`awk`/`findstr`/`Select-String` 的第一个自由词按表达式处理，其后的
   词仍按路径判定（`grep -rn "add .env" .env` 依然被拒）。
+- **参数位置上的命令替换会被吸收进外层命令。** 词法层在替换前后都补了分隔，但此前只在
+  尾部补：`echo $(rm -rf /)` 因此被读成「`echo` 带着 `rm -rf /` 这三个参数」一条无害命令，
+  替换里的程序从未被当作独立命令判定。`echo $(git push --force)`、`cat $(rm -rf /)`、
+  `tar -czf b.tgz $(rm -rf /)` 全部放行。现在替换两侧都有边界，且 `quoteCommandWords`
+  把 `git tag v$(cat VERSION)` 这样的名字保持成一个词，不被边界切碎。
+- **`sh -lc` / `bash -ec` 这类短选项簇里的 `-c` 不被识别。** 之前只认裸的 `-c`，
+  于是 `bash -lc 'rm -rf /'`、`sh -ec 'git push --force'` 把整个脚本当成一个不透明参数放行，
+  而这正是 CI 与登录 shell 的常见写法。现在按短选项簇识别，脚本取第一个非选项词。
 
 ## [0.3.0] - 2026-10-15
 
@@ -692,7 +702,8 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.3.0...main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.0...main
+[0.4.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Melosic/dsh-dev-workflow/releases/tag/v0.1.0
