@@ -209,11 +209,8 @@ window.__ModuleLoader__.load({
       'advanced.empty': 'not set',
       'advanced.codePaths': 'Code paths',
       'advanced.docsDir': 'Docs directory',
-      'advanced.adrDir': 'ADR directory',
       'advanced.changelog': 'Changelog path',
       'advanced.exclude': 'Excluded paths',
-      'advanced.branchPattern': 'Branch name pattern',
-      'advanced.commitPattern': 'Commit header pattern',
       'advanced.versionPattern': 'Version pattern',
       'advanced.mirrors': 'Code \u2194 document mirrors',
       'advanced.auditPath': 'Audit log path',
@@ -324,11 +321,8 @@ window.__ModuleLoader__.load({
       'advanced.empty': '未设置',
       'advanced.codePaths': '代码目录',
       'advanced.docsDir': '文档目录',
-      'advanced.adrDir': 'ADR 目录',
       'advanced.changelog': 'CHANGELOG 路径',
       'advanced.exclude': '排除路径',
-      'advanced.branchPattern': '分支命名正则',
-      'advanced.commitPattern': '提交标题正则',
       'advanced.versionPattern': '版本号正则',
       'advanced.mirrors': '代码 ↔ 文档映射',
       'advanced.auditPath': '审计日志路径',
@@ -561,22 +555,14 @@ window.__ModuleLoader__.load({
         hint: 'hint.auditEnabled',
       },
     ]
-    // Read-only projection of the fields the profile file owns.
-    //
-    // `inactive` marks a field the plugin declares but no check reads yet. It is
-    // a different claim from "read-only": the value is real and the Host accepts
-    // it, but nothing acts on it, and a panel that shows it without saying so
-    // reads as a promise. The flag is data, not a comment, because the test that
-    // pairs this list with the schema asserts it is set exactly where the
-    // documentation says the field is unwired.
+    // Read-only projection of the fields the profile file owns. Every row here
+    // is something a check or the release tag actually reads: the panel would
+    // otherwise show a value and leave the reader guessing whether it acts.
     const ADVANCED = [
       { path: ['codePaths'], label: 'advanced.codePaths' },
       { path: ['docs', 'docsDir'], label: 'advanced.docsDir' },
-      { path: ['docs', 'adrDir'], label: 'advanced.adrDir', inactive: true },
       { path: ['docs', 'changelog'], label: 'advanced.changelog' },
       { path: ['docs', 'exclude'], label: 'advanced.exclude' },
-      { path: ['rules', 'branchPattern'], label: 'advanced.branchPattern', inactive: true },
-      { path: ['rules', 'commitPattern'], label: 'advanced.commitPattern', inactive: true },
       { path: ['releaseCheck', 'versionPattern'], label: 'advanced.versionPattern' },
       { path: ['docs', 'mirrors'], label: 'advanced.mirrors' },
       { path: ['audit', 'path'], label: 'advanced.auditPath' },
@@ -1257,13 +1243,6 @@ window.__ModuleLoader__.load({
             'div',
             { key: keyOf(entry.path), className: 'dsw-dev-workflow-advancedRow' },
             h('span', { className: 'dsw-dev-workflow-advancedKey' }, t(entry.label)),
-            entry.inactive
-              ? h(
-                  'span',
-                  { className: 'dsw-dev-workflow-badge', 'data-tone': 'muted' },
-                  t('action.inactive'),
-                )
-              : null,
             h(
               'code',
               { className: 'dsw-dev-workflow-advancedValue' },

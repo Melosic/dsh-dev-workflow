@@ -56,7 +56,6 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `readme` | `string[]` | `['README.md', 'README.zh.md']` | 哪些文件算「README 类文档」 |
 | `changelog` | `string` | `'CHANGELOG.md'` | CHANGELOG 的路径 |
 | `docsDir` | `string` | `'docs/'` | 文档目录；其下的文件都算文档 |
-| `adrDir` | `string` | `'docs/ADR/'` | ADR 目录。**当前已声明、尚未被任何检查读取** |
 | `exclude` | `string[]` | `[]` | 算作文档的路径前缀；命中的文件不再被当成代码改动，因此不会触发文档滞后检查 |
 | `mirrors` | `string[][]` | 三组 | 必须一起改动的文件组，每组一行 |
 
@@ -86,24 +85,14 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 
 | 字段 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `branchPattern` | `string` | `^(feature\|fix\|docs\|hotfix\|chore)/[a-z0-9][a-z0-9._-]*$` | 分支命名规则。**已声明、面板只读展示，当前尚未被任何触发器读取**（见下） |
-| `commitPattern` | `string` | 见下 | 提交头部的正则。**已声明、面板只读展示，当前尚未被任何检查读取** |
 | `requireChangelogOnFeat` | `boolean` | `true` | `feat` 提交必须带上 CHANGELOG 改动，否则阻塞（本次提交或分支已有都算） |
 
-`branchPattern` 与 `commitPattern` 都还没有接线：没有触发器检测「在建分支」这个动作，
-提交检查走的是 `src/tools/check-commit-message.ts` 里的类型清单而不是 `commitPattern`。
-两者保留是为了让规则有一个单一出处（将来接线时直接用），面板把它们放在「高级（只读）」区
-展示。**它们是"声明了但未生效"的**，不要按它们判断插件当前的行为。
-
-`commitPattern` 的默认值由 `COMMIT_TYPES` 派生，避免类型清单与正则漂移：
-
-```js
-`^(${COMMIT_TYPES.join('|')})(\\([^)]+\\))?!?: \\S`
-```
+分支命名与提交头部格式都不在这里配：前者是团队约定、插件不检查（没有触发器盯「建分支」这个
+动作，见 `docs/TRIGGERS.md`），后者的类型清单是 `commitCheck.types`、长度是
+`commitCheck.subjectMaxLength`，实际检查读的就是它们。
 
 `COMMIT_TYPES` 为 `feat` / `fix` / `docs` / `style` / `refactor` / `perf` / `test` / `build` /
-`ci` / `chore` / `revert`。实际提交检查（`src/tools/check-commit-message.ts`）走的是这段类型
-清单本身，而不是 `commitPattern`；后者留作把同一份规则交给其它工具时的可复用形式。
+`ci` / `chore` / `revert`，可在面板勾选。
 
 ### `requireChangelogOnFeat` 与文档检查的分工
 
@@ -439,12 +428,11 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 每个守卫的**总开关都带一句后果说明**（关掉它之后哪一类动作不再被拦），关掉某个总开关时
 它下面的分项会同时标出「当前不生效」，避免「控件还亮着 = 规则还生效」的误读。
 
-### 只能在文件里改的（12 项）
+### 只能在文件里改的（9 项）
 
-面板的**高级**区（默认折叠、**只读**）展示其中 10 项，并提供一个打开当前 profile
-`cordis.patch.yml` 的按钮：`codePaths`、`docs.docsDir`、`docs.adrDir`、`docs.changelog`、
-`docs.exclude`、`rules.branchPattern`、`rules.commitPattern`、`releaseCheck.versionPattern`、
-`docs.mirrors`、`audit.path`。
+面板的**高级**区（默认折叠、**只读**）展示其中 7 项，并提供一个打开当前 profile
+`cordis.patch.yml` 的按钮：`codePaths`、`docs.docsDir`、`docs.changelog`、
+`docs.exclude`、`releaseCheck.versionPattern`、`docs.mirrors`、`audit.path`。
 
 另外 2 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）
 与 `fileGuard.noRead`（不许读取的敏感路径清单）。一个路径清单不是开关或枚举，面板给不了

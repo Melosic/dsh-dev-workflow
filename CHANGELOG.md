@@ -41,11 +41,19 @@
   本插件从未读取（`status` 的 `unavailable` 终点已有渲染分支）。
   顺带补的是文档里两处会把「实测基线」与「支持下界」混为一谈的表述。
 
+### Removed
+
+- **删掉三项从未被任何代码读取的配置：`rules.branchPattern`、`rules.commitPattern`、
+  `docs.adrDir`。** 它们之前只有声明、面板展示和一枚「当前不生效」徽标，没有任何行为——
+  一块只有承诺没有实现的表面。分支命名仍然是约定（见技能的分支模型一节）；提交头部规则读的是
+  `commitCheck.types`、`commitCheck.requireScope` 与 `commitCheck.subjectMaxLength`，不是一条
+  独立的正则。schemastery 接受未知键，所以旧配置文件里留着这三项不会报错，只是被忽略。
+
 ### Fixed
 
 - **规范里三处自相矛盾的说法。** 分支保护禁止一切强推，而安全操作要求用
   `--force-with-lease`；分支模型要求 `git merge main` 不用 rebase，而 rebase 在破坏性命令表里
-  被整体列为危险；分支命名被写得像门禁，但并无任何检查读取它。现在分别写明
+  被整体列为危险；分支命名被写得像门禁，但没有任何检查读取它。现在分别写明
   适用边界：lease 写法只用于非保护分支，rebase 只重写「别人已基于其工作」的历史时才算危险，
   分支命名明确标为约定。
 - 技能里「五道守卫可逐条配置」的说法不准确：`commandGuard` 只有一个档位覆盖所有不可逆形态，

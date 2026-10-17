@@ -37,12 +37,6 @@ export const SUBJECT_MAX_LENGTH = 50
 export const CONFIG_FILES = ['package.json', 'cordis.patch.yml'] as const
 
 /**
- * Default commit header pattern, derived from {@link COMMIT_TYPES} so the
- * accepted types and the pattern cannot drift apart.
- */
-export const DEFAULT_COMMIT_PATTERN = `^(${COMMIT_TYPES.join('|')})(\\([^)]+\\))?!?: \\S`
-
-/**
  * Semantic version, pre-release and build metadata included, as a full match.
  * Exported so the release check compiles exactly the pattern the schema
  * defaults to — a repository that narrows it narrows the check with it.
@@ -70,7 +64,6 @@ export const Config = z.object({
       readme: z.array(z.string()).default(['README.md', 'README.zh.md']).volatile(),
       changelog: z.string().default('CHANGELOG.md').volatile(),
       docsDir: z.string().default('docs/').volatile(),
-      adrDir: z.string().default('docs/ADR/').volatile(),
       /**
        * Files that must change together, listed as one group per line. The
        * repository keeps several such pairs; leaving them in configuration
@@ -111,11 +104,6 @@ export const Config = z.object({
   /** Mechanical conventions the checks compare a change against. */
   rules: z
     .object({
-      branchPattern: z
-        .string()
-        .default('^(feature|fix|docs|hotfix|chore)/[a-z0-9][a-z0-9._-]*$')
-        .volatile(),
-      commitPattern: z.string().default(DEFAULT_COMMIT_PATTERN).volatile(),
       requireChangelogOnFeat: z.boolean().default(true).volatile(),
     })
     .default({}),
@@ -171,8 +159,8 @@ export const Config = z.object({
        * `MAJOR.MINOR.PATCH` with optional pre-release and build metadata; a
        * repository that versions by date or build number says so here.
        *
-       * Not volatile: like `rules.branchPattern` and `rules.commitPattern`, a
-       * regular expression is a file-only setting the panel shows for reference.
+       * Not volatile: this writes the rule the release check compiles, so it
+       * belongs to the file the team agrees on rather than to a live control.
        */
       versionPattern: z.string().default(SEMVER_PATTERN),
     })
