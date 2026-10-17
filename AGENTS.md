@@ -23,6 +23,8 @@ dsh-dev-workflow 是 DSH 的开发工作流守门员与编排器插件。
 ## 关键约束
 
 - 分支命名：`feature/*`、`fix/*`、`docs/*`、`hotfix/*`（GitHub Flow）。
+- 一个 PR 只做一件事；改动超过 500 行就拆，或在 PR 正文里写清「哪几块、从哪读起」。
+  合并是 squash，分支上的多个关注点落进 `main` 时只剩一个提交、一条信息。
 - 提交信息：Conventional Commits，由 commitlint 在提交时校验。
 - 文档与代码同 PR 更新。
 - CHANGELOG 的 `[Unreleased]` 段常驻顶部。
