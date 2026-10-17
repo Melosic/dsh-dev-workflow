@@ -11,6 +11,32 @@ description: >
 This file is the single source of truth for how this project is developed. It is
 read on demand — nothing below is resident context.
 
+## How to Read This Document
+
+Three actors are addressed here, and knowing which one a rule is for keeps you
+from treating a convention as a gate:
+
+- **The plugin acts automatically.** *Automatic Triggers* and *Safe Operations*
+  describe behaviour that happens whether or not anyone remembers it. Do not
+  re-state those rules to the user; the guards already answer for them.
+- **The AI assistant must.** Most of this document is an instruction set for
+  whoever does the work, which is usually an assistant acting for a human. Follow
+  it, run the checks, and show the result.
+- **The human decides.** Anything that leaves this machine, anything
+  irreversible, and every judgement call marked "ask the user" belongs to them.
+
+Three documents hold the rules, and they are not interchangeable:
+
+| File             | Holds                                                     | Resident |
+| ---------------- | --------------------------------------------------------- | -------- |
+| `AGENTS.md`      | the stable rules that must hold on every turn             | yes      |
+| `CONTRIBUTING.md`| the expansion for humans working on the workflow plugin   | no       |
+| this file        | the specification the plugin ships to everyone who installs it | no    |
+
+Write a rule here only if it applies to any repository that installs the plugin.
+Repository-specific detail — this project's own commands, its CI layout, its
+release mechanics — belongs in the other two.
+
 ## Core Principles
 
 - **Automation over memory.** A rule that tooling can check should be checked by
@@ -48,6 +74,10 @@ read on demand — nothing below is resident context.
 - Branch names are all lowercase and kebab-case (the same style as the type and
   scope in a commit). A name that reads on its own is required: `feature/skill-md`
   and `fix/guard-force-push`, not `feature/stuff` or `feature/NewStuff`.
+- **Branch naming is a convention, not a gate.** Nothing in the plugin inspects a
+  branch name: `rules.branchPattern` is declared in the configuration but no
+  check reads it. Follow the rule because it tells a reader what the branch is
+  for, not because a badly named branch will be blocked.
 - Keep a branch on one topic.
 - Stay current with `git merge main`, not `git rebase main`. Under squash merge a
   rebase rewrites the branch's own history, so a reviewer can no longer see what
@@ -137,6 +167,42 @@ including an administrator.
 - The 50/72 rule is not cosmetic. Many tools truncate a subject, and a wrapped
   body stays readable in a terminal and in a diff.
 
+### Scope and Examples
+
+A scope names the area of behaviour that changed, not the file that was touched:
+
+| Scope    | Use for                                        |
+| -------- | ---------------------------------------------- |
+| `guard`  | one of the guards                              |
+| `trigger`| one of the triggers                            |
+| `check`  | the rules a check evaluates                    |
+| `config` | the configuration schema and defaults          |
+| `panel`  | the settings panel                             |
+| `i18n`   | dictionaries and `t()` usage                   |
+| `docs`   | prose only                                     |
+| `deps`   | dependencies and manifest changes              |
+
+If a change spans two areas it is usually two commits; if it genuinely cannot be
+split, pick the area a user would notice and say the rest in the body.
+
+The same change, described twice:
+
+```text
+fix: fix the crash
+```
+
+```text
+fix(guard): stop the force-push rule from matching git push --force-with-lease
+
+The rule compared the raw argument list, so the safe form was caught by the
+same branch as the dangerous one and every lease push asked for approval.
+
+Match the exact flag instead, and keep `--force` covered.
+```
+
+The second one can be reviewed without opening the diff. The first one cannot be
+reviewed at all.
+
 ### Issue References
 
 - `Closes #12` — once this commit lands, issue #12 can be closed.
@@ -206,6 +272,24 @@ remote, the tag or the version, and the exact command, then wait. One approval
 covers that one action — consent to commit is not consent to push, and consent to
 push is not consent to publish. When the user has not answered, the state is "not
 yet done", not "done".
+
+### Reviewer's Side
+
+The rules above are what the author owes; these are what the reviewer owes. A
+review that skips them is a rubber stamp with a comment attached.
+
+- Read the title and the *Why* first. Under squash merge the title is the commit
+  message that survives, so a vague title is a permanent defect, not a nitpick.
+- Review the diff against the stated intent. If the diff does something the
+  description does not mention, that is the finding — the extra change is
+  unreviewed by construction.
+- A test that changed in the same commit as the code it covers deserves a second
+  look: check whether the assertion moved to match the new behaviour or was
+  weakened to accommodate a bug.
+- "I trust it" is not a review state. Approve when CI is green and every
+  conversation is resolved, or ask for the change. Leave nothing in between.
+- Prefer asking for a split over reading it all. A pull request approved without
+  being read is worse than one that was never opened.
 
 ### Local Verification vs CI
 
@@ -295,6 +379,45 @@ this list waives just one of them.
 - A pre-release is not published to the `latest` tag. Publish it with
   `npm publish --tag next`, so nobody installs a release candidate by accident.
 - Examples: `0.2.0-rc.1`, `1.0.0-beta.3`.
+- A candidate and `[Unreleased]` must not both claim the same change. Either the
+  entries moved under the `-rc.1` heading, or they are still unreleased — pick
+  one and keep it true while the candidate is out. When `-rc.2` follows, add to
+  the same version heading; do not open a second one.
+
+### When a Release Stops Half-Way
+
+The steps are ordered, and a run can die between any two of them. Recover by
+working out which of the three facts actually happened, not which step the output
+claims:
+
+- **The tag exists but nothing shipped.** Fix the cause and publish again from
+  the same tag. Do not delete and re-push the tag once anyone may have fetched
+  it; the tag is the promise, the registry entry is the delivery.
+- **The publish succeeded but verification still shows the old version.** Wait.
+  Registry propagation takes minutes, and a mirror or a release-age policy can
+  hold an unqualified install back for a day. Confirm with a packument read
+  before concluding the publish failed — re-publishing the same version fails, so
+  a wrong conclusion here costs a version number.
+- **Something shipped and is wrong.** Amend nothing: a tagged commit is
+  immutable in practice. Follow *Withdrawing a Published Release*, then land the
+  fix as a new patch.
+- **The release commit itself is wrong** (wrong files, wrong date). If nothing
+  was tagged or published, reset and redo it. If a tag exists, leave the history
+  alone and correct forward.
+
+### Release Notes
+
+Release notes are the changelog section for that version, published where people
+look when a new version appears. They are not a second document to write.
+
+- Use the `## [<version>] - <date>` heading as the release title, so the registry,
+  the tag, and the changelog agree.
+- Copy the entries; do not summarise them into prose. A summary is a second
+  description that can drift from the first.
+- Lead with anything `BREAKING`, and state the migration path in the notes as
+  well as in the changelog. Someone reading the release page may never open the
+  changelog.
+- Do not restate commit messages, and do not list internal refactors.
 
 ### Deprecation and Removal
 
@@ -357,11 +480,11 @@ upgrade: *what changed for me?* It is not a summary of the commit log.
 
 ### Examples
 
-| Bad entry                              | Why it falls short                                | Better entry                                                         |
-| -------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------- |
-| `Fixed — fixed a bug`                  | A reader cannot tell whether it affects them.     | `Fixed — a failed push left the branch dirty; the error now rolls back` |
-| `Added — refactored the parser`        | A refactor is not an addition, nor user-visible.  | `Changed — the parser accepts a single leading "+" before a number`  |
-| `Changed — updated dependencies`       | A routine upgrade is not a change to the user.    | *(no entry)*                                                          |
+| Bad entry                        | Why it falls short                               | Better entry                                                            |
+| -------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| `Fixed — fixed a bug`            | A reader cannot tell whether it affects them.    | `Fixed — a failed push left the branch dirty; the error now rolls back` |
+| `Added — refactored the parser`  | A refactor is not an addition, nor user-visible. | `Changed — the parser accepts a single leading "+" before a number`     |
+| `Changed — updated dependencies` | A routine upgrade is not a change to the user.   | *(no entry)*                                                            |
 
 ### When to Write
 
@@ -370,6 +493,19 @@ upgrade: *what changed for me?* It is not a summary of the commit log.
 - `docs`, `test`, `chore`, `ci`, and `build` commits usually need no entry.
 - `feat`, `fix`, and `perf` need one. `refactor` needs one only when it changes
   something a user can observe. `revert` needs one.
+
+### Concurrent Edits
+
+`[Unreleased]` is the one section every open branch writes to, which makes it the
+most common conflict in this repository. Three habits keep the conflict small:
+
+- Add your entry at the **top** of its category, not at the bottom. The newest
+  entry is the one a reader most wants first, and appending to the end guarantees
+  a conflict with every other branch that also appended.
+- Resolve a `CHANGELOG.md` conflict by keeping **both** sides. A changelog
+  conflict is never a choice; both entries describe something that happened.
+- After merging `main`, check that your entry is not now duplicated, and that the
+  category headings are still in the Keep a Changelog order.
 
 ### Dependency Upgrades
 
@@ -391,25 +527,31 @@ upgrade: *what changed for me?* It is not a summary of the commit log.
 Destructive git commands. These rewrite or discard history and must never run
 unprompted:
 
-| Command             | Risk                                             |
-| ------------------- | ------------------------------------------------ |
-| `git push --force`  | overwrites remote history; can discard commits   |
-| `git reset --hard`  | discards uncommitted work permanently            |
-| `git clean -f`      | deletes untracked files permanently              |
-| `git branch -D`     | deletes a branch whose commits may exist nowhere |
-| `git rebase`        | rewrites history                                 |
-| `git commit --amend`| rewrites a commit that may already be published  |
-| `git checkout -- .` | discards every unstaged change                   |
-| `--no-verify`       | skips the hooks that protect the repository      |
-| `git push --delete` | removes a remote branch others may base work on  |
+| Command              | Risk                                             |
+| -------------------- | ------------------------------------------------ |
+| `git push --force`   | overwrites remote history; can discard commits   |
+| `git reset --hard`   | discards uncommitted work permanently            |
+| `git clean -f`       | deletes untracked files permanently              |
+| `git branch -D`      | deletes a branch whose commits may exist nowhere |
+| `git rebase`         | rewrites history                                 |
+| `git commit --amend` | rewrites a commit that may already be published  |
+| `git checkout -- .`  | discards every unstaged change                   |
+| `--no-verify`        | skips the hooks that protect the repository      |
+| `git push --delete`  | removes a remote branch others may base work on  |
 
+- The table is about rewriting history other people can see. Rebasing a branch
+  only you have, and have never pushed, rewrites nothing anyone else holds.
+  Rebasing a branch someone has based work on — or `main` itself — is the case
+  the table warns about, and it is why the branch model says `git merge main`.
 - Never hard-code a credential, and never write one into a log, a fixture, or a
   document. Secrets come from the environment or an untracked local file.
 - Never read a sensitive file to "check" it: `.env`, `*.pem`, `*.key`,
   `id_rsa*`, `credentials`, `*.p12`, an `.npmrc` holding an auth token, and
   anything under `secrets/`.
 - A force push must use `--force-with-lease`, which refuses to overwrite commits
-  you have not fetched. A bare `--force` is never the answer.
+  you have not fetched. That form is acceptable only on a branch that is neither
+  `main` nor protected; against `main`, no force form is acceptable at all. A
+  bare `--force` is never the answer.
 - Do not bypass git hooks as a habit. `--no-verify` is an escape hatch for an
   emergency, not a workflow.
 - An AI assistant must not run a destructive operation without explicit
@@ -422,9 +564,46 @@ unprompted:
   show the remote commit that will be overwritten as well.
 - When a destructive command is requested, prefer the reversible form and say
   why.
-- Scan the staged diff for credential patterns before committing. If one turns
-  up, rotate the secret — deleting the commit is not enough. A secret that
-  reached the remote is already exposed.
+- Scan the staged diff for credentials before committing, with a secret scanner
+  such as gitleaks rather than by eye. If one turns up, rotate the secret —
+  deleting the commit is not enough. A secret that reached the remote is already
+  exposed.
+
+## Tool and Guard Boundaries
+
+The plugin is a set of guards and triggers, not a sandbox. Knowing where it stops
+prevents both false trust and wasted effort trying to configure what cannot be
+configured:
+
+- **The guards see tool arguments, not running processes.** A path assembled
+  inside a script, or read through a language runtime, is invisible to
+  `fileGuard` — it matches the words a tool was called with.
+- **Shell parsing is lexical, not a shell.** The guards read the ordinary hiding
+  places — command substitutions, backticks, and the argument of `sh -c` are
+  parsed again as commands — but an interpreter is opaque: nothing reads inside
+  `node -e "…"` or `python -c "…"`. The guards catch the ordinary forms of a
+  destructive command, which is where mistakes happen; they are not a defence
+  against someone deliberately obfuscating one.
+- **How configurable a guard is depends on which guard it is.** `gitGuard` gives
+  each rule its own policy (force push, hard reset, rebase, amend, branch delete,
+  clean, discarded checkout, `--no-verify`), and `outwardGuard` gives each
+  outward action its own (push, tag, pull request, publish). `commandGuard` has
+  a single policy for every recognised pattern, because they share the one
+  property that matters — none can be undone. `fileGuard` and `secretGuard` are
+  fixed `deny` with no per-item exemption, so the only relaxation is turning the
+  guard off; do that only in a sandbox where the files you would expose do not
+  matter.
+- **Some configuration does not take effect.** `rules.branchPattern`,
+  `rules.commitPattern`, and `docs.adrDir` are declared but nothing reads them,
+  which is why branch naming is a convention rather than a gate. The panel marks
+  them as inactive.
+- **The triggers check the action, not the result.** A commit message is checked
+  before the commit runs; a changed file is checked before it is written. Where a
+  value cannot be known until the command executes, the check says so rather than
+  guessing.
+- **The real boundary is the host.** The sandbox and approval policy decide what a
+  tool may do. These guards exist so a normal mistake is caught early — treat a
+  green run as "nothing obvious went wrong", never as proof of safety.
 
 ## Automatic Triggers
 
