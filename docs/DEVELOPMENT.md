@@ -170,7 +170,10 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   `devDependencies` 的三个精确版本是「CI 跑在哪」。测试跑通一个新版本**不是**抬下界的理由：
   下界一抬，还留在旧版本上的用户会被 `preflight()` 静默禁用（见 `docs/PUBLISHING.md` 第 6 条），
   而 `latest` 渠道往往比 `next` 渠道落后一截。升级开发基线的最小步骤写在 `docs/PUBLISHING.md` 第 4 条。
-- **`.npmrc` 的 `minimumReleaseAge=1440` 会挡住刚发布不到一天的版本。** 它只拦**解析**
-  （`pnpm add` / `pnpm install` 无 frozen），不拦 `pnpm install --frozen-lockfile` 的下载，
-  所以 CI 不受影响。本地要装新版本时在命令行加 `--config.minimumReleaseAge=0`，不要改仓库
-  里那份 `.npmrc`——它对所有贡献者生效，且故意留着以躲开刚发布的破坏性版本。
+- **本机 `~/.npmrc` 的 `minimum-release-age=1440` 会挡住刚发布不到一天的版本。** 注意它来自
+  **用户级** npmrc，不是仓库里那份（仓库 `.npmrc` 只有 `auto-install-peers` /
+  `strict-peer-dependencies` / `resolution-mode`，故意不含年龄门槛）。它只拦**解析**
+  （`pnpm add` / 无 frozen 的 `pnpm install`），不拦 `pnpm install --frozen-lockfile` 的下载，
+  所以 CI 不受影响。本地要装新版本时在命令行加 `--config.minimumReleaseAge=0`，不要改任何一份
+  `.npmrc`——用户级那份是你自己的供应链防护，仓库那份对所有贡献者生效。
+  用 `pnpm config get minimum-release-age` 确认本机处于哪种状态。

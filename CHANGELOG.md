@@ -60,6 +60,13 @@
 
 ### Fixed
 
+- **`docs/PUBLISHING.md` 把年龄门槛归因错了对象。** 原文说「只有应用内插件管理器（pnpm 11）会
+  停在上一版，`dsh plugin add` 走 PATH 上的 pnpm 10，默认仍是 0，实测三次都装到最新版」。
+  实际上门槛读的是**配置而不是 pnpm 版本**：用户级 `~/.npmrc` 里的 `minimum-release-age`
+  会被 pnpm 10 与 11 一起继承。本机 pnpm 10.30.3 实测拒绝了一个 10 小时前发布的版本
+  （`ERR_PNPM_NO_MATURE_MATCHING_VERSION`），所以两条安装路径在该设置下行为一致。文档现在
+  写明门槛来源、用 `pnpm config get minimum-release-age` 自查，并把「刚发完就装一遍验证」
+  这条自查路径与「只拦解析、不拦 `--frozen-lockfile`」的边界一起写进去。
 - **规范里三处自相矛盾的说法。** 分支保护禁止一切强推，而安全操作要求用
   `--force-with-lease`；分支模型要求 `git merge main` 不用 rebase，而 rebase 在破坏性命令表里
   被整体列为危险；分支命名被写得像门禁，但没有任何检查读取它。现在分别写明
