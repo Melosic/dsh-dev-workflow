@@ -207,8 +207,8 @@ DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `pre
    禁用**（见第 6 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
 
    升级开发基线时的最小动作：改 `package.json` 的 `devDependencies` 三个精确版本 → 跑
-   `pnpm install`（`.npmrc` 的 `minimumReleaseAge` 会挡住 24 小时内的新版本，此时加
-   `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm test`
+   `pnpm install`（本机 `~/.npmrc` 的 `minimum-release-age` 会挡住 24 小时内的新版本，此时加
+   `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test`
    → 再决定下界动不动。`minimumReleaseAge` 只拦**解析**，不拦 `--frozen-lockfile` 的下载，
    所以 CI 不需要任何额外参数。下界若确实要抬，按第 8 条先查真实版本列表。
 5. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
@@ -327,9 +327,23 @@ dependencies:
 Done in 16.9s using pnpm v11.7.0
 ```
 
-**这条只发生在应用内的插件管理器这条路上。** `dsh plugin --profile <profile> add …`
-转发给 PATH 上的 pnpm 10.30.3，其 `minimumReleaseAge` 默认仍是 0，实测三次都装到最新版。
-README 里的安装命令不需要因此改动。
+**门槛来自配置，不来自 pnpm 版本，所以两条安装路径都会中。** pnpm 11 把默认值改成 1440，
+pnpm 10 的默认值仍是 0，但**用户级 `~/.npmrc` 里的 `minimum-release-age` 会被两者一起继承**。
+本机实测：`~/.npmrc` 写着 `minimum-release-age=1440`，于是 PATH 上的 pnpm 10.30.3 同样拒绝一个
+10 小时前发布的版本：
+
+```text
+ERR_PNPM_NO_MATURE_MATCHING_VERSION  Version 0.2.1-rc.2 (released 10 hours ago) of
+@deepseek-ai/dsh-skill does not meet the minimumReleaseAge constraint
+```
+
+所以 `dsh plugin --profile <profile> add …`（走 PATH 上的 pnpm）与应用内插件管理器（走 pnpm 11）
+在这个设置下行为一致；只有把该设置留在 0 的机器，前者才会立刻装到新版。想知道自己属于哪种：
+
+```bash
+pnpm config get minimum-release-age   # 0 或空 = 不受限；1440 = 24 小时
+```
+
 
 ### 可以怎么办
 
@@ -373,6 +387,21 @@ npm view @melosic/dsh-dev-workflow time --registry https://registry.npmjs.org
 ```
 
 这条只对「当前最新版」成立：下一次发 `0.3.0`，门槛立刻对 `0.3.0` 生效。
+
+### 本地自己装也会被挡（发布前自查）
+
+同一个设置对**开发机自己的解析**生效，所以「刚发完就装一遍验证」会失败：本机 `~/.npmrc` 有
+`minimum-release-age=1440` 时，安装一个当天发布的版本会得到
+`ERR_PNPM_NO_MATURE_MATCHING_VERSION`。一次性绕过写在命令行上，不要改 `~/.npmrc`：
+
+```bash
+pnpm add @melosic/dsh-dev-workflow@latest --config.minimumReleaseAge=0
+```
+
+**这条只拦「解析」，不拦 `--frozen-lockfile`。** lockfile 已记录精确版本时 pnpm 不再解析，
+年龄检查不参与，所以 CI 与 profile 的 `install --frozen-lockfile` 都不需要任何额外参数
+（用冷 store 实测过：显式指定版本先解析、再冷启动 `--frozen-lockfile` 下载，两步都过）。
+
 
 ## 撤回、废弃与回滚
 

@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "allowJs": true,
+    "checkJs": true,
+    /* `client.js` is plain browser JS with no annotations of its own, so
+     * `noImplicitAny` would bury the signal under ~80 implicit-`any` reports
+     * about parameters whose types are the host's. What this check is for is
+     * the other half: property and method shapes on the services the panel
+     * injects, which is exactly the surface that changed between DSH releases.
+     * Do not turn this on without annotating the file. */
+    "noImplicitAny": false,
+    /* No Node globals: this half runs in the browser. Keeping them out is also
+     * what lets the factory's own `require` parameter be seen as used — with
+     * `@types/node` in scope, the ambient `require` shadows it and tsc reports
+     * a false unused-parameter. Referencing `process` or `Buffer` here should
+     * be an error, not a habit. */
+    "types": [],
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["client.js", "client-env.d.ts"]
+}

@@ -75,9 +75,9 @@ release mechanics — belongs in the other two.
   scope in a commit). A name that reads on its own is required: `feature/skill-md`
   and `fix/guard-force-push`, not `feature/stuff` or `feature/NewStuff`.
 - **Branch naming is a convention, not a gate.** Nothing in the plugin inspects a
-  branch name: `rules.branchPattern` is declared in the configuration but no
-  check reads it. Follow the rule because it tells a reader what the branch is
-  for, not because a badly named branch will be blocked.
+  branch name — there is no configuration field for it either. Follow the rule
+  because it tells a reader what the branch is for, not because a badly named
+  branch will be blocked.
 - Keep a branch on one topic.
 - Stay current with `git merge main`, not `git rebase main`. Under squash merge a
   rebase rewrites the branch's own history, so a reviewer can no longer see what
@@ -593,10 +593,6 @@ configured:
   fixed `deny` with no per-item exemption, so the only relaxation is turning the
   guard off; do that only in a sandbox where the files you would expose do not
   matter.
-- **Some configuration does not take effect.** `rules.branchPattern`,
-  `rules.commitPattern`, and `docs.adrDir` are declared but nothing reads them,
-  which is why branch naming is a convention rather than a gate. The panel marks
-  them as inactive.
 - **The triggers check the action, not the result.** A commit message is checked
   before the commit runs; a changed file is checked before it is written. Where a
   value cannot be known until the command executes, the check says so rather than
@@ -616,8 +612,8 @@ configured:
 - **Before a release** — check the version, the tag against `package.json`, and
   whether the changelog carries the release.
 - **No trigger watches branch creation.** Branch naming is a convention this
-  document asks for, not something the plugin enforces — `rules.branchPattern` is
-  declared but no check reads it yet, so a badly named branch is not blocked.
+  document asks for, not something the plugin enforces, so a badly named branch is
+  not blocked.
 - **Otherwise stay quiet.** Do not volunteer the specification, do not read its
   full text, and do not interrupt unrelated work. The resident cost stays at one
   summary line.

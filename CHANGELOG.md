@@ -22,6 +22,15 @@
   （读标题与 *Why*、按声明意图读 diff、警惕同提交里被削弱的断言）；发布一节补「发版中断在
   半路」的三种恢复路径与「发布说明就是 CHANGELOG 段落，不要另写一份」；CHANGELOG 一节补
   「并发编辑」（条目加在分类顶部，冲突时两边都留）。
+- **`client.js` 进入类型检查（`pnpm typecheck:client`），CI 与 `prepublishOnly` 都会跑。**
+  面板是手写的浏览器 JS，此前不在任何 tsconfig 里——宿主改了方法名，编译期毫无反应，
+  要等用户打开一个空白面板才知道。新配置 `tsconfig.client.json`（`allowJs` + `checkJs`）配上
+  `client-env.d.ts` 里的宿主类型导入，把 `ctx.configForms`、`ctx.locale`、`ctx.remote`、
+  `ctx.slots` 的真实声明带进程序，`apply` 的参数按宿主 `Context` 标注后，改名或删字段就是编译错误。
+  连带发现并修正三处：`ctx.slots` 的声明来自 `@deepseek-ai/dsh-client-ui-renderer` 而非
+  `dsh-client-ui-slots`（后者只提供类型，服务由 renderer 挂载），本插件的
+  `settings.devWorkflow` 命名空间需要自行并入宿主 `LocaleNamespaceMap`，`typecheck:tests`
+  之外还要有这一份才能覆盖到浏览器侧。
 
 ### Changed
 
@@ -41,11 +50,26 @@
   本插件从未读取（`status` 的 `unavailable` 终点已有渲染分支）。
   顺带补的是文档里两处会把「实测基线」与「支持下界」混为一谈的表述。
 
+### Removed
+
+- **删掉三项从未被任何代码读取的配置：`rules.branchPattern`、`rules.commitPattern`、
+  `docs.adrDir`。** 它们之前只有声明、面板展示和一枚「当前不生效」徽标，没有任何行为——
+  一块只有承诺没有实现的表面。分支命名仍然是约定（见技能的分支模型一节）；提交头部规则读的是
+  `commitCheck.types`、`commitCheck.requireScope` 与 `commitCheck.subjectMaxLength`，不是一条
+  独立的正则。schemastery 接受未知键，所以旧配置文件里留着这三项不会报错，只是被忽略。
+
 ### Fixed
 
+- **`docs/PUBLISHING.md` 把年龄门槛归因错了对象。** 原文说「只有应用内插件管理器（pnpm 11）会
+  停在上一版，`dsh plugin add` 走 PATH 上的 pnpm 10，默认仍是 0，实测三次都装到最新版」。
+  实际上门槛读的是**配置而不是 pnpm 版本**：用户级 `~/.npmrc` 里的 `minimum-release-age`
+  会被 pnpm 10 与 11 一起继承。本机 pnpm 10.30.3 实测拒绝了一个 10 小时前发布的版本
+  （`ERR_PNPM_NO_MATURE_MATCHING_VERSION`），所以两条安装路径在该设置下行为一致。文档现在
+  写明门槛来源、用 `pnpm config get minimum-release-age` 自查，并把「刚发完就装一遍验证」
+  这条自查路径与「只拦解析、不拦 `--frozen-lockfile`」的边界一起写进去。
 - **规范里三处自相矛盾的说法。** 分支保护禁止一切强推，而安全操作要求用
   `--force-with-lease`；分支模型要求 `git merge main` 不用 rebase，而 rebase 在破坏性命令表里
-  被整体列为危险；分支命名被写得像门禁，但并无任何检查读取它。现在分别写明
+  被整体列为危险；分支命名被写得像门禁，但没有任何检查读取它。现在分别写明
   适用边界：lease 写法只用于非保护分支，rebase 只重写「别人已基于其工作」的历史时才算危险，
   分支命名明确标为约定。
 - 技能里「五道守卫可逐条配置」的说法不准确：`commandGuard` 只有一个档位覆盖所有不可逆形态，

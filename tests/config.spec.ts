@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COMMIT_TYPES, Config, DEFAULT_COMMIT_PATTERN, SUBJECT_MAX_LENGTH } from '../src/config.js'
+import { COMMIT_TYPES, Config, SUBJECT_MAX_LENGTH } from '../src/config.js'
 import { plain } from './harness.js'
 
 // The configuration surface: every default the plugin documents, and the
@@ -125,7 +125,6 @@ describe('src/config.ts', () => {
     expect(plain(config.docs.readme)).toEqual(['README.md', 'README.zh.md'])
     expect(plain(config.docs.changelog)).toBe('CHANGELOG.md')
     expect(plain(config.docs.docsDir)).toBe('docs/')
-    expect(plain(config.docs.adrDir)).toBe('docs/ADR/')
     expect(plain(config.docs.mirrors)).toEqual([
       ['README.md', 'README.zh.md'],
       ['locale/en.json', 'locale/zh.json'],
@@ -133,8 +132,7 @@ describe('src/config.ts', () => {
     ])
   })
 
-  it('derives the default commit pattern from the accepted types', () => {
-    expect(DEFAULT_COMMIT_PATTERN).toBe(`^(${COMMIT_TYPES.join('|')})(\\([^)]+\\))?!?: \\S`)
+  it('keeps the commit type list the checks agree on', () => {
     expect(COMMIT_TYPES).toHaveLength(11)
     expect(SUBJECT_MAX_LENGTH).toBe(50)
   })

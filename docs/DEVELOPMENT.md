@@ -14,7 +14,7 @@ pnpm test:watch     # 边改边跑
 提交前跑与 CI 完全相同的检查：
 
 ```bash
-pnpm typecheck && pnpm typecheck:tests && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
+pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
 ```
 
 CI 还多一步 commitlint 校验提交信息（见 `.github/workflows/ci.yml`）；本地由 husky 的
@@ -50,6 +50,11 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 
 `src/` 之外的一切都不进构建产物。`tsconfig.json` 的 `include` 只有 `src/**/*.ts`，
 `rootDir` 是 `src`，所以往 `src/` 之外放 `.ts` 不会污染 `lib/`。
+
+浏览器侧有另外两份配置：`tsconfig.client.json` 用 `allowJs` + `checkJs` 检查手写的
+`client.js`，`client-env.d.ts` 为它提供宿主类型（`window.__ModuleLoader__`、`react`
+外部模块、以及从客户端包导入的 `Context` 增补）。两者都是构建期输入，不在 `files` 里，
+不会随包发布。
 
 ## 测试怎么组织
 
@@ -118,7 +123,7 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 ## CI 会拦住什么
 
 `.github/workflows/ci.yml` 在 Node 22 上依次跑：`pnpm install --frozen-lockfile`、
-`typecheck`、`typecheck:tests`、`lint`、对本次 PR 新增提交跑 `commitlint`、
+`typecheck`、`typecheck:tests`、`typecheck:client`、`lint`、对本次 PR 新增提交跑 `commitlint`、
 `format:check`、`test`、`build`、`ci:checks`。
 （单个 Node 版本而非矩阵：`engines.node` 声明的是代码所需的下限，CI 跑的是当前 LTS。）
 `main` 分支的保护规则要求 `verify` 这个检查通过、要求 PR、且禁止强制推送。
@@ -146,7 +151,13 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   检查发布出去的源码；`pnpm typecheck:tests` 用第二份配置把 `tests/` 也检查一遍——它同样不随包
   发布，所以不进构建的 `rootDir`，但类型错误应该在 CI 里现形，而不是等到某条断言以奇怪的方式失败。
   `scripts/` 是 `.mjs`，由 ESLint 覆盖，不在这两份配置里。CI 与 `pnpm ci:checks` 之外，
-  `prepublishOnly` 也跑这两个 typecheck。
+  `prepublishOnly` 也跑这三个 typecheck。
+- **`client.js` 由 `tsconfig.client.json` 单独检查，那才是它唯一的编译期保障。** 它是手写的
+  浏览器 JS，任何构建都不经过它，`allowJs` + `checkJs` 配上 `client-env.d.ts` 里的宿主类型导入
+  才能把「宿主改了方法名」变成编译错误而不是空白面板。`noImplicitAny` 是**故意关**的：文件里没有
+  注解，打开它只会淹没真正的信号（被注入服务的属性形状）。要开就先给文件补注解。
+  `client-env.d.ts` 里声明 `LocaleNamespaceMap` 是本插件面板命名空间进入宿主类型表的唯一方式，
+  删掉它 `ctx.locale.register` 就会拒绝本插件自己的命名空间。
 - **`AGENTS.md` 只放稳定规则，不放进度。** 进度写 `.dev-docs/PROGRESS.md`（本机私有，
   已被 gitignore）。`AGENTS.md` 每次会话都会被注入，里面每条过期状态都是常驻成本。
 - **`docs/SECURITY.md` 里 git-guard 与 husky 的分工不要混。** 前者管 DSH 会话里的模型行为，
@@ -159,7 +170,10 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   `devDependencies` 的三个精确版本是「CI 跑在哪」。测试跑通一个新版本**不是**抬下界的理由：
   下界一抬，还留在旧版本上的用户会被 `preflight()` 静默禁用（见 `docs/PUBLISHING.md` 第 6 条），
   而 `latest` 渠道往往比 `next` 渠道落后一截。升级开发基线的最小步骤写在 `docs/PUBLISHING.md` 第 4 条。
-- **`.npmrc` 的 `minimumReleaseAge=1440` 会挡住刚发布不到一天的版本。** 它只拦**解析**
-  （`pnpm add` / `pnpm install` 无 frozen），不拦 `pnpm install --frozen-lockfile` 的下载，
-  所以 CI 不受影响。本地要装新版本时在命令行加 `--config.minimumReleaseAge=0`，不要改仓库
-  里那份 `.npmrc`——它对所有贡献者生效，且故意留着以躲开刚发布的破坏性版本。
+- **本机 `~/.npmrc` 的 `minimum-release-age=1440` 会挡住刚发布不到一天的版本。** 注意它来自
+  **用户级** npmrc，不是仓库里那份（仓库 `.npmrc` 只有 `auto-install-peers` /
+  `strict-peer-dependencies` / `resolution-mode`，故意不含年龄门槛）。它只拦**解析**
+  （`pnpm add` / 无 frozen 的 `pnpm install`），不拦 `pnpm install --frozen-lockfile` 的下载，
+  所以 CI 不受影响。本地要装新版本时在命令行加 `--config.minimumReleaseAge=0`，不要改任何一份
+  `.npmrc`——用户级那份是你自己的供应链防护，仓库那份对所有贡献者生效。
+  用 `pnpm config get minimum-release-age` 确认本机处于哪种状态。
