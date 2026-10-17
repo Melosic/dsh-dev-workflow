@@ -11,6 +11,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **开发基线升到 DSH `0.2.1-rc.2`，支持下界仍留在 `0.2.0-rc.2`。** `devDependencies` 现在
+  精确钉住 `@deepseek-ai/dsh`、`@deepseek-ai/dsh-skill`、`@deepseek-ai/dsh-tools` 的
+  `0.2.1-rc.2`，让 `pnpm typecheck`、`pnpm typecheck:tests`、`pnpm test` 跑在一个确定版本上。
+  `peerDependencies` 的下界**没有**跟着抬：`0.2.1-rc.2` 在 `next` 渠道，`latest` 渠道仍是
+  `0.2.0-rc.2`，抬下界会让仍在默认渠道上的用户被 `preflight()` 静默禁用。两者为何分离、
+  以后怎么升级，写进了 `docs/PUBLISHING.md` 第 4 条与 `docs/DEVELOPMENT.md`。
+- **DSH `0.2.1-rc.2` 的 API 差异已核对，无需改代码。** 三个包只用到 `dsh-skill` 的
+  `BUNDLED_SKILL_RANK` 与 `dsh-tools` 的 `defineTool`，`dsh-tools` 的类型变更是增量式；
+  面板用的 `configForms` 公共 API 两版逐字相同，`ConfigFormSnapshot` 删掉的 `mode` 字段
+  本插件从未读取（`status` 的 `unavailable` 终点已有渲染分支）。
+  顺带补的是文档里两处会把「实测基线」与「支持下界」混为一谈的表述。
+
 ## [0.3.0] - 2026-10-15
 
 ### Added
