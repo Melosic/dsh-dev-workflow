@@ -68,6 +68,10 @@
 - **file-guard 认不出套在 shell 里的读取。** `cat .env` 会被拒，`sh -c "cat .env"` 却放行——
   程序名看到的是 `sh`。现在与 command-guard 用同一条规则拆开 shell 包装，把 `-c` 后面的
   命令行当作独立命令重新判定；`bash -lc`、套一层的 `sh -c "sudo cat .env"` 同样覆盖。
+- **`pnpm -r publish` 与 `pnpm --filter pkg publish` 完全看不见。** 识别发版时只把命令的
+  第一个词当子命令，而 pnpm 允许全局选项写在子命令前面：`--filter` 顶到前面时被当成子命令，
+  于是发布既没有触发预发检查，也没有触发 outward 守卫——`-r` 会把工作区里每个包都推上去。
+  现在子命令取第一个自由词，会跳过选项及其取值。
 - **git-guard 只认 `checkout --` 一种写法。** `git restore <path>` 是同一损失的新写法、
   也是现在最常敲的形态，此前完全放行；`git checkout -f <branch>` 与
   `git switch --discard-changes <branch>` 不再停在冲突上而是直接丢弃本地改动，同样没被拦。
