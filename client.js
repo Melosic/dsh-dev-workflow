@@ -642,7 +642,10 @@ window.__ModuleLoader__.load({
     const MASTER_ON = new Map()
     for (const spec of FIELDS) {
       const key = spec.path.join('.')
-      if (DEPENDENTS[key] !== undefined) MASTER_ON.set(key, spec.on === undefined ? true : spec.on)
+      if (DEPENDENTS[key] === undefined) continue
+      // `on` exists only on a switch spec; a boolean switch omits it and is on
+      // at `true`.
+      MASTER_ON.set(key, 'on' in spec && spec.on !== undefined ? spec.on : true)
     }
 
     const keyOf = (path) => path.join('.')
