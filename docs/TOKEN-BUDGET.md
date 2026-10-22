@@ -46,11 +46,14 @@ Token 估算口径（脚本内的 `estimate()`）：非 CJK 字符按 4 字符/t
 
 | 文件 | 字符数 | 行数 |
 | --- | --- | --- |
-| `skills/dsh-dev-workflow/SKILL.md` | 32200 | 626 |
-| `skills/dsh-dev-workflow/SKILL.zh.md` | 15200 | 511 |
+| `skills/dsh-dev-workflow/SKILL.md` | 33744 | 646 |
+| `skills/dsh-dev-workflow/SKILL.zh.md` | 15718 | 522 |
 
 行数按 `Get-Content` 计（末行换行不算一行）；字符数按 UTF-8 解码后的字符个数（不是字节数）。
 复算方法见 `.dev-docs/_probe/tokens-3a.mjs`。
+
+这两个数字是探针输出的 `bodyChars` / `bodyLines`，即去掉 frontmatter 后、真正交给模型的
+正文——`SkillProvider.get()` 剥掉 frontmatter 才返回内容，所以按文件大小算会偏大。
 
 这份成本只在模型决定读规范时支付一次，并且每个会话读一次就够。它不受「每轮注入」
 影响，也不随对话轮数增长。
