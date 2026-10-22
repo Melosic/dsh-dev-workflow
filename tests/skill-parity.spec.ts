@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { COMMIT_TYPES, Config, SUBJECT_MAX_LENGTH } from '../src/config.js'
 
 // SKILL.md and SKILL.zh.md are one specification in two languages. The headings
 // are translated, so they cannot be compared as text; what has to match is the
@@ -104,5 +105,52 @@ describe('skills/dsh-dev-workflow', () => {
       expect(/^name:\s*(\S.*)$/m.exec(frontmatter)?.[1]?.trim(), file).toBe('dsh-dev-workflow')
       expect(/^description:/m.test(frontmatter), file).toBe(true)
     }
+  })
+})
+
+// The specification states the default thresholds in prose, and the gate enforces
+// them from `src/config.ts`. Both are read by different people at different times,
+// so the only thing keeping them equal is this test: change the default without
+// touching the skill and the two documents disagree about what the rule is.
+describe('skill thresholds match the configured defaults', () => {
+  const texts = {
+    en: readFileSync(FILES.en, 'utf8'),
+    zh: readFileSync(FILES.zh, 'utf8'),
+  }
+
+  it('states the configured subject length', () => {
+    const limit = Config({}).commitCheck.subjectMaxLength.get()
+    expect(limit).toBe(SUBJECT_MAX_LENGTH)
+    expect(texts.en).toContain(`${limit} characters`)
+    expect(texts.zh).toContain(`${limit} 字符`)
+  })
+
+  it('lists exactly the configured commit types', () => {
+    const types = [...Config({}).commitCheck.types.get()]
+    expect(types).toEqual([...COMMIT_TYPES])
+
+    // Only the commit-type table counts. A scope table also uses `| `name` | … |`
+    // rows, so the rows are taken from the contiguous block holding `feat`.
+    for (const [file, text] of Object.entries(texts)) {
+      const rows = text.split(/\r?\n/)
+      const anchor = rows.findIndex((line) => /^\s*\|\s*`feat`\s*\|/.test(line))
+      expect(anchor, file).toBeGreaterThan(-1)
+
+      const block: string[] = []
+      for (const line of rows.slice(anchor)) {
+        if (!/^\s*\|/.test(line)) break
+        block.push(line)
+      }
+      const listed = block
+        .map((line) => /^\s*\|\s*`([a-z]+)`\s*\|/.exec(line)?.[1])
+        .filter((name): name is string => name !== undefined)
+      expect(new Set(listed), file).toEqual(new Set(types))
+    }
+  })
+
+  it('says scope is optional, as the default requires it not', () => {
+    expect(Config({}).commitCheck.requireScope.get()).toBe(false)
+    expect(texts.en).toMatch(/`scope` is optional/)
+    expect(texts.zh).toMatch(/`scope` 可选/)
   })
 })

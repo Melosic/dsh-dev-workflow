@@ -116,13 +116,25 @@ const warnings = []
 /** Rule 8's threshold: the skill's own guidance, past which a change is split. */
 const CHANGE_SIZE_LIMIT = 500
 
+// A passing check says so. Printing only the failures makes a green run look
+// identical to a run where half the checks never executed, which is the failure
+// mode this whole file exists to prevent. `mark()` records the failure count
+// before a check; `ok()` prints the check's name only if nothing was added.
+const mark = () => failures.length
+const ok = (name, before) => {
+  if (failures.length === before) console.log(`[ok] ${name}`)
+}
+
 const locales = ['locale/en.json', 'locale/zh.json']
+let before = mark()
 const keySets = locales.map((file) => new Set(keyPaths(readJson(file))))
 const [en, zh] = keySets
 for (const key of en) if (!zh.has(key)) failures.push(`${locales[1]} is missing key "${key}"`)
 for (const key of zh) if (!en.has(key)) failures.push(`${locales[0]} is missing key "${key}"`)
+ok(`locale keys aligned (${en.size} keys)`, before)
 
 const skillFiles = ['skills/dsh-dev-workflow/SKILL.md', 'skills/dsh-dev-workflow/SKILL.zh.md']
+before = mark()
 
 /**
  * Read a skill file: validate its frontmatter and return the heading levels of
@@ -187,6 +199,7 @@ if (enShape.length !== zhShape.length) {
     }
   }
 }
+ok(`skill headings aligned (${enShape.length} sections)`, before)
 
 // 4. Phase-number citations, as described above. Walking the repository also
 //    covers `.dev-docs/`, where the numbering is actually defined, so that
@@ -210,6 +223,7 @@ function trackedMarkdown(directory = '') {
   }
   return found
 }
+before = mark()
 for (const file of trackedMarkdown()) {
   const lines = readFileSync(new URL(file, root), 'utf8').split(/\r?\n/)
   const line = lines.findIndex((entry) => PHASE.test(entry))
@@ -220,8 +234,10 @@ for (const file of trackedMarkdown()) {
     )
   }
 }
+ok('no numbered development phases cited', before)
 
 const pkg = readJson('package.json')
+before = mark()
 const patch = pkg.dsh?.bundle?.patch
 if (typeof patch !== 'string') {
   failures.push('package.json: dsh.bundle.patch is not declared')
@@ -233,6 +249,7 @@ if (typeof patch !== 'string') {
     )
   }
 }
+ok('bundle patch declared and shipped', before)
 
 // 5. The tarball must contain the files the host actually loads. `lib/` is a
 //    build output: it is gitignored and absent from a fresh clone, so packing
@@ -243,6 +260,7 @@ if (typeof patch !== 'string') {
 //    script, so packing from inside it would recurse. Existence plus whitelist
 //    coverage is what the tarball listing would prove.
 /** Entries in `files`: a trailing slash is a directory prefix, otherwise exact. */
+before = mark()
 const shipped = [
   'lib/index.js',
   'lib/index.d.ts',
@@ -272,6 +290,7 @@ const emittedMaps = ['lib/index.js.map', 'lib/index.d.ts.map']
 if (emittedMaps.some((file) => existsSync(new URL(file, root))) && !covered('src/index.ts')) {
   failures.push('package.json: files excludes src/ while the build emits source maps')
 }
+ok(`published entry points present (${shipped.length} checked)`, before)
 
 // 6. Mirrored pairs. The pair rule is the plugin's own (`docs.mirrors` in
 //    `src/config.ts`), so the list below is the schema's default, kept here only
@@ -282,6 +301,7 @@ const mirrors = pkg.dsh?.config?.docs?.mirrors ?? [
   ['skills/dsh-dev-workflow/SKILL.md', 'skills/dsh-dev-workflow/SKILL.zh.md'],
 ]
 const changed = new Set(changedFiles())
+before = mark()
 for (const pair of mirrors) {
   const touched = pair.filter((file) => changed.has(file))
   if (touched.length > 0 && touched.length < pair.length) {
@@ -290,14 +310,17 @@ for (const pair of mirrors) {
     )
   }
 }
+ok(`mirrored pairs consistent (${mirrors.length} groups)`, before)
 
 // 7. Version alignment. The titled heading is what the release notes point at,
 //    so a version without one is a release nobody can read about.
+before = mark()
 const changelog = readFileSync(new URL('CHANGELOG.md', root), 'utf8')
 const escaped = pkg.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 if (!new RegExp(`^##\\s+\\[?v?${escaped}\\]?\\b`, 'm').test(changelog)) {
   failures.push(`CHANGELOG.md: no section for the released version ${pkg.version}`)
 }
+ok(`CHANGELOG records ${pkg.version}`, before)
 
 // 8. Change size, as described above. Skipped silently when no base resolves,
 //    which is the same blind spot rules 6 and 7 have.
@@ -308,6 +331,8 @@ if (size !== undefined && size > CHANGE_SIZE_LIMIT) {
       `A squash merge lands this as one commit; split it, or say in the description ` +
       `which concern is which`,
   )
+} else if (size !== undefined) {
+  console.log(`[ok] ${size} changed lines, under the ${CHANGE_SIZE_LIMIT}-line guidance`)
 }
 
 if (failures.length > 0) {
@@ -315,13 +340,3 @@ if (failures.length > 0) {
   process.exit(1)
 }
 for (const warning of warnings) console.warn(`warning: ${warning}`)
-
-console.log(
-  `locale keys aligned (${en.size} keys); bundle patch declared and shipped; ` +
-    `skill headings aligned (${enShape.length} sections); ` +
-    `published entry points present (${shipped.length} checked); ` +
-    `mirrored pairs consistent (${mirrors.length} groups); ` +
-    `CHANGELOG records ${pkg.version}; ` +
-    `no numbered development phases cited` +
-    (size === undefined ? '.' : `; ${size} changed lines.`),
-)
