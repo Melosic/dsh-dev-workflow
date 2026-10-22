@@ -23,6 +23,14 @@
 - **`docs/DEVELOPMENT.md` 新增「会话状态与进度文件」**，区分 `src/state.ts`（内存、
   进程结束即忘）与 `.dev-docs/PROGRESS.md`（本机私有、不入库），并说明为何会发布的
   文件不能引用后者。
+- **`ci:checks` 全绿时也逐条打印 `[ok]`。** 此前它只在失败时出声，一次全过的运行和一次
+  某项压根没跑成的运行在输出上无法区分。现在每项检查都以 `[ok] <名称>` 或失败行出现，
+  `docs/I18N.md`、`docs/PUBLISHING.md` 里引用该输出的示例同步更新。
+- **技能里的阈值与 `src/config.ts` 的默认值改由测试绑定。** `SKILL.md` 写「最多 50 字符」、
+  列 11 个 type、说 scope 可选，而这三项都能在面板里改；此前没有任何东西保证正文与默认值
+  一致，改默认值后两份规范会各说各话。`tests/skill-parity.spec.ts` 现在读
+  `commitCheck.subjectMaxLength` / `commitCheck.types` / `commitCheck.requireScope`
+  并断言双语正文与之相符（反向对照已验证：把 50 改成 72、或多列一个 type，用例即失败）。
 
 ## [0.4.1] - 2026-10-22
 
