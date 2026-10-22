@@ -11,6 +11,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **技能补三条纪律，都是「已实现但没写下来」的那一类。** `### Local Verification vs CI`
+  增加「没跑成的检查不等于通过的检查」「验产物不验意图」「第二次失败就停下报告」；
+  `## Tool and Guard Boundaries` 增加「守卫抛错 = 该次调用报错，不会放行」与
+  「子代理里 `ask` 等于拒绝」；`## How to Read This Document` 增加「只给一个主要建议」。
+  双语同步，章节数仍为 35。
+- **`docs/CONFIGURATION.md` 说明三档 + `onFailure` 就是 major/minor 的实现**，
+  并点明 advisory 是既有按字段可调的软警告，不需要另起一套通道。
+- **`docs/DEVELOPMENT.md` 新增「会话状态与进度文件」**，区分 `src/state.ts`（内存、
+  进程结束即忘）与 `.dev-docs/PROGRESS.md`（本机私有、不入库），并说明为何会发布的
+  文件不能引用后者。
+
 ## [0.4.1] - 2026-10-22
 
 ### Fixed
