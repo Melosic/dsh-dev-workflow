@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-22
+
 ### Fixed
 
 - **面板把所有字段标成「当前不生效」。** 依赖上级开关的控件用「上级的值等于 `true`」判断
@@ -711,7 +713,8 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.0...main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.1...main
+[0.4.1]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.1.0...v0.2.0
