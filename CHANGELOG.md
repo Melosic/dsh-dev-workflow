@@ -31,6 +31,9 @@
   一致，改默认值后两份规范会各说各话。`tests/skill-parity.spec.ts` 现在读
   `commitCheck.subjectMaxLength` / `commitCheck.types` / `commitCheck.requireScope`
   并断言双语正文与之相符（反向对照已验证：把 50 改成 72、或多列一个 type，用例即失败）。
+- **`docs/TOKEN-BUDGET.md` 的按需成本表换成探针实测值。** 表里写的 32200/626 与 15200/511
+  是 35 节重写之前的文件大小；现在实测正文为 33744/646 与 15718/522。同时写明这两个数是
+  `SkillProvider.get()` 剥掉 frontmatter 之后的正文，不是文件大小，按字节算会偏大。
 
 ## [0.4.1] - 2026-10-22
 
