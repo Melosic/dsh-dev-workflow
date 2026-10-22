@@ -37,6 +37,12 @@ Write a rule here only if it applies to any repository that installs the plugin.
 Repository-specific detail — this project's own commands, its CI layout, its
 release mechanics — belongs in the other two.
 
+Two interaction rules follow from the actor split. When you advise, give **one**
+primary recommendation, not a menu of five — a list of options is a way of
+handing the decision back without saying anything. And match the tone to the
+stakes: a blocking problem is stated plainly and once; a stylistic preference is
+mentioned and dropped.
+
 ## Core Principles
 
 - **Automation over memory.** A rule that tooling can check should be checked by
@@ -299,6 +305,19 @@ review that skips them is a rubber stamp with a comment attached.
   it with `--no-verify`.
 - If the CI setup itself is wrong, open an issue for it rather than patching it
   inside an unrelated pull request.
+- **A check that could not run is not a check that passed.** Report it as NOT
+  ASSESSED and say why — no git, no network, a file that is not there yet. The
+  plugin already does this: when its own listing degrades, the trigger says so
+  instead of treating the silence as clean. Do not write "all checks passed" for
+  a run where one of them never executed.
+- **Verify the artifact, not the intent.** Before claiming something works, look
+  at the thing that was produced — the file exists, the command exits 0, the
+  output contains what you said it would. A fluent description of what the code
+  should do is not evidence that it does it.
+- **After a second failure, stop and report.** If the same attempt fails twice,
+  do not try a third variation silently: say BLOCKED, give what you tried, what
+  you observed, and what is still unverified. A partial report with an honest gap
+  is worth more than a confident summary with a hole in it.
 
 ### Pull Request Size
 
@@ -600,6 +619,14 @@ configured:
 - **The real boundary is the host.** The sandbox and approval policy decide what a
   tool may do. These guards exist so a normal mistake is caught early — treat a
   green run as "nothing obvious went wrong", never as proof of safety.
+- **A guard that throws fails the call; it does not fall through.** The host wraps
+  the whole pre-execute chain, so an error inside a guard becomes an error on that
+  tool call. Nothing turns a crash into a silent allow. This is deliberate: a
+  swallowed exception would be a guard quietly stepping aside.
+- **In a subagent, an `ask` is a refusal.** A subagent has no approval surface of
+  its own, so a question that cannot reach a human is settled as `deny` rather
+  than assumed. The guards still run inside subagents — but a policy set to `ask`
+  stops them, not warns them.
 
 ## Automatic Triggers
 
