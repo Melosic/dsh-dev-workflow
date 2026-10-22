@@ -632,6 +632,21 @@ window.__ModuleLoader__.load({
     for (const [master, dependents] of Object.entries(DEPENDENTS)) {
       for (const path of dependents) if (!MASTERS.has(path)) MASTERS.set(path, master)
     }
+    /**
+     * The value that means "this master switch is on", per master path.
+     *
+     * A boolean switch is on at `true`, but `mode` is a two-value union whose on
+     * value is the string `on`. Comparing every master against `true` marked
+     * every field under `mode` as not in effect even while the plugin was on.
+     */
+    const MASTER_ON = new Map()
+    for (const spec of FIELDS) {
+      const key = spec.path.join('.')
+      if (DEPENDENTS[key] === undefined) continue
+      // `on` exists only on a switch spec; a boolean switch omits it and is on
+      // at `true`.
+      MASTER_ON.set(key, 'on' in spec && spec.on !== undefined ? spec.on : true)
+    }
 
     const keyOf = (path) => path.join('.')
     const readPath = (value, path) => {
@@ -746,7 +761,8 @@ window.__ModuleLoader__.load({
           live: (path) => {
             const master = MASTERS.get(keyOf(path))
             if (master === undefined) return true
-            return effective(master.split('.')) === true
+            const on = MASTER_ON.get(master)
+            return effective(master.split('.')) === (on === undefined ? true : on)
           },
         }
       }

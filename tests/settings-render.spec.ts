@@ -265,6 +265,31 @@ describe('client.js rendered section', () => {
     expect(inactive('outwardGuard.push')).toBe(false)
   })
 
+  // `mode` is a two-value union, not a boolean: its on value is the string
+  // `on`. A liveness check that compares every master against `true` marks the
+  // whole page as not in effect while the plugin is plainly on, which is how the
+  // panel came to show "not in effect" on every field at once.
+  it('treats a union master switch as on at its own on value', async () => {
+    const { panel, form } = await build({ config: Config({ mode: 'on' }), user: { mode: 'on' } })
+    const inactive = (path: string): boolean =>
+      allNodes(fieldFor(panel, path)).some(
+        (node) =>
+          node.props.className === 'dsw-dev-workflow-badge' && node.props['data-tone'] === 'muted',
+      )
+
+    expect(form.getSnapshot().read(['mode'])).toBe('on')
+    expect(form.getSnapshot().live(['commitCheck', 'enabled'])).toBe(true)
+    expect(inactive('commitCheck.enabled'), 'a field under an on master is live').toBe(false)
+    expect(inactive('gitGuard.enabled')).toBe(false)
+
+    // Turning the master off still marks its dependents, so the union value is
+    // compared against the right target in both directions.
+    clickIn(fieldFor(panel, 'mode'), (node) => node.props.role === 'switch')
+    expect(form.getSnapshot().read(['mode'])).toBe('off')
+    expect(form.getSnapshot().live(['commitCheck', 'enabled'])).toBe(false)
+    expect(inactive('commitCheck.enabled')).toBe(true)
+  })
+
   it('resets every overridden field at once from the footer', async () => {
     const { panel, scope } = await build({
       config: Config({ mode: 'off', gitGuard: { forcePush: 'deny' } }),
