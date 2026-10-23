@@ -507,6 +507,31 @@ look when a new version appears. They are not a second document to write.
   changelog.
 - Do not restate commit messages, and do not list internal refactors.
 
+If the project writes for readers in more than one language, put both on the
+same page rather than picking one:
+
+```markdown
+[中文](#cn-v1.2.3) | [English](#en-v1.2.3)
+
+<h3 id="cn-v1.2.3">中文标题</h3>
+
+- 条目（与 changelog 一致）
+
+<h3 id="en-v1.2.3">English heading</h3>
+
+- the same entry, translated
+
+Full Changelog: [v1.2.2...v1.2.3](https://.../compare/v1.2.2...v1.2.3)
+```
+
+The second language is a translation of the same entries, never a second summary
+of them: if the two halves disagree, the changelog is right and the release page
+is wrong. Keep one heading per language — a `###` sub-heading under each is fine,
+a second copy of the whole page is not. This costs a translation per release and
+buys a page that a reader who does not read the changelog's language can still
+use; skip it if the project genuinely has one audience, and say so rather than
+leaving one half empty.
+
 ### Deprecation and Removal
 
 - To deprecate something, add an entry under `Deprecated` in `[Unreleased]`
