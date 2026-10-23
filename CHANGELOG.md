@@ -18,8 +18,10 @@
   把插件限定在项目根带 `.dsh/dev-workflow.yml` 的仓库，其余仓库里技能目录行不出现、监听器
   原样放行。默认 `all`，现有安装行为不变。
 - **仓库级 PR 模板与 bug 报告表单。** 模板分七节，七节全部由检查读取：缺一段或段内为空都在
-  `gh pr create` 之前拦下；「无」或一句话是完整答案。`.github/ISSUE_TEMPLATE/bug-report.yml`
-  强制填 DSH 版本与 `/dev-workflow status` 输出——「插件没反应」的报障多数是配置值或版本差异。
+  `gh pr create` 之前拦下；「无」或一句话是完整答案。另有一节 `Where to look first` 只给人看、
+  不进检查，小改动可以整段删掉。勾选框默认留空，不适用的行要删掉并说明，而不是勾上。
+  `.github/ISSUE_TEMPLATE/bug-report.yml` 强制填 DSH 版本与 `/dev-workflow status` 输出——
+  「插件没反应」的报障多数是配置值或版本差异。
 - **PR 段落名可配置（`prSections`）。** 段落名属于仓库模板，不属于工作流；中文模板的仓库
   此前只能整体关掉触发器。默认是与模板一致的七节，只在配置文件里声明。
 - **发版检查的三条约定可配置。** `releaseCheck.publishers`（哪些包管理器的 publish 算发版，
