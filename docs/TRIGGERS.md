@@ -163,8 +163,8 @@ git 之后**：它管的也是 git（外加 `gh` 与包管理器），但拦的�
 | 规则 | 判定 |
 | --- | --- |
 | 标题 | 复用提交信息的判定函数（`evaluateMessage`），也就是**同一套配置、同一套规则**。**squash merge 后 PR 标题就是 main 上的提交信息**，因此它必须满足与提交信息完全相同的规范；`commitCheck.enabled` / `onFailure` 对标题同样生效，一处关掉或降级在三个入口一致 |
-| 描述段落 | PR 模板要求的段落（默认 `## What` / `## Why` / `## How to verify`，由 `prSections` 按仓库模板改写），**缺段或段内为空都算缺失**——一个只有标题的空盒子并不比没有好 |
-| 检查清单 | 在模板要求的那三段**之内**遗留的 `- [ ]` 未勾选行逐项计数（描述整体为空时这条不触发，只提示） |
+| 描述段落 | PR 模板要求的段落（默认 `## What` / `## Why` / `## How to verify` / `## Type of change` / `## Non-goals` / `## Risk and rollback` / `## Checklist`，由 `prSections` 按仓库模板改写），**缺段或段内为空都算缺失**——一个只有标题的空盒子并不比没有好 |
+| 检查清单 | 在模板要求的那些段**之内**遗留的 `- [ ]` 未勾选行逐项计数（描述整体为空时这条不触发，只提示） |
 | 关联 Issue | 标题与描述里没有 `#<数字>` 时**只警告**：本地无法判断是否真的存在对应 Issue，不该因此阻塞 |
 
 `.github/pull_request_template.md` 提供这三节的空壳，提示文字写在 HTML 注释里。判定前先剥掉
@@ -223,9 +223,9 @@ HTML 注释：GitHub 会把模板预填进描述框，一个没动过的 PR 到�
 | SemVer | 版本号须匹配 `MAJOR.MINOR.PATCH`，可带 `-rc.1` 之类的预发布后缀 | `releaseCheck.semver` 关闭即跳过；模式本身是文件级设置 `releaseCheck.versionPattern` |
 | tag 与 manifest 一致 | 去掉 `v` 前缀后，tag 名与 `package.json` 的 `version` 必须相同：两者不一致意味着「发布出来的版本」和「tag 名」不是同一个 | 同上，随版本规则一起开关 |
 | 预发布不推 latest | 版本带预发布后缀而 dist-tag 是 `latest` → 阻塞，提示改用 `--tag next` | `releaseCheck.prereleaseTag` |
-| CHANGELOG 有 `[Unreleased]` | 没有 `## [Unreleased]` 段 → 阻塞（Keep a Changelog 要求它常驻顶部） | `releaseCheck.changelog` |
-| CHANGELOG 分类合法 | `[Unreleased]` 段里的 `###` 标题须是 Added / Changed / Deprecated / Removed / Fixed / Security 之一 | `releaseCheck.changelogCategories` |
-| `[Unreleased]` 不为空 | **`[Unreleased]` 与 `[<version>]` 两段都为空**才算空：发布流程的第二步就是把条目从前者移入后者，所以 tag 创建的那一刻，合法状态可能落在任何一段里 | 同 `changelog` |
+| CHANGELOG 有待发布段 | 没有这一段 → 阻塞（Keep a Changelog 要求它常驻顶部；段名默认 `[Unreleased]`） | `releaseCheck.changelog`，段名见 `releaseCheck.unreleased` |
+| CHANGELOG 分类合法 | 待发布段里的 `###` 标题须在允许的分类里，默认是 Added / Changed / Deprecated / Removed / Fixed / Security | `releaseCheck.changelogCategories`，名单见 `releaseCheck.categories` |
+| 待发布段不为空 | **待发布段与 `[<version>]` 两段都为空**才算空：发布流程的第二步就是把条目从前者移入后者，所以 tag 创建的那一刻，合法状态可能落在任何一段里 | 同 `changelog` |
 
 **版本条目按两种写法查。** `## [1.0.0]`、`## 1.0.0` 与 `## v1.0.0 - 2026-01-01` 都是常见写法，
 查表时带上/去掉 `v` 前缀都试一遍——不这么做，写 `## v1.0.0` 的仓库会在每次 tag 时被告知
@@ -234,6 +234,9 @@ HTML 注释：GitHub 会把模板预填进描述框，一个没动过的 PR 到�
 版本号取自 tag（无 tag 时才退回 `package.json`）。`package.json` 与 CHANGELOG 在
 **判定时刻**从会话 cwd 读取；读不到就不跑对应规则，只跑能跑的——门禁不会因此变成空操作。
 **规则全部可在配置里单独关掉**（`releaseCheck.*`，默认沿用上表），这样想放宽一条不必整关检查。
+换名字比关规则更常见：中文 CHANGELOG 的 `## 未发布`、`### 修复` 用 `releaseCheck.unreleased`
+与 `releaseCheck.categories` 对齐即可；用 `cargo publish` 这类非 JS 包管理器发版的仓库，
+把程序名加进 `releaseCheck.publishers`，发版检查与对外动作守卫才会看见它。
 
 ## 守卫危险 git 命令
 

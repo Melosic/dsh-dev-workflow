@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
-import { Config } from '../src/config.js'
+import { Config, PR_SECTIONS } from '../src/config.js'
 import { createTranslator } from '../src/i18n.js'
 import { createWorkflowState } from '../src/state.js'
 import {
@@ -29,7 +29,27 @@ const GOOD_BODY = [
   '## How to verify',
   '',
   'Run `/dev-workflow status --json` and check that it parses.',
+  '',
+  '## Type of change',
+  '',
+  '- Feature: behaviour that did not exist now does.',
+  '',
+  '## Non-goals',
+  '',
+  'Changing the human-readable output.',
+  '',
+  '## Risk and rollback',
+  '',
+  'None; revert the commit.',
+  '',
+  '## Checklist',
+  '',
+  '- [x] One concern in this pull request.',
+  '- [x] The tests fail without the change.',
 ].join('\n')
+
+/** The sections the default configuration requires, in template order. */
+const SECTIONS = PR_SECTIONS.join(', ')
 
 /**
  * Build the listener the way the runtime does.
@@ -153,7 +173,7 @@ describe('src/triggers/pre-pr.ts', () => {
       'gh pr create --title "feat(cli): add a flag" --body "Adds a flag."',
     )
     expect(decision.kind).toBe('ask')
-    expect((decision as { reason: string }).reason).toContain('What, Why, How to verify')
+    expect((decision as { reason: string }).reason).toContain(SECTIONS)
   })
 
   it('asks about a checklist left unticked', async () => {
@@ -194,9 +214,7 @@ describe('src/triggers/pre-pr.ts', () => {
     ].join('\n')
     const outcome = evaluatePullRequest({ body }, config, t)
     expect(outcome.ok).toBe(false)
-    expect(outcome.errors).toContain(
-      t('trigger.pre_pr.error.description', { sections: 'What, Why, How to verify' }),
-    )
+    expect(outcome.errors).toContain(t('trigger.pre_pr.error.description', { sections: SECTIONS }))
   })
 
   it('does not count a checkbox inside a comment', () => {
@@ -230,6 +248,18 @@ describe('src/triggers/pre-pr.ts', () => {
       '## How to verify',
       '<!-- What to run? -->',
       'Run it.',
+      '## Type of change',
+      '<!-- Which one? -->',
+      'Feature.',
+      '## Non-goals',
+      '<!-- What is out of scope? -->',
+      'Nothing.',
+      '## Risk and rollback',
+      '<!-- What could break? -->',
+      'None.',
+      '## Checklist',
+      '<!-- Tick what applies. -->',
+      '- [x] One concern.',
     ].join('\n')
     const decision = await fire(
       listener,
@@ -336,7 +366,7 @@ describe('src/triggers/pre-pr.ts', () => {
       cwd: directory,
     })
     expect(thin.kind).toBe('ask')
-    expect((thin as { reason: string }).reason).toContain('What, Why, How to verify')
+    expect((thin as { reason: string }).reason).toContain(SECTIONS)
   })
 
   it('renders the approval prompt in both client languages', async () => {

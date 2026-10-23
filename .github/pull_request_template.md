@@ -1,12 +1,12 @@
 <!--
-The first three headings are read by the pre-pull-request check: a missing or
-empty one is reported before `gh pr create` runs. Keep those three names and
-their `##` level exactly as they are — the text underneath may be in any
-language.
+All seven headings below are read by the pre-pull-request check: a missing or
+empty one is reported before `gh pr create` runs. Keep the names and their `##`
+level exactly as they are — the text underneath may be in any language.
 
-The remaining sections are for the reader. They are not checked, so deleting one
-costs nothing but the information; leaving it empty tells the reviewer you had
-nothing to say about it.
+"None", "not applicable", or a single sentence is a complete answer for any of
+them. What is not accepted is deleting the heading or leaving it blank: those
+are the two states where the reviewer cannot tell "nothing to say" from "not
+considered".
 -->
 
 ## What

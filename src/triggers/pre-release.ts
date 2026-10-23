@@ -3,7 +3,7 @@ import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { CheckResult } from '../tools/result.js'
-import { SEMVER_PATTERN } from '../config.js'
+import { CHANGELOG_CATEGORIES, PUBLISHERS, SEMVER_PATTERN, UNRELEASED } from '../config.js'
 import { fingerprint, summarize } from '../checks.js'
 import {
   commandOf,
@@ -26,18 +26,6 @@ import { hasShortOption } from '../guard/shared.js'
 // so the action is recognised by the shell command that performs it (`git tag`,
 // `npm publish`).
 
-/** Package managers whose `publish` subcommand reaches the registry. */
-const PACKAGE_MANAGERS = new Set([
-  'npm',
-  'npm.exe',
-  'pnpm',
-  'pnpm.exe',
-  'yarn',
-  'yarn.exe',
-  'bun',
-  'bun.exe',
-])
-
 /** `git tag` options that take a separate value, so it is not the tag name. */
 const TAG_VALUE_OPTIONS = new Set(['-m', '--message', '-F', '--file', '-u', '--local-user'])
 
@@ -51,7 +39,10 @@ const SEMVER = new RegExp(SEMVER_PATTERN)
 const PRERELEASE = /^\d+\.\d+\.\d+-/
 
 /** The categories Keep a Changelog defines, lowercased. */
-const CATEGORIES = new Set(['added', 'changed', 'deprecated', 'removed', 'fixed', 'security'])
+const CATEGORIES = new Set<string>(CHANGELOG_CATEGORIES)
+
+/** Publishers a caller that states none gets: the JavaScript package managers. */
+const PACKAGE_MANAGERS: ReadonlySet<string> = new Set<string>(PUBLISHERS)
 
 /** Which release rules apply, and how a version is written. */
 export interface ReleaseRules {
@@ -61,8 +52,14 @@ export interface ReleaseRules {
   readonly versioned: boolean
   /** Require the changelog to carry the release. */
   readonly changelog: boolean
-  /** Restrict `###` headings to {@link CATEGORIES}. */
+  /** Restrict `###` headings to {@link categories}. */
   readonly changelogCategories: boolean
+  /** The `###` headings a section may use, lowercased. */
+  readonly categories: ReadonlySet<string>
+  /** The `##` heading a release is cut from, lowercased and unbracketed for lookup. */
+  readonly unreleased: string
+  /** The same heading as the repository writes it, for messages. */
+  readonly unreleasedName: string
   /** Block a pre-release published to `latest`. */
   readonly prereleaseTag: boolean
 }
@@ -73,6 +70,9 @@ export const DEFAULT_RELEASE_RULES: ReleaseRules = {
   versioned: true,
   changelog: true,
   changelogCategories: true,
+  categories: CATEGORIES,
+  unreleased: UNRELEASED.toLowerCase(),
+  unreleasedName: UNRELEASED,
   prereleaseTag: true,
 }
 
@@ -95,6 +95,7 @@ export function releaseRules(config: Config): ReleaseRules {
   } catch {
     version = SEMVER
   }
+  const name = config.releaseCheck.unreleased.get()
   return {
     version,
     // Switching the rule off accepts every version rather than deleting the
@@ -103,6 +104,11 @@ export function releaseRules(config: Config): ReleaseRules {
     versioned: config.releaseCheck.semver.get(),
     changelog: config.releaseCheck.changelog.get(),
     changelogCategories: config.releaseCheck.changelogCategories.get(),
+    categories: new Set(
+      config.releaseCheck.categories.get().map((category) => category.toLowerCase()),
+    ),
+    unreleased: name.toLowerCase().replace(/^\[|\]$/g, ''),
+    unreleasedName: name,
     prereleaseTag: config.releaseCheck.prereleaseTag.get(),
   }
 }
@@ -274,9 +280,13 @@ function versionBumpOf(args: readonly string[]): string | undefined {
  * same registry writes through their own tooling, and guessing at their output
  * would be worse than saying plainly that they are not covered.
  * @param command - a shell command line, as a tool would receive it.
+ * @param publishers - programs whose `publish` subcommand uploads to a registry.
  * @returns what the line does, or `undefined` when it releases nothing.
  */
-export function detectRelease(command: string): ReleaseCommand | undefined {
+export function detectRelease(
+  command: string,
+  publishers: ReadonlySet<string> = PACKAGE_MANAGERS,
+): ReleaseCommand | undefined {
   let tag: string | undefined
   let tagLiteral = true
   let publishTag: string | undefined
@@ -300,7 +310,7 @@ export function detectRelease(command: string): ReleaseCommand | undefined {
 
   for (const { program, args } of git) {
     if (program === 'git' || program === 'git.exe') continue
-    if (!PACKAGE_MANAGERS.has(program)) continue
+    if (!publishers.has(program)) continue
     const wordsAfter = args.map((word) => word.value)
 
     // pnpm and npm both accept global options before the subcommand
@@ -467,13 +477,13 @@ export function evaluateRelease(
 
   if (rules.changelog && input.changelog !== undefined) {
     const released = sections(input.changelog)
-    const unreleased = released.get('unreleased')
+    const unreleased = released.get(rules.unreleased)
     if (unreleased === undefined) {
-      errors.push(t('trigger.pre_release.error.changelog'))
+      errors.push(t('trigger.pre_release.error.changelog', { section: rules.unreleasedName }))
     } else {
       if (rules.changelogCategories) {
         for (const category of categoryHeadings(unreleased)) {
-          if (!CATEGORIES.has(category.toLowerCase())) {
+          if (!rules.categories.has(category.toLowerCase())) {
             errors.push(t('trigger.pre_release.error.changelog_category', { section: category }))
           }
         }
@@ -482,7 +492,10 @@ export function evaluateRelease(
       const empty = unreleased.trim().length === 0 && (recorded ?? '').trim().length === 0
       if (empty) {
         errors.push(
-          t('trigger.pre_release.error.changelog_empty', { version: version ?? 'Unreleased' }),
+          t('trigger.pre_release.error.changelog_empty', {
+            version: version ?? rules.unreleasedName,
+            section: rules.unreleasedName,
+          }),
         )
       }
     }
@@ -511,12 +524,14 @@ export function createPreReleaseTrigger(
     if (agent === undefined) return downstream
     const command = commandOf(exec.arguments)
     if (command === undefined) return downstream
-    const release = detectRelease(command)
+    const config = options.config()
+    // The publishers are configuration, so the recogniser is told which
+    // programs to look for rather than assuming the JavaScript ones.
+    const release = detectRelease(command, new Set(config.releaseCheck.publishers.get()))
     if (release === undefined) return downstream
     if (exec.signal.aborted) return { kind: 'cancel' }
 
     const t = options.t()
-    const config = options.config()
     const rules = releaseRules(config)
     const cwd = agent.session.header.cwd ?? process.cwd()
     const sessionId = String(agent.session.id)

@@ -60,7 +60,7 @@ export function detectOutward(command: string, config: Config): GuardHit | undef
   // One recogniser answers both questions: it returns the tag only when the line
   // creates one, and the dist-tag only when the line really publishes (it
   // deliberately reports nothing for `--dry-run`).
-  const release = detectRelease(command)
+  const release = detectRelease(command, new Set(config.releaseCheck.publishers.get()))
   if (release?.tag !== undefined) {
     hits.push({ reason: 'security.guard.outward_tag', action: guard.tag.get() })
   }

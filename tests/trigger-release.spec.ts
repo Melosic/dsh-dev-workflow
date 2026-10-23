@@ -10,6 +10,7 @@ import {
   createPreReleaseTrigger,
   detectRelease,
   evaluateRelease,
+  releaseRules,
 } from '../src/triggers/pre-release.js'
 import { askOf, makeExec } from './harness.js'
 
@@ -152,7 +153,7 @@ describe('src/triggers/pre-release.ts', () => {
 
     expect(decision.kind).toBe('ask')
     expect((decision as { reason: string }).reason).toContain(
-      t('trigger.pre_release.error.changelog_empty', { version: '0.2.0' }),
+      t('trigger.pre_release.error.changelog_empty', { version: '0.2.0', section: 'Unreleased' }),
     )
     expect(state.lastOutcome()).toMatchObject({ kind: 'release', ok: false })
   })
@@ -208,7 +209,9 @@ describe('src/triggers/pre-release.ts', () => {
 
   it('asks when the changelog keeps no unreleased section at all', () => {
     const outcome = evaluateRelease({ version: '0.2.0', changelog: '# Changelog\n' }, t)
-    expect(outcome.errors).toContain(t('trigger.pre_release.error.changelog'))
+    expect(outcome.errors).toContain(
+      t('trigger.pre_release.error.changelog', { section: 'Unreleased' }),
+    )
   })
 
   it('passes a compliant release without a word', async () => {
@@ -325,6 +328,44 @@ describe('src/triggers/pre-release.ts', () => {
 
     expect((await fire(listener, command, { cwd: directory, sessionId: 's1' })).kind).toBe('ask')
     expect((await fire(listener, command, { cwd: directory, sessionId: 's2' })).kind).toBe('ask')
+  })
+
+  it('reads the changelog section the repository configured', () => {
+    // A changelog written in another language names its section differently;
+    // the default `[Unreleased]` lookup would report every release as missing it.
+    const chinese = ['# Changelog', '', '## [未发布]', '', '### Fixed', '', '- One problem.'].join(
+      '\n',
+    )
+    const configured = Config({ releaseCheck: { unreleased: '未发布' } })
+    const rules = releaseRules(configured)
+
+    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t).errors).toContain(
+      t('trigger.pre_release.error.changelog', { section: 'Unreleased' }),
+    )
+    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t, rules).errors).toEqual([])
+  })
+
+  it('accepts the categories the repository configured', () => {
+    // `### 修复` is the Chinese spelling of Fixed; a repository keeping its own
+    // vocabulary lists it instead of switching the category rule off.
+    const chinese = ['# Changelog', '', '## [Unreleased]', '', '### 修复', '', '- 一个问题。'].join(
+      '\n',
+    )
+    const configured = Config({ releaseCheck: { categories: ['修复', '新增'] } })
+    const rules = releaseRules(configured)
+
+    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t).ok).toBe(false)
+    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t, rules).errors).toEqual([])
+  })
+
+  it('recognises the publishers the repository configured', () => {
+    // `cargo publish` is a release the default list has never heard of.
+    const publishers = new Set(
+      Config({ releaseCheck: { publishers: ['cargo'] } }).releaseCheck.publishers.get(),
+    )
+
+    expect(detectRelease('cargo publish')).toBeUndefined()
+    expect(detectRelease('cargo publish', publishers)).toEqual({ publishTag: 'latest' })
   })
 
   it('checks a release even where there is no changelog to read', async () => {
