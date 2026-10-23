@@ -627,6 +627,14 @@ configured:
   its own, so a question that cannot reach a human is settled as `deny` rather
   than assumed. The guards still run inside subagents — but a policy set to `ask`
   stops them, not warns them.
+- **Which repositories are checked is a setting, not a property of the machine.**
+  DSH enables a plugin per profile, and a profile is per machine — but these rules
+  belong to a repository. With `scope: 'marked'`, only a repository whose project
+  root carries `.dsh/dev-workflow.yml` is checked; everywhere else the skill line
+  is absent and every guard steps aside, so nothing is resident and nothing
+  interrupts. The default is `all`, which checks every working directory as
+  before. If a repository has no marker and you are unsure whether the rules
+  apply, ask before assuming they do — silence from the guards is not agreement.
 
 ## Automatic Triggers
 

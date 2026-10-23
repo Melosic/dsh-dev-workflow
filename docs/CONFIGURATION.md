@@ -19,6 +19,7 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
 | `releaseCheck` | 对象 | 见下 | 发版前检查的四条规则开关与版本号模式 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
+| `scope` | `'all' \| 'marked'` | `'all'` | 按仓库生效。`marked` 只检查项目根目录带 `.dsh/dev-workflow.yml` 的仓库，见下 |
 | `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 本插件自身文案的语言（**不是**设置页的语言，也**不**决定模型怎么写提交信息） |
 | `enableOwnTrigger` | `boolean` | `true` | 是否运行自带的三个约定检查（提交前、PR 前、发版前） |
 | `gitGuard` | 对象 | 见下 | 危险 git 操作的策略 |
@@ -27,6 +28,23 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `fileGuard` | 对象 | 见下 | 不许读取的敏感路径 |
 | `secretGuard` | 对象 | 见下 | 凭据泄漏预防 |
 | `audit` | 对象 | 见下 | 审计记录的开关与路径 |
+
+### `scope: 'marked'`：按仓库生效
+
+DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装进一个 profile，这台机器上的每个
+工作目录都会用上它。工作流规则却不是机器的属性，而是仓库的属性——同一个 profile 里，有的仓库
+想要这套门禁，有的仓库不想要。
+
+`scope: 'marked'` 就是给这件事的一个开关：只有**项目根目录**带 `.dsh/dev-workflow.yml` 的仓库
+才被检查，其余仓库里触发器、五个守卫、技能目录行全部安静，常驻成本为零。标记文件只看在不在，
+内容不解析——一个不可能被配错的标记比一个能配错的更有价值。
+
+项目根目录取的是「向上最近的 `.git`」，与 DSH 自己对项目根的定义一致，所以在仓库子目录里发起
+调用也能命中同一个根。目录的向上查找会缓存，标记文件的存在性不缓存：会话进行中新建或删掉标记，
+下一次工具调用就生效，不需要重启。
+
+默认是 `all`。反过来把 `marked` 设成默认，等于让所有还没建标记的仓库静默失去检查——那是把安全
+放松伪装成默认值。
 
 ### `locale: 'auto'` 的解析时机
 
@@ -348,6 +366,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 想要的行为 | 配置 |
 | --- | --- |
 | 完全关掉插件（零常驻、零介入） | `mode: 'off'` |
+| 只在部分仓库生效（零常驻、零介入） | `scope: 'marked'`，然后在要检查的仓库根目录建 `.dsh/dev-workflow.yml` |
 | 只关掉自带检查（交给 husky / commitlint） | `enableOwnTrigger: false`（管提交 / PR / 发版三个触发器） |
 | 只关掉提交信息检查 | `commitCheck.enabled: false`（PR 标题同样不再按提交规范判） |
 | 只关掉文档同步检查 | `docsCheck.enabled: false` |
@@ -418,11 +437,11 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 [权限策略为 `never` 时会发生什么](#权限策略为-never-时会发生什么)）。现在撤销也只要一步：
 把那个档位选回 `ask` 再保存，profile 里那一项就被删掉了。
 
-### 面板可以改的（36 项）
+### 面板可以改的（37 项）
 
 | 分组 | 项目 |
 | --- | --- |
-| 工作流模式 | `mode`、`locale`、`enableOwnTrigger` |
+| 工作流模式 | `mode`、`scope`、`locale`、`enableOwnTrigger` |
 | 提交规范 | `commitCheck.enabled`、`onFailure`、`types`、`requireScope`、`subjectMaxLength` |
 | 文档同步 | `docsCheck.enabled`、`rules.requireChangelogOnFeat`、`docsCheck.requireReadmeOnConfig`、`releaseCheck.semver`、`releaseCheck.changelog`、`releaseCheck.changelogCategories`、`releaseCheck.prereleaseTag` |
 | Git 安全 | `gitGuard.enabled`、八个操作档位、`gitGuard.rememberApproved` |

@@ -167,6 +167,19 @@ export const Config = z.object({
     .default({}),
   /** Master switch. `off` registers nothing, so the plugin costs no tokens. */
   mode: z.union(['on', 'off']).default('on').volatile(),
+  /**
+   * Which working directories the plugin applies to.
+   *
+   * `all` is what a profile-wide install has always done: every working
+   * directory is checked. `marked` restricts it to a repository whose project
+   * root carries `.dsh/dev-workflow.yml`, so one profile can serve repositories
+   * that want the rules and repositories that do not.
+   *
+   * The default stays `all`: making `marked` the default would silently stop
+   * checking every repository that has not created a marker yet, which is a
+   * security relaxation disguised as a default.
+   */
+  scope: z.union(['all', 'marked']).default('all').volatile(),
   /** Dictionary to translate user-visible text with. `auto` follows the runtime locale. */
   locale: z.union(['auto', 'en-US', 'zh-CN']).default('auto').volatile(),
   /**

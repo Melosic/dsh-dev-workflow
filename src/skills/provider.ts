@@ -49,11 +49,15 @@ async function readBody(url: URL): Promise<string> {
  * @param options.currentLocale - read on every call, so a locale change applies
  *   to the next load without re-registering the provider.
  * @param options.t - translator for the catalog description.
+ * @param options.applies - whether the plugin applies to a working directory.
+ *   The catalog line is resident cost, so a repository that did not opt in must
+ *   not be paying for it.
  * @returns a provider serving exactly one skill in one language at a time.
  */
 export function createSkillProvider(options: {
   currentLocale: () => Locale
   t: Translate
+  applies: (cwd: string | undefined) => boolean
 }): SkillProvider {
   const resourceBase = {
     kind: 'directory' as const,
@@ -78,8 +82,16 @@ export function createSkillProvider(options: {
 
   return {
     name: PROVIDER_NAME,
-    list: async () => [candidate()],
-    get: async (): Promise<SkillDefinition | undefined> => {
+    // `cwd` is the working directory the registry is building this catalog for,
+    // so the answer is per repository rather than per profile. An absent `cwd`
+    // means the registry is not asking on behalf of a directory, and the plugin
+    // answers the way it always did.
+    list: async (lookup) => (options.applies(lookup.cwd) ? [candidate()] : []),
+    get: async (_candidate, lookup): Promise<SkillDefinition | undefined> => {
+      // A catalog the list already filtered out should never be asked for, but
+      // a stale candidate would otherwise load the whole specification into a
+      // repository that opted out.
+      if (!options.applies(lookup.cwd)) return undefined
       const locale = options.currentLocale()
       const entry = candidate()
       let content = bodies.get(locale)
