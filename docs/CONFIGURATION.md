@@ -16,9 +16,9 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `docs` | 对象 | 见下 | 文档相关路径 |
 | `rules` | 对象 | 见下 | 机械约定 |
 | `commitCheck` | 对象 | 见下 | 提交信息检查的开关、档位与类型清单 |
-| `prSections` | `string[]` | `['What', 'Why', 'How to verify']` | PR 描述必须填的段落名，按仓库模板改写；只能在配置文件里声明 |
+| `prSections` | `string[]` | `['What', 'Why', 'How to verify', 'Type of change', 'Non-goals', 'Risk and rollback', 'Checklist']` | PR 描述必须填的段落名，按仓库模板改写；只能在配置文件里声明 |
 | `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
-| `releaseCheck` | 对象 | 见下 | 发版前检查的四条规则开关与版本号模式 |
+| `releaseCheck` | 对象 | 见下 | 发版前检查的规则开关、版本号模式，以及分类名 / 待发布段名 / 发版程序 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
 | `scope` | `'all' \| 'marked'` | `'all'` | 按仓库生效。`marked` 只检查项目根目录带 `.dsh/dev-workflow.yml` 的仓库，见下 |
 | `locale` | `'auto' \| 'en-US' \| 'zh-CN'` | `'auto'` | 本插件自身文案的语言（**不是**设置页的语言，也**不**决定模型怎么写提交信息） |
@@ -117,7 +117,7 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
 
 | 字段 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `prSections` | `string[]` | `['What', 'Why', 'How to verify']` | PR 描述必须填的段落名，缺一段或段内为空都阻塞 |
+| `prSections` | `string[]` | `['What', 'Why', 'How to verify', 'Type of change', 'Non-goals', 'Risk and rollback', 'Checklist']` | PR 描述必须填的段落名，缺一段或段内为空都阻塞 |
 
 段落名属于**仓库模板**，不属于工作流本身：一个中文模板、或一个把段落叫 `背景` / `改动` / `验证`
 的仓库，用默认值就会被每个 PR 告知「缺少模板要求的段落」，而它自己的模板从没要求过那三段。
@@ -133,6 +133,40 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
     prSections: ['背景', '改动', '验证']
 ```
 
+
+## `releaseCheck`
+
+| 字段 | 类型 | 默认值 | 作用 |
+| --- | --- | --- | --- |
+| `semver` | `boolean` | `true` | 版本号必须是 `MAJOR.MINOR.PATCH`（可带预发布后缀） |
+| `changelog` | `boolean` | `true` | CHANGELOG 必须承载这次发版，或有非空的待发布段 |
+| `changelogCategories` | `boolean` | `true` | `###` 标题必须落在 `categories` 列出的分类里 |
+| `categories` | `string[]` | `['added','changed','deprecated','removed','fixed','security']` | 允许的 `###` 分类名，大小写不敏感；只能在文件里声明 |
+| `unreleased` | `string` | `'Unreleased'` | 发版所切的那一段的标题，大小写不敏感、带不带方括号都认；只能在文件里声明 |
+| `publishers` | `string[]` | `['npm','pnpm','yarn','bun']`（含 `.exe`） | 哪些程序的 `publish` 子命令算发版；只能在文件里声明 |
+| `prereleaseTag` | `boolean` | `true` | 预发布版本不许发到 `latest` |
+| `versionPattern` | `string` | 语义化版本正则 | 版本号的完整匹配正则；只能在文件里声明 |
+
+后四个字段回答的是同一类问题：**这套发版规则假定的是 Keep a Changelog + JavaScript 包管理器，
+而你的仓库不一定如此**。一个用 `## 未发布` 的中文 CHANGELOG、一个用 `### 修复` 做分类的仓库、
+一个用 `cargo publish` 发版的 Rust 项目，都不该为了躲开误报而把整条规则关掉——关掉规则就连真正
+的问题一起放过了。
+
+`unreleased` 与 `categories` 都只做**名字**上的对齐，判定逻辑不变：仍然是「这一段在不在」、
+「段内是不是空的」、「`###` 标题在不在名单里」。
+
+`publishers` 同时被发版前检查和对外动作守卫读取：加一个 `cargo`，`cargo publish` 才会被问
+「版本号对不对、CHANGELOG 写了没」。
+
+```yaml
+# ~/.dsh/profiles/<name>/cordis.patch.yml
+- id: dsh-dev-workflow
+  config:
+    releaseCheck:
+      unreleased: 未发布
+      categories: ['新增', '修复', '变更']
+      publishers: ['cargo']
+```
 
 ### `requireChangelogOnFeat` 与文档检查的分工
 
@@ -393,6 +427,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 只关掉提交信息检查 | `commitCheck.enabled: false`（PR 标题同样不再按提交规范判） |
 | 只关掉文档同步检查 | `docsCheck.enabled: false` |
 | 只关掉发版检查的某一条规则 | `releaseCheck.semver` / `changelog` / `changelogCategories` / `prereleaseTag` |
+| 换一套分类名 / 待发布段名 / 发版程序 | `releaseCheck.categories` / `unreleased` / `publishers` |
 | 放宽版本号格式 | `releaseCheck.versionPattern` 改成你要的正则 |
 | 只关掉危险 git 命令守卫 | `gitGuard.enabled: false` |
 | 只关掉对外动作守卫 | `outwardGuard.enabled: false` |
@@ -478,15 +513,16 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 每个守卫的**总开关都带一句后果说明**（关掉它之后哪一类动作不再被拦），关掉某个总开关时
 它下面的分项会同时标出「当前不生效」，避免「控件还亮着 = 规则还生效」的误读。
 
-### 只能在文件里改的（10 项）
+### 只能在文件里改的（13 项）
 
 面板的**高级**区（默认折叠、**只读**）展示其中 7 项，并提供一个打开当前 profile
 `cordis.patch.yml` 的按钮：`codePaths`、`docs.docsDir`、`docs.changelog`、
 `docs.exclude`、`releaseCheck.versionPattern`、`docs.mirrors`、`audit.path`。
 
-另外 3 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）、
-`fileGuard.noRead`（不许读取的敏感路径清单）、`prSections`（PR 模板的段落名）。一份清单不是
-开关或枚举，面板给不了比编辑文件更好的体验。
+另外 6 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）、
+`fileGuard.noRead`（不许读取的敏感路径清单）、`prSections`（PR 模板的段落名），以及
+`releaseCheck` 下的 `categories` / `unreleased` / `publishers`（分类名、待发布段名、哪些程序
+算发版）。一份清单或一个名字不是开关或枚举，面板给不了比编辑文件更好的体验。
 
 ### 面板不做什么
 

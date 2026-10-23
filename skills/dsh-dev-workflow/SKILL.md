@@ -268,7 +268,11 @@ not permission to skip the asking.
 - [ ] Documentation touched by the change is updated in the same commit or PR.
 - [ ] `CHANGELOG.md` carries an `[Unreleased]` entry for the change.
 
-Pull request description template. These are the default section names; the gate
+Pull request description template. Every heading below must carry something —
+the gate reports a missing or empty one before `gh pr create` runs. "None" or one
+sentence is a complete answer where nothing applies; what is not accepted is
+deleting a heading or leaving it blank, because then the reviewer cannot tell
+"nothing to say" from "not considered". These are the default names and the gate
 matches them literally, so a repository that renames them in its own template
 lists the new names in `prSections`. The text under each heading may be in any
 language:
@@ -285,6 +289,23 @@ Scripts cannot parse the current prose output. Closes #7.
 ## How to verify
 
 Run `/dev-workflow status --json` and check that the output parses.
+
+## Type of change
+
+Feature: behaviour that did not exist now does.
+
+## Non-goals
+
+Changing the human-readable output.
+
+## Risk and rollback
+
+None; revert the commit.
+
+## Checklist
+
+- [x] One concern in this pull request.
+- [x] The tests fail without the change.
 ```
 
 A pull request is mergeable only when CI is green, the branch is up to date with
@@ -521,6 +542,12 @@ upgrade: *what changed for me?* It is not a summary of the commit log.
 - One entry per change.
 - Say what it means for the user, not what the code does.
 - For a breaking change, give the migration path.
+- Keep an entry to one or two sentences. If it needs three or more, it is either
+  several changes that want separate entries, or an explanation of *how* the fix
+  works — and that belongs in the commit message and the pull request, which is
+  where someone debugging it will look. A changelog long enough to be skimmed is
+  a changelog nobody reads; the release notes are copied from it verbatim, so
+  this is also what decides how long the release page is.
 
 ### Examples
 
@@ -674,7 +701,8 @@ configured:
   files took their documentation with them.
 - **Before a pull request** — check the title with the commit-message rules (under
   squash merge it becomes the commit on the main branch) and the description
-  against the template's sections — `What` / `Why` / `How to verify` unless
+  against the template's sections — `What` / `Why` / `How to verify` /
+  `Type of change` / `Non-goals` / `Risk and rollback` / `Checklist` unless
   `prSections` says otherwise.
 - **Before a release** — check the version, the tag against `package.json`, and
   whether the changelog carries the release.

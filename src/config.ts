@@ -31,11 +31,58 @@ export const COMMIT_TYPES = [
 export const SUBJECT_MAX_LENGTH = 50
 
 /**
- * Sections the specification's pull request template asks for. A repository
- * whose own template names them differently overrides this; the names are a
- * property of the template, not of the workflow.
+ * Sections the specification's pull request template asks for, in template
+ * order. Every one of them must carry something: the four below the first three
+ * exist to make the author answer a question a reviewer would otherwise have to
+ * ask, and "none" is a valid answer to each.
+ *
+ * A repository whose template names them differently, or asks for fewer,
+ * overrides the list; the names are a property of the template, not of the
+ * workflow.
  */
-export const PR_SECTIONS = ['What', 'Why', 'How to verify'] as const
+export const PR_SECTIONS = [
+  'What',
+  'Why',
+  'How to verify',
+  'Type of change',
+  'Non-goals',
+  'Risk and rollback',
+  'Checklist',
+] as const
+
+/**
+ * Programs whose `publish` subcommand uploads to a registry.
+ *
+ * A repository releasing through something else — `cargo publish`,
+ * `poetry publish`, `mvn deploy` — names it here; otherwise the release check
+ * never sees the command and says nothing about a release that happened.
+ */
+export const PUBLISHERS = [
+  'npm',
+  'npm.exe',
+  'pnpm',
+  'pnpm.exe',
+  'yarn',
+  'yarn.exe',
+  'bun',
+  'bun.exe',
+] as const
+
+/** The changelog section a release is cut from, by its default name. */
+export const UNRELEASED = 'Unreleased'
+
+/**
+ * The categories Keep a Changelog defines, lowercased. A repository that keeps
+ * its own headings overrides the list rather than switching the rule off.
+ */
+export const CHANGELOG_CATEGORIES = [
+  'added',
+  'changed',
+  'deprecated',
+  'removed',
+  'fixed',
+  'security',
+] as const
 
 /**
  * Files whose change normally implies a README update. Used by
@@ -171,10 +218,42 @@ export const Config = z.object({
       /** Require the changelog to carry the release, or a non-empty `[Unreleased]`. */
       changelog: z.boolean().default(true).volatile(),
       /**
-       * Restrict `###` headings to the Keep a Changelog categories. Off lets a
-       * repository keep its own headings — `### Internal` and the like.
+       * Restrict `###` headings to the categories listed in
+       * `releaseCheck.categories`. Off lets any heading through.
        */
       changelogCategories: z.boolean().default(true).volatile(),
+      /**
+       * The `###` headings a changelog section may use. The default is the six
+       * Keep a Changelog names; a repository with its own vocabulary — `###
+       * Internal`, `### 修复` — lists them here instead of switching the rule
+       * off. Matched case-insensitively.
+       *
+       * File-only: the settings panel has no text control.
+       */
+      categories: z
+        .array(z.string())
+        .default([...CHANGELOG_CATEGORIES])
+        .volatile(),
+      /**
+       * The changelog heading a release is cut from. The default is
+       * `[Unreleased]`; a repository that names it otherwise — `## 未发布`,
+       * `## Next` — says so here. Matched case-insensitively, with or without
+       * the square brackets.
+       *
+       * File-only: the settings panel has no text control.
+       */
+      unreleased: z.string().default(UNRELEASED).volatile(),
+      /**
+       * Programs whose `publish` subcommand uploads to a registry. The default
+       * is the JavaScript package managers; a repository releasing with
+       * `cargo`, `poetry`, `mvn`, or a private tool names it here.
+       *
+       * File-only: the settings panel has no text control.
+       */
+      publishers: z
+        .array(z.string())
+        .default([...PUBLISHERS])
+        .volatile(),
       /** Block a pre-release published to `latest` instead of a `next`-style tag. */
       prereleaseTag: z.boolean().default(true).volatile(),
       /**

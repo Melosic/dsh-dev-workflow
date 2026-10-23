@@ -85,7 +85,14 @@ const READONLY = [
 
 // File-only on purpose: the plan keeps them out of the panel. Naming them here
 // means a new volatile leaf fails the coverage check instead of slipping by.
-const FILE_ONLY = ['docs.readme', 'fileGuard.noRead', 'prSections']
+const FILE_ONLY = [
+  'docs.readme',
+  'fileGuard.noRead',
+  'prSections',
+  'releaseCheck.categories',
+  'releaseCheck.unreleased',
+  'releaseCheck.publishers',
+]
 
 describe('client.js schema agreement', () => {
   it('pairs with the Loader entry the bundle patch installs', () => {
