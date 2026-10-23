@@ -218,10 +218,12 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 `python -c "…"`。守卫看的是**参数文本**，不做动态解析，所以它认不出解释器内部那句。
 
 shell 那一层则恢复了一部分：`sudo` / `env` / `npx` 这类**裸包装词**由 `src/shell.ts` 的
-`TRANSPARENT` 剥离（`sudo git push --force` 照样命中），`sh -c "git push --force"` 里的
+`TRANSPARENT` 剥离（`sudo git push --force` 照样命中），`timeout 120` / `nice -n 10` 这类
+**限流器前缀**同样剥离并吃掉自己的时长与选项值（`timeout 120 git push --force` 照样命中），
+`sh -c "git push --force"` 里的
 `-c` 参数会被再次当作命令行解析（`SHELLS`：`sh`、`bash`、`zsh`、`dash`、`ksh`、`ash`），
 `$(...)` 与反引号里的命令同样递归解析。但**解释器本身仍是不透明的**——那需要真正的运行时
-语义，属于已知边界。
+语义，属于已知边界。`flock -c "<命令>"` 也仍是边界：命令藏在选项值里，词法走查取不回来。
 
 ## 依赖与供应链
 

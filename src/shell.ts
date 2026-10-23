@@ -24,6 +24,15 @@ export const TRANSPARENT = new Set([
   'exec',
   'time',
   'npx',
+  // Resource-limited runners. `timeout 120 git push --force` is an ordinary way
+  // to write a push with a deadline, and leaving these out of the set made the
+  // wrapper word itself the program, so every guard read `timeout` and found
+  // nothing to judge.
+  'timeout',
+  'nice',
+  'stdbuf',
+  'ionice',
+  'watch',
 ])
 
 /**
@@ -46,22 +55,53 @@ export function baseName(word: string): string {
 /**
  * Wrapper options that take a separate value: `sudo -u root rm -rf /` really
  * starts at `rm`, and the value would otherwise be read as the program.
+ *
+ * Per wrapper, not one shared set: the letters collide. `sudo -p 'Password:'`
+ * takes a value while `time -p` is a boolean flag, so one global table skipped
+ * the program after `time -p`. A wrapper with no entry has no value options.
  */
-const WRAPPER_VALUE_OPTIONS = new Set([
-  '--user',
-  '--group',
-  '--host',
-  '--prompt',
-  '--role',
-  '--type',
-  '--chdir',
-  '-u',
-  '-g',
-  '-h',
-  '-p',
-  '-r',
-  '-t',
+const WRAPPER_VALUE_OPTIONS = new Map<string, ReadonlySet<string>>([
+  [
+    'sudo',
+    new Set([
+      '--user',
+      '--group',
+      '--host',
+      '--prompt',
+      '--role',
+      '--type',
+      '--chdir',
+      '--close-from',
+      '--other-user',
+      '-u',
+      '-g',
+      '-h',
+      '-p',
+      '-r',
+      '-t',
+      '-U',
+    ]),
+  ],
+  ['doas', new Set(['-u', '-C'])],
+  ['env', new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string'])],
+  ['exec', new Set(['-a'])],
+  ['npx', new Set(['-p', '--package', '-c', '--call', '--npm', '--registry'])],
+  ['timeout', new Set(['-s', '--signal', '-k', '--kill-after'])],
+  ['nice', new Set(['-n', '--adjustment'])],
+  ['stdbuf', new Set(['-i', '-o', '-e', '--input', '--output', '--error'])],
+  ['ionice', new Set(['-c', '-n', '-p', '--class', '--classdata', '--pid'])],
+  ['watch', new Set(['-n', '--interval', '-q', '--equexit'])],
 ])
+
+/**
+ * Leading positional arguments a wrapper names before the command it runs.
+ * `timeout 120 git push` names a deadline first; without this the deadline was
+ * read as the program and the push behind it went unjudged. `flock` is left out
+ * of {@link TRANSPARENT} deliberately: its `-c` form hides the command inside an
+ * option value, which this walk has no way to return, so peeling it would trade
+ * one blind spot for another.
+ */
+const WRAPPER_POSITIONALS = new Map<string, number>([['timeout', 1]])
 
 /**
  * The word that asks a shell for a command string: `-c`, or the same letter
@@ -114,14 +154,28 @@ export function skipWrappers(words: readonly string[]): number {
     // Every wrapper that follows is looked at again, so `nohup doas rm` lands on
     // `rm` rather than stopping at `doas`.
     if (!TRANSPARENT.has(baseName(word))) break
+    const wrapper = baseName(word)
     const rest = words.slice(index + 1)
     while (rest[0] !== undefined && (ASSIGNMENT.test(rest[0]) || rest[0] === '--')) rest.shift()
-    const option = rest[0]
-    if (option !== undefined && WRAPPER_VALUE_OPTIONS.has(option)) {
+    const values = WRAPPER_VALUE_OPTIONS.get(wrapper)
+    // Every option the wrapper takes is stepped over, not just the first: a
+    // wrapper accepts several, and stopping at one left the second option to be
+    // read as the program — `sudo -n -u root rm` came out as a program named
+    // `-u`.
+    while (rest[0] !== undefined && rest[0].startsWith('-')) {
+      const option = rest[0]
       rest.shift()
+      // `--opt=value` carries its value in the same word.
+      if (option.includes('=')) continue
+      if (values?.has(option) === true) rest.shift()
+    }
+    // Positional arguments the wrapper names first: `timeout 120 cmd` puts the
+    // deadline between the wrapper and the program.
+    const positional = WRAPPER_POSITIONALS.get(wrapper) ?? 0
+    for (let step = 0; step < positional; step += 1) {
+      if (rest[0] === undefined || rest[0].startsWith('-')) break
       rest.shift()
-    } else if (option?.startsWith('--') && option.includes('=')) rest.shift()
-    else if (option?.startsWith('-') && option.length > 2 && !option.startsWith('--')) rest.shift()
+    }
     index = words.length - rest.length
   }
   return index
