@@ -179,6 +179,65 @@ describe('src/triggers/pre-pr.ts', () => {
     expect(decision.kind).toBe('allow')
   })
 
+  // GitHub pre-fills a repository template into the description box, so an
+  // untouched pull request arrives as headings whose only content is the
+  // template's own `<!-- what to write here -->` hint. Reading that hint as
+  // text would let every pull request through the moment a template was added.
+  it('does not count template hints as a filled section', () => {
+    const body = [
+      '## What',
+      '<!-- Describe the change in one sentence. -->',
+      '## Why',
+      '<!-- Why is this needed? Link the issue. -->',
+      '## How to verify',
+      '<!-- What should a reviewer run? -->',
+    ].join('\n')
+    const outcome = evaluatePullRequest({ body }, config, t)
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toContain(
+      t('trigger.pre_pr.error.description', { sections: 'What, Why, How to verify' }),
+    )
+  })
+
+  it('does not count a checkbox inside a comment', () => {
+    const body = `${GOOD_BODY}\n<!--\n- [ ] this line is an instruction, not a task\n-->`
+    const outcome = evaluatePullRequest({ body }, config, t)
+    expect(outcome.ok).toBe(true)
+  })
+
+  it('does not count an issue reference written inside a comment', () => {
+    const body = `${GOOD_BODY.replace(' Closes #7.', '')}\n<!-- Closes #12 -->`
+    const outcome = evaluatePullRequest({ body }, config, t)
+    expect(outcome.warnings).toContain(t('trigger.pre_pr.warn.issue'))
+  })
+
+  it('still blocks a real unticked box next to a comment', () => {
+    const body = `${GOOD_BODY}\n<!-- a note -->\n- [ ] Documentation updated`
+    const outcome = evaluatePullRequest({ body }, config, t)
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toContain(t('trigger.pre_pr.error.checklist', { count: 1 }))
+  })
+
+  it('asks about a description that keeps its text outside the comments', async () => {
+    const { listener } = trigger()
+    const body = [
+      '## What',
+      '<!-- Describe the change. -->',
+      'Add a flag.',
+      '## Why',
+      '<!-- Why? -->',
+      'Scripts need it. Closes #7.',
+      '## How to verify',
+      '<!-- What to run? -->',
+      'Run it.',
+    ].join('\n')
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(body)}`,
+    )
+    expect(decision.kind).toBe('allow')
+  })
+
   it('notes a missing issue reference without blocking on it', () => {
     const outcome = evaluatePullRequest(
       { title: 'feat(cli): add a flag', body: GOOD_BODY.replace(' Closes #7.', '') },

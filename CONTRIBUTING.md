@@ -6,6 +6,17 @@
 在动手之前，请先读 [`AGENTS.md`](AGENTS.md)：那是本仓库的稳定规则清单。
 本文是它的展开版本。
 
+## 报障与提议
+
+报障请用 [bug 报告表单](.github/ISSUE_TEMPLATE/bug-report.yml)，它会强制填两项东西：
+DSH 版本、以及 `/dev-workflow status` 的完整输出。理由是「插件没反应」这类报障里，
+绝大多数最终查明是配置值不同、版本差异，或者规则本就如此设计——缺这两项无法分辨。
+
+发现绕过（某条该拦的命令被放行、某条规则可以被静默跳过）不要开公开 issue，
+走 [security advisory](https://github.com/Melosic/dsh-dev-workflow/security/advisories/new)。
+
+功能提议用普通 issue 的自由文本即可，本仓库不设功能请求表单：没人填的表单比没有更糟。
+
 ## 环境搭建
 
 **要求**
@@ -125,6 +136,9 @@ docs(readme): document the /dev-workflow command
    一个 PR 只做一件事；改动超过 500 行就拆，或在正文里写清「哪几块、从哪读起」。
    合并是 squash，分支上的几个关注点在 `main` 上只会剩下一个提交、一条信息，
    所以拆分要在开 PR 之前做——合并之后再想还原几乎不可能。
+   GitHub 会用 `.github/pull_request_template.md` 预填正文，其中 `## What` / `## Why` /
+   `## How to verify` 三个标题**必须原样保留**（检查按字面匹配，段内文字可任意语言）；
+   提示注释在判定前会被剥掉，删不删都不影响，留着只是给自己看。
 4. 等待 CI 通过。CI 会校验：typecheck（源码 / 测试 / 面板）、lint、test、构建、locale key 对齐、
    `cordis.patch.yml` 存在于 `files` 字段。
 5. 合并策略：**squash merge**，保持 `main` 历史线性、每个合并对应一个完整意图。

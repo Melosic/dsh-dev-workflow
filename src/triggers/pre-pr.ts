@@ -202,6 +202,21 @@ function worthAsking(outcome: CheckResult, t: Translate): boolean {
 }
 
 /**
+ * Remove the HTML comments a template uses as instructions.
+ *
+ * GitHub pre-fills a repository template into the description box, so an
+ * untouched pull request arrives as headings whose only content is a
+ * `<!-- what to write here -->` hint. Treating that hint as text would let every
+ * pull request through the moment the repository started using a template, and
+ * a `- [ ]` inside one is not a task the author forgot.
+ * @param body - the pull request description.
+ * @returns the description with its HTML comments removed.
+ */
+function withoutComments(body: string): string {
+  return body.replace(/<!--[\s\S]*?-->/g, '')
+}
+
+/**
  * Judge the text of one pull request against the workflow rules.
  *
  * The title is judged with the commit-message rules because squash merge makes
@@ -241,11 +256,12 @@ export function evaluatePullRequest(
     if (!(input.bodyLiteral ?? true)) {
       warnings.push(t('trigger.pre_pr.warn.body_literal'))
     } else {
-      const missing = missingSections(input.body)
+      const described = withoutComments(input.body)
+      const missing = missingSections(described)
       if (missing.length > 0) {
         errors.push(t('trigger.pre_pr.error.description', { sections: missing.join(', ') }))
       }
-      const unchecked = uncheckedBoxes(input.body)
+      const unchecked = uncheckedBoxes(described)
       if (unchecked > 0) {
         errors.push(t('trigger.pre_pr.error.checklist', { count: unchecked }))
       }
@@ -260,7 +276,10 @@ export function evaluatePullRequest(
     warnings.push(t('trigger.pre_pr.warn.filled'))
   }
 
-  const described = `${input.title ?? ''}\n${input.body ?? ''}`
+  // The reference is looked for in the same text the section rules read: a
+  // template hint of the form `<!-- Closes #123 -->` is an instruction to the
+  // author, not a reference the author wrote.
+  const described = `${input.title ?? ''}\n${withoutComments(input.body ?? '')}`
   if (described.trim().length > 0 && !/(?:^|\s)#\d+/.test(described)) {
     warnings.push(t('trigger.pre_pr.warn.issue'))
   }
