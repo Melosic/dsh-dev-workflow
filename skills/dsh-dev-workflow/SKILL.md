@@ -284,7 +284,9 @@ Add a `--json` flag to the status command.
 
 ## Why
 
-Scripts cannot parse the current prose output. Closes #7.
+Scripts cannot parse the current prose output.
+
+Closes #7
 
 ## How to verify
 
@@ -307,6 +309,27 @@ None; revert the commit.
 - [x] One concern in this pull request.
 - [x] The tests fail without the change.
 ```
+
+Two rules about that template are worth knowing before you copy it:
+
+- **The boxes start unticked, and a tick is the only answer.** The sample above
+  shows them ticked, which is the state the author leaves them in before asking
+  for review. Every `- [ ]` under a heading the gate reads is counted, so a line
+  that does not apply has to be deleted and explained under Non-goals — ticking
+  it to move on is the one thing the check cannot tell from a real answer. That is
+  also why `Type of change` is a list of lines to delete rather than a set of
+  checkboxes: one ticked box among four would leave three counted as unticked and
+  block every pull request.
+- **Not every checklist line fits every change.** "The tests fail without the
+  change" is true of a behaviour change and meaningless for a documentation fix, a
+  configuration default, or a pure refactor. Delete that line in those cases and
+  say why — a false tick is worse than a deleted line, because it teaches the
+  reviewer to stop reading the list.
+- **A breaking change needs its migration path**, not just the label: say what an
+  existing caller has to do, in the same place a reader will look for it.
+- **Paste no CI status.** The platform runs the checks and shows them on the pull
+  request; a hand-written "CI passed" is a claim that can be stale by the time it
+  is read.
 
 A pull request is mergeable only when CI is green, the branch is up to date with
 `main`, and every review conversation is resolved. Never merge by bypassing a
