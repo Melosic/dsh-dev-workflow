@@ -1,0 +1,71 @@
+name: Bug report
+description: Something the plugin does that it should not, or fails to do.
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A bug report that omits the DSH version and the plugin's own status output
+        usually cannot be acted on: most reports turn out to be a configuration
+        value, a different DSH version, or an intended rule. Both fields below are
+        what makes the report reproducible.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The behaviour you observed, and the command or action that produced it.
+      placeholder: |
+        I ran `git commit -m "..."` and the pre-commit check said ...
+
+        Expected: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `/dev-workflow status`
+      description: |
+        Paste the whole block. It states the mode, the locale, the last check
+        outcome, the guard hit counts, and whether audit writes are failing —
+        which is where most "the plugin did nothing" reports actually end.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: DSH version and plugin version.
+      placeholder: 'DSH 0.2.1-rc.2, @melosic/dsh-dev-workflow 0.4.2'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where it happens
+      description: Which part of the plugin misbehaved.
+      options:
+        - A convention trigger (commit message, PR description, release)
+        - A guard (git, outward, command, file, secret)
+        - The `/dev-workflow` command
+        - The settings panel
+        - The skill text the assistant reads
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: |
+        The settings you changed from the defaults, if any. The panel writes them
+        to your profile's `cordis.patch.yml`; paste only the `dsh-dev-workflow`
+        entry. Leave empty if everything is at its default.
+      render: yaml
+    validations:
+      required: false
