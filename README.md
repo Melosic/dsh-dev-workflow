@@ -29,6 +29,7 @@ It speaks at those moments, not between them.
 - **Three triggers, quiet until they matter:** before a commit, before `gh pr create`, before `git tag` or a publish.
 - **Five guards, one shape.** Irrecoverable shell commands, destructive git operations, actions other people can see, sensitive reads, credentials in arguments.
 - **One switch, and it is an install switch.** `/dev-workflow status` reports mode, locale, last check and guard activity; `off` unregisters everything.
+- **Per repository, not per machine.** `scope: 'marked'` limits the rules to repositories whose root carries a `.dsh/dev-workflow.yml`; everywhere else the plugin stays out of the way.
 - **A settings panel** in DeepSeek Harness Settings for every switch and enum, applied without a restart.
 
 ## Requirements
