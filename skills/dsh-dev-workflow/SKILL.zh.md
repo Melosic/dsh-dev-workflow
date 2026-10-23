@@ -400,35 +400,86 @@ Feature：此前不存在的行为现在有了。
 
 ### 发布说明
 
-发布说明就是该版本的 CHANGELOG 段落，发在「新版本出现时人们会看的地方」。它不是第二份
-要另写的文档。
+发布说明是一个版本的交付说明，发在「新版本出现时人们会看的地方」。它的读者是使用者与升级者，
+不是写这次改动的开发者。它回答的是：**对我意味着什么、我要不要升级、怎么升。**
 
-- 用 `## [<version>] - <日期>` 这一行作为发布标题，让 registry、tag、CHANGELOG 三者一致。
-- 复制条目，不要把它们概括成散文。概括是第二份描述，会和第一份漂移。
-- 把 `BREAKING` 的内容放最前，并在发布说明里也写明迁移路径。只看发布页的人可能永远不打开
-  CHANGELOG。
-- 不要复述提交信息，也不要罗列内部重构。
+这些要写详细：
+
+- **新增功能**：用户能感知到的变化，带一个简短的使用示例。
+- **修复列表**：修掉了哪些用户看得见的缺陷。
+- **破坏性变更**：必须显眼，附迁移步骤。
+- **升级**：版本要求、配置变更，以及装之前或装之后必须做的事。
+- **已知问题**：诚实列出。没有就写一行「无」，而不是删掉这一节——缺一节读起来像漏了。
+- **致谢**（可选）：为这个版本做出贡献的人。
+
+这些要简略或省略：
+
+- 内部实现细节，以及重构的流水账。
+- 一串 commit hash——用 changelog 的链接代替。
+- 什么信息都没有的「杂项更新」。
+- 每个 PR 的审查过程。
+
+详略原则：用户视角详细（我能得到什么、我要改什么），内部视角简略（想看细节的给链接）。
+
+条目取自该版本的 changelog 段落，逐字复制而不是重新概括：两边在事实上不一致时，以 changelog
+为准，发布页是错的。升级、已知问题、致谢这三节是唯一不存在于 changelog 里的内容——changelog
+记录的是「改了什么」，而这三节回答的是「改了什么」这个记录装不下的问题。
 
 如果这个项目有不止一种语言的读者，就把两种语言放在同一页上，而不是二选一：
 
 ```markdown
-[中文](#cn-v1.2.3) | [English](#en-v1.2.3)
+[中文](#cn-v1.2.0) | [English](#en-v1.2.0)
 
-<h3 id="cn-v1.2.3">中文标题</h3>
+<h3 id="cn-v1.2.0">v1.2.0</h3>
 
-- 条目（与 changelog 一致）
+#### 新增
 
-<h3 id="en-v1.2.3">English heading</h3>
+- 空配置自动回退到默认值，不必先写一份配置文件
 
-- 同一条目的译文
+#### 修复
 
-Full Changelog: [v1.2.2...v1.2.3](https://.../compare/v1.2.2...v1.2.3)
+- Windows 上配置里的 `C:\...` 被当成转义读不到
+
+#### 破坏性变更
+
+- 配置字段 `timeout` 更名为 `requestTimeout`；旧名仍兼容一个版本
+
+#### 升级
+
+`dsh plugin --profile <profile> add @melosic/dsh-dev-workflow@1.2.0`
+
+#### 已知问题
+
+- 无
+
+<h3 id="en-v1.2.0">v1.2.0</h3>
+
+#### Added
+
+- An empty configuration now falls back to the defaults instead of requiring a file
+
+#### Fixed
+
+- A `C:\...` path in the configuration was read as an escape sequence on Windows
+
+#### Breaking changes
+
+- The `timeout` field is now `requestTimeout`; the old name still works for one version
+
+#### Upgrade
+
+`dsh plugin --profile <profile> add @melosic/dsh-dev-workflow@1.2.0`
+
+#### Known issues
+
+- None
+
+Full Changelog: [v1.1.0...v1.2.0](https://.../compare/v1.1.0...v1.2.0)
 ```
 
-第二种语言是同一批条目的译文，不是对它们的第二次概括：两边不一致时，以 changelog 为准，
-发布页是错的。每种语言一个标题即可——每个下面用 `###` 再分小节可以，整页复制两遍不可以。
-代价是每次发版多一次翻译，换来一个不读 changelog 那种语言的读者也能用；如果项目确实只有
-一种读者，就不做，并且明确说明，而不是留半页空白。
+第二种语言是同一批条目的译文，不是对它们的第二次概括。每种语言一个标题即可——每个下面用
+`####` 再分小节可以，整页复制两遍不可以。代价是每次发版多一次翻译，换来一个不读 changelog
+那种语言的读者也能用；如果项目确实只有一种读者，就不做，并且明确说明，而不是留半页空白。
 
 ### 废弃与移除
 
