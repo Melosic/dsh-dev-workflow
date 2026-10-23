@@ -317,29 +317,66 @@ gh release create v<版本号> --title "v<版本号>" --notes-file .dev-docs/_re
 （SKILL.md 里写的 `<(awk ...)` 是 bash 进程替换，在 PowerShell 里不可用，
 本机做法是先写文件再传入。）
 
-**逐字抄，不重写，也不要在发布页上再加摘要。** 发布页的长度因此完全由
+**条目逐字抄，不重写，也不要在发布页上再加摘要。** 发布页的篇幅因此主要由
 `CHANGELOG.md` 的条目决定：条目写成一两句话，发布页就是短的；条目写成三段小作文，
-发布页就是一篇没人读的长文。要改发布页，改 changelog，不要在 `gh release create`
+发布页就是一篇没人读的长文。要改发布页的条目，改 changelog，不要在 `gh release create`
 之后再补一段「本次亮点」。SKILL.md 的 `### What to Write` / `### How to Write`
 给的就是这个字数标准。
 
 ### 发布页的模板（中英双语）
 
-`CHANGELOG.md` 只有中文，而发布页的读者不一定读中文，所以发布页把中文段逐条译成英文，
-两种语言放在同一页：
+发布页是**交付说明**，读者是使用者与升级者，不是写这次改动的开发者。它回答的是：
+对我意味着什么、我要不要升级、怎么升。所以除了 changelog 的条目，还要有 changelog
+装不下的三节——升级、已知问题、致谢。
 
 ```markdown
 [中文](#cn-v0.5.0) | [English](#en-v0.5.0)
 
-<h3 id="cn-v0.5.0">新版本标题（中文）</h3>
+<h3 id="cn-v0.5.0">v0.5.0</h3>
+
+#### 新增
 
 - 条目一（与 changelog 一致）
 - 条目二
 
-<h3 id="en-v0.5.0">Release title (English)</h3>
+#### 修复
+
+- 修掉了什么用户可见的问题
+
+#### 破坏性变更
+
+- 配置字段 `old` 更名为 `new`；旧名仍兼容一个版本
+
+#### 升级
+
+`dsh plugin --profile <profile> add @melosic/dsh-dev-workflow@0.5.0`
+
+#### 已知问题
+
+- 无
+
+<h3 id="en-v0.5.0">v0.5.0</h3>
+
+#### Added
 
 - Entry one, translated from the changelog
 - Entry two
+
+#### Fixed
+
+- Which user-visible bug is gone
+
+#### Breaking changes
+
+- The `old` field is now `new`; the old name still works for one version
+
+#### Upgrade
+
+`dsh plugin --profile <profile> add @melosic/dsh-dev-workflow@0.5.0`
+
+#### Known issues
+
+- None
 
 Full Changelog: [v0.4.2...v0.5.0](https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.2...v0.5.0)
 ```
@@ -347,14 +384,31 @@ Full Changelog: [v0.4.2...v0.5.0](https://github.com/Melosic/dsh-dev-workflow/co
 几条约束：
 
 - **英文那一半是译文，不是第二份摘要。** 两边不一致时以 `CHANGELOG.md` 为准，发布页是错的。
+- **升级、已知问题、致谢只出现在发布页。** 这三节回答的是「改了什么」这个记录装不下的问题，
+  所以它们不在 changelog 里，也不该为了「单一来源」把它们删掉。没有已知问题就写「无」，
+  不要删掉这一节。
 - **每段语言一个 `<h3 id>` 锚点**，顶部跳转链接指向它们；不要整页复制两遍。
-- **分类标题**（`### Added` / `### Fixed`）可以在每种语言下各自保留，`BREAKING` 的条目在
+- **分类标题**（`#### Added` / `#### Fixed`）可以在每种语言下各自保留，`BREAKING` 的条目在
   两段里都放最前。
 - **最后一行固定是 `Full Changelog:` 加对比链接**，这是 DSH 自己的发布页也在用的收尾。
 - 译文不额外改动事实：条目说「默认值不变」，译文也要说默认值不变。
+- 内部实现细节、重构流水账、一串 commit hash、每个 PR 的审查过程——都不写，细节给
+  changelog 链接。
 
-模板不单独存成文件：它只有十几行，且必须跟着 `CHANGELOG.md` 的段一起变，存成文件反而会
+模板不单独存成文件：它只有几十行，且必须跟着 `CHANGELOG.md` 的段一起变，存成文件反而会
 和 changelog 漂移。发版时把这一节连同 changelog 段落一起写进 `.dev-docs/_release-notes.md`。
+
+### 改写已经发出去的发布页
+
+发布页可以事后改，不必重发版本：
+
+```bash
+gh release edit v<版本号> --notes-file .dev-docs/_release-notes.md
+```
+
+适用于两件事：一是旧发布页写成了 changelog 的复制品（内部细节堆满、没有升级与已知问题）；
+二是发布页的**名字**漏了 `v`（`gh release list` 里 `v0.4.1` 与 `0.4.2` 并存）。名字用
+`gh release edit <tag> --title v<版本号>` 改；tag 本身不要动，它已经发到 registry 上了。
 
 注意 tag 必须已经推送：
 

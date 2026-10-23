@@ -495,42 +495,98 @@ claims:
 
 ### Release Notes
 
-Release notes are the changelog section for that version, published where people
-look when a new version appears. They are not a second document to write.
+Release notes are the delivery note for one version, published where people look
+when a new version appears. Their reader is the user, or the person deciding
+whether to upgrade — not the developer who wrote the change. The question they
+answer is *what does this mean for me, should I upgrade, and how*.
 
-- Use the `## [<version>] - <date>` heading as the release title, so the registry,
-  the tag, and the changelog agree.
-- Copy the entries; do not summarise them into prose. A summary is a second
-  description that can drift from the first.
-- Lead with anything `BREAKING`, and state the migration path in the notes as
-  well as in the changelog. Someone reading the release page may never open the
-  changelog.
-- Do not restate commit messages, and do not list internal refactors.
+Write these out in full:
+
+- **New features.** What changed that the user can notice, with a short usage
+  example.
+- **Fixes.** Which user-visible bugs are gone.
+- **Breaking changes.** Impossible to miss, with the migration steps.
+- **Upgrade.** Version requirements, configuration changes, and anything that has
+  to happen before or after the install.
+- **Known issues.** Honestly listed. If there are none, say so in one line
+  rather than deleting the section — a missing section reads as an oversight.
+- **Thanks** (optional). The contributors who made the release.
+
+Keep these short, or leave them out:
+
+- Internal implementation detail, and the log of refactors.
+- A list of commit hashes. Link to the changelog instead.
+- A "miscellaneous" entry that says nothing.
+- A narrative of each pull request's review.
+
+The split is: detail from the user's side — what I get, what I must change —
+and brief from the internal side, where a link is enough.
+
+The entries come from the changelog section for that version and are copied,
+never re-summarised: when the two disagree on a fact, the changelog is right and
+the release page is wrong. The upgrade, known-issues, and thanks sections are the
+only content that does not exist in the changelog, because a changelog records
+changes and those three answer questions a record of changes cannot hold.
 
 If the project writes for readers in more than one language, put both on the
 same page rather than picking one:
 
 ```markdown
-[中文](#cn-v1.2.3) | [English](#en-v1.2.3)
+[中文](#cn-v1.2.0) | [English](#en-v1.2.0)
 
-<h3 id="cn-v1.2.3">中文标题</h3>
+<h3 id="cn-v1.2.0">v1.2.0</h3>
 
-- 条目（与 changelog 一致）
+#### 新增
 
-<h3 id="en-v1.2.3">English heading</h3>
+- 空配置自动回退到默认值，不必先写一份配置文件
 
-- the same entry, translated
+#### 修复
 
-Full Changelog: [v1.2.2...v1.2.3](https://.../compare/v1.2.2...v1.2.3)
+- Windows 上配置里的 `C:\...` 被当成转义读不到
+
+#### 破坏性变更
+
+- 配置字段 `timeout` 更名为 `requestTimeout`；旧名仍兼容一个版本
+
+#### 升级
+
+`dsh plugin --profile <profile> add @melosic/dsh-dev-workflow@1.2.0`
+
+#### 已知问题
+
+- 无
+
+<h3 id="en-v1.2.0">v1.2.0</h3>
+
+#### Added
+
+- An empty configuration now falls back to the defaults instead of requiring a file
+
+#### Fixed
+
+- A `C:\...` path in the configuration was read as an escape sequence on Windows
+
+#### Breaking changes
+
+- The `timeout` field is now `requestTimeout`; the old name still works for one version
+
+#### Upgrade
+
+`dsh plugin --profile <profile> add @melosic/dsh-dev-workflow@1.2.0`
+
+#### Known issues
+
+- None
+
+Full Changelog: [v1.1.0...v1.2.0](https://.../compare/v1.1.0...v1.2.0)
 ```
 
 The second language is a translation of the same entries, never a second summary
-of them: if the two halves disagree, the changelog is right and the release page
-is wrong. Keep one heading per language — a `###` sub-heading under each is fine,
+of them. Keep one heading per language — a `####` sub-heading under each is fine,
 a second copy of the whole page is not. This costs a translation per release and
-buys a page that a reader who does not read the changelog's language can still
-use; skip it if the project genuinely has one audience, and say so rather than
-leaving one half empty.
+buys a page a reader who does not read the changelog's language can still use;
+skip it if the project genuinely has one audience, and say so rather than leaving
+one half empty.
 
 ### Deprecation and Removal
 
