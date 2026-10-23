@@ -114,7 +114,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && p
 [ok] skill headings aligned (35 sections)
 [ok] published entry points present (8 checked)
 [ok] mirrored pairs consistent (3 groups)
-[ok] CHANGELOG records 0.4.1
+[ok] CHANGELOG records 0.4.2
 [ok] no numbered development phases cited
 ```
 
