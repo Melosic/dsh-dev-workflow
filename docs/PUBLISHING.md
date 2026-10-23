@@ -323,6 +323,39 @@ gh release create v<版本号> --title "v<版本号>" --notes-file .dev-docs/_re
 之后再补一段「本次亮点」。SKILL.md 的 `### What to Write` / `### How to Write`
 给的就是这个字数标准。
 
+### 发布页的模板（中英双语）
+
+`CHANGELOG.md` 只有中文，而发布页的读者不一定读中文，所以发布页把中文段逐条译成英文，
+两种语言放在同一页：
+
+```markdown
+[中文](#cn-v0.5.0) | [English](#en-v0.5.0)
+
+<h3 id="cn-v0.5.0">新版本标题（中文）</h3>
+
+- 条目一（与 changelog 一致）
+- 条目二
+
+<h3 id="en-v0.5.0">Release title (English)</h3>
+
+- Entry one, translated from the changelog
+- Entry two
+
+Full Changelog: [v0.4.2...v0.5.0](https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.2...v0.5.0)
+```
+
+几条约束：
+
+- **英文那一半是译文，不是第二份摘要。** 两边不一致时以 `CHANGELOG.md` 为准，发布页是错的。
+- **每段语言一个 `<h3 id>` 锚点**，顶部跳转链接指向它们；不要整页复制两遍。
+- **分类标题**（`### Added` / `### Fixed`）可以在每种语言下各自保留，`BREAKING` 的条目在
+  两段里都放最前。
+- **最后一行固定是 `Full Changelog:` 加对比链接**，这是 DSH 自己的发布页也在用的收尾。
+- 译文不额外改动事实：条目说「默认值不变」，译文也要说默认值不变。
+
+模板不单独存成文件：它只有十几行，且必须跟着 `CHANGELOG.md` 的段一起变，存成文件反而会
+和 changelog 漂移。发版时把这一节连同 changelog 段落一起写进 `.dev-docs/_release-notes.md`。
+
 注意 tag 必须已经推送：
 
 ```bash
