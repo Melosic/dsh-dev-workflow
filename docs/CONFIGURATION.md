@@ -16,6 +16,7 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `docs` | 对象 | 见下 | 文档相关路径 |
 | `rules` | 对象 | 见下 | 机械约定 |
 | `commitCheck` | 对象 | 见下 | 提交信息检查的开关、档位与类型清单 |
+| `prSections` | `string[]` | `['What', 'Why', 'How to verify']` | PR 描述必须填的段落名，按仓库模板改写；只能在配置文件里声明 |
 | `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
 | `releaseCheck` | 对象 | 见下 | 发版前检查的四条规则开关与版本号模式 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
@@ -111,6 +112,27 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
 
 `COMMIT_TYPES` 为 `feat` / `fix` / `docs` / `style` / `refactor` / `perf` / `test` / `build` /
 `ci` / `chore` / `revert`，可在面板勾选。
+
+## `prSections`
+
+| 字段 | 类型 | 默认值 | 作用 |
+| --- | --- | --- | --- |
+| `prSections` | `string[]` | `['What', 'Why', 'How to verify']` | PR 描述必须填的段落名，缺一段或段内为空都阻塞 |
+
+段落名属于**仓库模板**，不属于工作流本身：一个中文模板、或一个把段落叫 `背景` / `改动` / `验证`
+的仓库，用默认值就会被每个 PR 告知「缺少模板要求的段落」，而它自己的模板从没要求过那三段。
+
+只在配置文件里声明，面板不显示——面板只有开关、分段、数字、勾选四种控件，没有文本输入框，
+强行做成控件只能给出一组写死的选项，那比不改更糟。判定时大小写不敏感，标题层级必须是 `##`。
+数组顺序只影响报错时列出缺失段落的顺序。
+
+```yaml
+# ~/.dsh/profiles/<name>/cordis.patch.yml
+- id: dsh-dev-workflow
+  config:
+    prSections: ['背景', '改动', '验证']
+```
+
 
 ### `requireChangelogOnFeat` 与文档检查的分工
 
@@ -456,15 +478,15 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 每个守卫的**总开关都带一句后果说明**（关掉它之后哪一类动作不再被拦），关掉某个总开关时
 它下面的分项会同时标出「当前不生效」，避免「控件还亮着 = 规则还生效」的误读。
 
-### 只能在文件里改的（9 项）
+### 只能在文件里改的（10 项）
 
 面板的**高级**区（默认折叠、**只读**）展示其中 7 项，并提供一个打开当前 profile
 `cordis.patch.yml` 的按钮：`codePaths`、`docs.docsDir`、`docs.changelog`、
 `docs.exclude`、`releaseCheck.versionPattern`、`docs.mirrors`、`audit.path`。
 
-另外 2 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）
-与 `fileGuard.noRead`（不许读取的敏感路径清单）。一个路径清单不是开关或枚举，面板给不了
-比编辑文件更好的体验。
+另外 3 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）、
+`fileGuard.noRead`（不许读取的敏感路径清单）、`prSections`（PR 模板的段落名）。一份清单不是
+开关或枚举，面板给不了比编辑文件更好的体验。
 
 ### 面板不做什么
 

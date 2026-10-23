@@ -218,7 +218,8 @@ fix(guard): 强推规则不再匹配 git push --force-with-lease
 - [ ] 变更涉及的文档在同一提交或同一 PR 内更新。
 - [ ] `CHANGELOG.md` 里有这次变更的 `[Unreleased]` 条目。
 
-PR 描述模板。三个小节名必须逐字保留（英文——门禁按字面匹配）；其下正文可以用任何语言：
+PR 描述模板。下面是默认的小节名；门禁按字面匹配，所以仓库若在自己的模板里改了名，
+要在 `prSections` 里列出新的名字。其下正文可以用任何语言：
 
 ```markdown
 ## What
@@ -537,7 +538,8 @@ CHANGELOG 只回答一个问题，给「正在决定要不要升级」的人：*
 - **提交之前**——按 Conventional Commits 检查提交信息，检查 `CHANGELOG.md` 是否需要
   `[Unreleased]` 条目，以及变更的文件有没有把对应文档一起带上。
 - **开 PR 之前**——用提交信息规则检查标题（在 squash merge 下它就是落在 main 分支上的
-  提交），并按模板的 `What` / `Why` / `How to verify` 三节检查描述。
+  提交），并按模板的段落检查描述——默认是 `What` / `Why` / `How to verify`，除非
+  `prSections` 另有说明。
 - **发版之前**——检查版本号、tag 与 `package.json` 是否一致，以及 CHANGELOG 是否包含该
   版本。
 - **没有触发器监听建分支动作。** 分支命名是本文要求的约定，不是插件强制执行的东西，
