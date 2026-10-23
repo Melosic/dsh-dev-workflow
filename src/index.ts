@@ -187,6 +187,17 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       return listener(exec, next)
     }
 
+  // Registering a gate is `scoped(listener)`, and doing that inline at each of
+  // the seven sites buries the listener in wrapper syntax. Naming the two things
+  // a gate needs — its body and the event it rides — keeps each registration
+  // readable, and keeps the wrapper from being forgotten at one site out of seven.
+  const gate = (
+    listener: (
+      exec: ToolExecution,
+      next: () => Promise<PreToolDecision>,
+    ) => Promise<PreToolDecision>,
+  ): (() => void) => ctx.on('tools/pre-execute', scoped(listener))
+
   const activate = (): void => {
     registered = registrationSignature()
     const registrations: (() => void)[] = [
@@ -250,42 +261,33 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // is already being fixed at commit time is not judged twice.
     if (config.enableOwnTrigger.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createPreCommitTrigger({
-              config: () => config,
-              t: () => t,
-              state,
-              git: (cwd) => runtime.git(cwd),
-              log: (message) => ctx.logger.debug(message),
-              approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
-            }),
-          ),
+        gate(
+          createPreCommitTrigger({
+            config: () => config,
+            t: () => t,
+            state,
+            git: (cwd) => runtime.git(cwd),
+            log: (message) => ctx.logger.debug(message),
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
         ),
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createPrePrTrigger({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
-            }),
-          ),
+        gate(
+          createPrePrTrigger({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
         ),
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createPreReleaseTrigger({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
-            }),
-          ),
+        gate(
+          createPreReleaseTrigger({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
         ),
       )
     }
@@ -299,21 +301,18 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // are switched on independently.
     if (config.gitGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createGitGuard({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              audit,
-              // Read at call time and never injected: a profile without an
-              // approval service still mounts the plugin, and every question then
-              // falls back to the dispatcher's own prompt.
-              approval: () => ctx.get('approval') as ApprovalService | undefined,
-            }),
-          ),
+        gate(
+          createGitGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+            // Read at call time and never injected: a profile without an
+            // approval service still mounts the plugin, and every question then
+            // falls back to the dispatcher's own prompt.
+            approval: () => ctx.get('approval') as ApprovalService | undefined,
+          }),
         ),
       )
     }
@@ -323,20 +322,17 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // lands, and consent is the thing being protected.
     if (config.outwardGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createOutwardGuard({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              audit,
-              // Same seam the git guard reads, and for the same reason: it is what
-              // lets `rememberApproved` apply to a push as well as to a commit.
-              approval: () => ctx.get('approval') as ApprovalService | undefined,
-            }),
-          ),
+        gate(
+          createOutwardGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+            // Same seam the git guard reads, and for the same reason: it is what
+            // lets `rememberApproved` apply to a push as well as to a commit.
+            approval: () => ctx.get('approval') as ApprovalService | undefined,
+          }),
         ),
       )
     }
@@ -346,54 +342,45 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // own switch, so a profile can keep one without the others.
     if (config.commandGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createCommandGuard({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              audit,
-              approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
-            }),
-          ),
+        gate(
+          createCommandGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
         ),
       )
     }
 
     if (config.fileGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createFileGuard({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              audit,
-              approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
-            }),
-          ),
+        gate(
+          createFileGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
         ),
       )
     }
 
     if (config.secretGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
-          scoped(
-            createSecretGuard({
-              config: () => config,
-              t: () => t,
-              state,
-              log: (message) => ctx.logger.debug(message),
-              audit,
-              approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
-            }),
-          ),
+        gate(
+          createSecretGuard({
+            config: () => config,
+            t: () => t,
+            state,
+            log: (message) => ctx.logger.debug(message),
+            audit,
+            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+          }),
         ),
       )
     }
