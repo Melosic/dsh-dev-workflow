@@ -315,7 +315,15 @@ gh release create v<版本号> --title "v<版本号>" --notes-file .dev-docs/_re
 
 `--notes-file` 指向从 `CHANGELOG.md` 抄出来的 `[<版本号>]` 段。
 （SKILL.md 里写的 `<(awk ...)` 是 bash 进程替换，在 PowerShell 里不可用，
-本机做法是先写文件再传入。）注意 tag 必须已经推送：
+本机做法是先写文件再传入。）
+
+**逐字抄，不重写，也不要在发布页上再加摘要。** 发布页的长度因此完全由
+`CHANGELOG.md` 的条目决定：条目写成一两句话，发布页就是短的；条目写成三段小作文，
+发布页就是一篇没人读的长文。要改发布页，改 changelog，不要在 `gh release create`
+之后再补一段「本次亮点」。SKILL.md 的 `### What to Write` / `### How to Write`
+给的就是这个字数标准。
+
+注意 tag 必须已经推送：
 
 ```bash
 git push origin main --follow-tags
