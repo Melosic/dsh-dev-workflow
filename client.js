@@ -120,6 +120,7 @@ window.__ModuleLoader__.load({
       'group.audit': 'Audit log',
       'group.advanced': 'Advanced (read-only)',
       'field.mode': 'Plugin mode',
+      'field.scope': 'Which repositories',
       'field.locale': 'Plugin text language',
       'field.ownTrigger': 'Run the built-in checks (commit, PR, release)',
       'field.commitEnabled': 'Check commit messages',
@@ -157,6 +158,8 @@ window.__ModuleLoader__.load({
       'outward.publish': 'Publish a version',
       'hint.mode':
         'Off withdraws every tool, skill, command and trigger this plugin registers, so it costs no tokens. The plugin itself stays loaded — enabling or disabling it is the plugin manager\u2019s job.',
+      'hint.scope':
+        'Which repositories this profile checks. Marked means only a repository whose project root has .dsh/dev-workflow.yml; the skill line and every guard stay quiet everywhere else, so an unmarked repository pays nothing.',
       'hint.locale':
         'The language of this plugin\u2019s own text — check results, skill text, approval prompts. It does not decide what language the model writes commits or pull requests in.',
       'hint.localeResolved':
@@ -187,6 +190,8 @@ window.__ModuleLoader__.load({
         'Off means no guard decision is recorded: a reviewer has no trail of what was questioned, allowed, or refused after the session ends.',
       'value.on': 'On',
       'value.off': 'Off',
+      'value.all': 'Every repository',
+      'value.marked': 'Only marked ones',
       'value.auto': 'Auto',
       'value.en-US': 'English',
       'value.zh-CN': 'Chinese',
@@ -235,6 +240,7 @@ window.__ModuleLoader__.load({
       'group.audit': '审计日志',
       'group.advanced': '高级（只读）',
       'field.mode': '插件模式',
+      'field.scope': '作用于哪些仓库',
       'field.locale': '插件文案语言',
       'field.ownTrigger': '运行自带检查（提交 / PR / 发版）',
       'hint.ownTrigger':
@@ -274,6 +280,8 @@ window.__ModuleLoader__.load({
       'outward.publish': '发布版本',
       'hint.mode':
         '关闭后，本插件注册的工具、技能、命令和触发器全部撤销，不占常驻 token。插件本身仍然加载 —— 启用或停用是插件管理器的事。',
+      'hint.scope':
+        '这个 profile 检查哪些仓库。「仅带标记」表示只检查项目根目录下有 .dsh/dev-workflow.yml 的仓库；其余仓库里技能目录行和所有守卫都不出声，也不占常驻 token。',
       'hint.locale':
         '本插件自身文案的语言 —— 检查结果、技能正文、审批提示。它不决定模型用什么语言写提交信息或 PR。',
       'hint.localeResolved': '「自动」跟随本机语言，当前为：{locale}（{tag}）。',
@@ -300,6 +308,8 @@ window.__ModuleLoader__.load({
         '关闭后不再记录任何守卫决策：会话结束后，审查者看不到哪些操作被问过、被放行或被拒绝。',
       'value.on': '开启',
       'value.off': '关闭',
+      'value.all': '所有仓库',
+      'value.marked': '仅带标记的',
       'value.auto': '自动',
       'value.en-US': 'English',
       'value.zh-CN': '中文',
@@ -389,6 +399,14 @@ window.__ModuleLoader__.load({
         on: 'on',
         off: 'off',
         hint: 'hint.mode',
+      },
+      {
+        group: 'workflow',
+        path: ['scope'],
+        control: 'segments',
+        label: 'field.scope',
+        options: ['all', 'marked'],
+        hint: 'hint.scope',
       },
       {
         group: 'workflow',

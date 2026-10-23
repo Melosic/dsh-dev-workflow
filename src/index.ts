@@ -1,4 +1,5 @@
 import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { Config } from './config.js'
 import type { Translate } from './i18n.js'
 import { createTranslator, resolveLocale } from './i18n.js'
@@ -23,6 +24,8 @@ import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
 import { createSecretGuard } from './guard/secret-guard.js'
 import { createAudit } from './audit.js'
+import { applies } from './scope.js'
+import type { Scope } from './scope.js'
 
 /** Cordis plugin name. */
 export const name = 'dev-workflow'
@@ -158,6 +161,43 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     into.push(ctx.effect(() => once))
   }
 
+  // A profile is per machine, but the rules are a property of the repository.
+  // `scope: 'marked'` is how one profile serves repositories that want the rules
+  // and repositories that do not, and the gate below is the only place that
+  // decides it — every listener asks the same question, so the answer cannot
+  // disagree between the trigger that speaks first and the guard that speaks
+  // last.
+  //
+  // The gate wraps the registration rather than living inside each listener:
+  // a listener that is skipped has to behave exactly like one that found
+  // nothing, and calling `next()` is precisely that.
+  const cwdOf = (exec: ToolExecution): string => exec.agent?.session.header.cwd ?? process.cwd()
+
+  const scoped =
+    (
+      listener: (
+        exec: ToolExecution,
+        next: () => Promise<PreToolDecision>,
+      ) => Promise<PreToolDecision>,
+    ) =>
+    async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
+      // Read live: the panel can change the scope without re-registering
+      // anything, so a rebuild would only add a way for the two to disagree.
+      if (!applies(config.scope.get() as Scope, cwdOf(exec))) return next()
+      return listener(exec, next)
+    }
+
+  // Registering a gate is `scoped(listener)`, and doing that inline at each of
+  // the seven sites buries the listener in wrapper syntax. Naming the two things
+  // a gate needs — its body and the event it rides — keeps each registration
+  // readable, and keeps the wrapper from being forgotten at one site out of seven.
+  const gate = (
+    listener: (
+      exec: ToolExecution,
+      next: () => Promise<PreToolDecision>,
+    ) => Promise<PreToolDecision>,
+  ): (() => void) => ctx.on('tools/pre-execute', scoped(listener))
+
   const activate = (): void => {
     registered = registrationSignature()
     const registrations: (() => void)[] = [
@@ -173,7 +213,11 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       // reads the locale on every `list()`/`get()`, so one provider serves
       // whichever locale is in effect without being re-registered.
       ctx.skills.registerProvider(() =>
-        createSkillProvider({ currentLocale: () => runtime.locale(), t }),
+        createSkillProvider({
+          currentLocale: () => runtime.locale(),
+          t,
+          applies: (cwd) => applies(config.scope.get() as Scope, cwd),
+        }),
       ),
     ]
 
@@ -217,8 +261,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // is already being fixed at commit time is not judged twice.
     if (config.enableOwnTrigger.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createPreCommitTrigger({
             config: () => config,
             t: () => t,
@@ -228,8 +271,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createPrePrTrigger({
             config: () => config,
             t: () => t,
@@ -238,8 +280,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),
         ),
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createPreReleaseTrigger({
             config: () => config,
             t: () => t,
@@ -260,8 +301,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // are switched on independently.
     if (config.gitGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createGitGuard({
             config: () => config,
             t: () => t,
@@ -282,8 +322,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // lands, and consent is the thing being protected.
     if (config.outwardGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createOutwardGuard({
             config: () => config,
             t: () => t,
@@ -303,8 +342,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     // own switch, so a profile can keep one without the others.
     if (config.commandGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createCommandGuard({
             config: () => config,
             t: () => t,
@@ -319,8 +357,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
 
     if (config.fileGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createFileGuard({
             config: () => config,
             t: () => t,
@@ -335,8 +372,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
 
     if (config.secretGuard.enabled.get()) {
       registrations.push(
-        ctx.on(
-          'tools/pre-execute',
+        gate(
           createSecretGuard({
             config: () => config,
             t: () => t,

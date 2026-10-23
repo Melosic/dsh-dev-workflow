@@ -34,6 +34,7 @@ const { description, namespaces } = await loadPanel(createFormScope(Config({})))
 /** Every item the plan's second step lists as "must be configurable". */
 const REQUIRED = [
   'mode',
+  'scope',
   'locale',
   'enableOwnTrigger',
   'commitCheck.enabled',
