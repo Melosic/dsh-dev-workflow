@@ -89,10 +89,11 @@ mentioned and dropped.
   rebase rewrites the branch's own history, so a reviewer can no longer see what
   changed since the last review.
 - Resolve conflicts on the branch, never on `main`.
-- After resolving a merge conflict, re-run `pnpm typecheck`, `pnpm lint`, and
-  `pnpm test` before committing. A conflict resolution can change what the code
-  means, so the earlier green run no longer covers it — committing without
-  re-verifying treats the merge as risk-free text editing.
+- After resolving a merge conflict, re-run the project's own checks — typecheck,
+  lint, and tests, with whatever commands that project defines — before
+  committing. A conflict resolution can change what the code means, so the earlier
+  green run no longer covers it — committing without re-verifying treats the merge
+  as risk-free text editing.
 - Merging uses **squash merge**, so `main` keeps one commit per pull request and
   a linear history.
 - The squash commit that lands on `main` takes its message from the **pull
@@ -104,18 +105,24 @@ mentioned and dropped.
 
 ### Branch Protection
 
-`main` is protected in the repository settings, not by convention. The rules:
+This model assumes `main` is protected in the repository settings, not by
+convention. The rules it depends on:
 
 - Direct pushes are forbidden.
 - Force pushes are forbidden.
 - Deletion is forbidden.
-- A pull request is required, with at least one review.
-- All required CI checks must pass.
+- A pull request is required, and its required CI checks must pass.
 - The branch must be up to date with `main` before it can merge.
 - Every review conversation must be resolved.
 
-These are configured on the GitHub repository itself, so they hold for everyone,
-including an administrator.
+Whether an approving review is *also* required is a repository decision, not part
+of this model: a repository maintained by one person usually turns it off, since a
+review by nobody is not a review.
+
+None of this is enforced by the plugin — these are GitHub settings, and a
+repository without them still gets the checks described in *Automatic Triggers*.
+Read the repository's actual protection settings before assuming this list is in
+force.
 
 ### Hotfix Flow
 
@@ -211,7 +218,19 @@ reviewed at all.
 
 ### Issue References
 
-- `Closes #12` — once this commit lands, issue #12 can be closed.
+- Open an issue when the problem is real but the fix is not happening now: a
+  defect you are deferring, a proposal that needs agreement before any code, a
+  release checklist that spans several changes. The issue is what keeps that work
+  from being remembered only by whoever happened to hear about it.
+- Do not open one for what this session will finish. The commit message and the
+  pull request description already are that record; a second copy is a second
+  thing to keep in sync, and it goes stale the moment the code moves.
+- A bypass — a rule that should have caught something and did not, or one that can
+  be skipped without a trace — goes to a private security advisory where the host
+  offers one, not to a public issue. Publishing the bypass before the fix
+  publishes an exploit.
+- Then reference it from the commit: `Closes #12` — once this commit lands, issue
+  #12 can be closed.
 - `Refs #12` — this commit relates to issue #12 but does not close it.
 - Several issues: `Closes #12, #15`.
 - Reference the number only. A full URL is not used, because the repository is
@@ -330,28 +349,33 @@ review that skips them is a rubber stamp with a comment attached.
 
 ## Documentation Sync
 
-| Change                                        | Update in the same PR                           |
-| --------------------------------------------- | ----------------------------------------------- |
-| User-visible behaviour                        | `README.md` **and** `README.zh.md`              |
-| An entry point, data flow, or module boundary | `docs/ARCHITECTURE.md`                          |
-| A config option, its default, or its values   | `docs/CONFIGURATION.md`                         |
-| A tool: name, parameters, or returned text    | `docs/TOOLS.md`                                 |
-| A trigger, or when one fires                  | `docs/TRIGGERS.md`                              |
-| User-visible strings                          | `locale/en.json` **and** `locale/zh.json`       |
-| Anything in this specification                | `SKILL.md` **and** `SKILL.zh.md`, same sections  |
-| Any change at all                             | a `CHANGELOG.md` `[Unreleased]` entry           |
+| Change                            | Update in the same PR                              |
+| --------------------------------- | -------------------------------------------------- |
+| User-visible behaviour            | the README, in **every** language it is written in |
+| An entry point, data flow, or module boundary | the architecture document               |
+| A config option, its default, or its values | the configuration reference             |
+| A tool: name, parameters, or returned text | the tool reference                      |
+| A trigger, or when one fires      | the trigger reference                              |
+| User-visible strings              | every locale dictionary, as a pair                 |
+| Anything in this specification    | this file and its translation, same sections       |
+| Any change at all                 | an `[Unreleased]` entry in the changelog           |
 
+- Which files those are is configuration, not a constant of this document:
+  `docs.readme`, `docs.changelog`, `docs.docsDir`, and `docs.mirrors` name the
+  paths the checks actually read. A project with no `docs/` tree simply has fewer
+  rows to fill; the changelog row applies everywhere.
 - Paired files move together or not at all. A half-synced pair is worse than a
   stale one, because it looks maintained.
 - CI enforces what is mechanical: locale keys line up, and the two skill files
   expose the same sections in the same order. Whether a translation reads well
   stays a human review item.
-- `docs/` always describes the current state of `main`. It is not versioned
+- The docs describe the current state of the main branch. They are not versioned
   documentation: to read how an older version behaved, check out its git tag.
 
 ### When Documentation Sync Does Not Apply
 
-These changes need no `README.md` and no `docs/` update:
+These changes need no README and no architecture/config/tool/trigger document
+update:
 
 - A purely internal refactor that leaves externally visible behaviour unchanged.
 - A test-only change.
@@ -360,8 +384,8 @@ These changes need no `README.md` and no `docs/` update:
 - CI configuration.
 
 The exemption covers prose only. If any of these does change what a user sees,
-it still needs a `CHANGELOG.md` entry — the two obligations are separate, and
-this list waives just one of them.
+it still needs a changelog entry — the two obligations are separate, and this
+list waives just one of them.
 
 ## Releases (SemVer + Keep a Changelog)
 
@@ -546,17 +570,23 @@ most common conflict in this repository. Three habits keep the conflict small:
 Destructive git commands. These rewrite or discard history and must never run
 unprompted:
 
-| Command              | Risk                                             |
-| -------------------- | ------------------------------------------------ |
-| `git push --force`   | overwrites remote history; can discard commits   |
-| `git reset --hard`   | discards uncommitted work permanently            |
-| `git clean -f`       | deletes untracked files permanently              |
-| `git branch -D`      | deletes a branch whose commits may exist nowhere |
-| `git rebase`         | rewrites history                                 |
-| `git commit --amend` | rewrites a commit that may already be published  |
-| `git checkout -- .`  | discards every unstaged change                   |
-| `--no-verify`        | skips the hooks that protect the repository      |
-| `git push --delete`  | removes a remote branch others may base work on  |
+| Command                                  | Risk                                             |
+| ---------------------------------------- | ------------------------------------------------ |
+| `git push --force` / `--force-with-lease`| overwrites remote history; can discard commits   |
+| `git push --mirror`                      | forces and deletes: makes the remote match you   |
+| `git reset --hard`                       | discards uncommitted work permanently            |
+| `git clean -f`                           | deletes untracked files permanently              |
+| `git branch -D`                          | deletes a branch whose commits may exist nowhere |
+| `git rebase`                             | rewrites history                                 |
+| `git commit --amend`                     | rewrites a commit that may already be published  |
+| `git checkout -- .` / `git restore .`    | discards every unstaged change                   |
+| `git checkout -f` / `git switch --discard-changes` | discards edits by switching anyway      |
+| `git push --delete`                      | removes a remote branch others may base work on  |
+| `--no-verify`                            | skips the hooks that protect the repository      |
+
+`git restore --staged <path>` is not on the list: it moves a change back to the
+working tree and discards nothing. `git restore <path>` with no `--staged` is the
+modern spelling of `git checkout -- <path>` and is.
 
 - The table is about rewriting history other people can see. Rebasing a branch
   only you have, and have never pushed, rewrites nothing anyone else holds.
