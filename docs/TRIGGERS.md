@@ -86,8 +86,10 @@ git 之后**：它管的也是 git（外加 `gh` 与包管理器），但拦的�
 2. `segments()` 按这些运算符切段，每段独立判断——所以
    `pnpm test && git commit -m "..."` 里的提交部分照样被识别。
 3. `programInvocations()` 在每段里跳过前导的 `VAR=value` 赋值与包装词（`sudo`、`doas`、`env`、
-   `nohup`、`command`、`exec`、`time`、`npx`，以及它们自己的取值选项，如 `sudo -u root`），
-   取程序名的 basename；`sh -c "<命令>"` 这类把脚本藏在一个词里的写法会**递归解析**内部的命令行。
+   `nohup`、`command`、`exec`、`time`、`npx`，以及限流器 `timeout`、`nice`、`stdbuf`、`ionice`、
+   `watch`；值选项按包装词各自声明，如 `sudo -u root`、`nice -n 10`，`timeout` 还要先吃掉
+   自己的时长参数），取程序名的 basename；`sh -c "<命令>"` 这类把脚本藏在一个词里的写法会
+   **递归解析**内部的命令行。
 4. `gitInvocations()` 在 `git` 的调用里跳过 `-C`、`-c`、`--git-dir` 等带值的全局选项，
    取出子命令与它的参数。
 5. `commitArguments()` 解析提交信息：`-m` / `--message` / `--message=` / `-mXXX`

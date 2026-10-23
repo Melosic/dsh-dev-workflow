@@ -92,6 +92,35 @@ describe('skipWrappers', () => {
   it('leaves an unwrapped command alone', () => {
     expect(skipWrappers(['git', 'status'])).toBe(0)
   })
+
+  it('steps over a resource-limit wrapper to the command it runs', () => {
+    // `timeout 120 git push --force` is an ordinary way to write a push with a
+    // deadline. The wrapper used to be read as the program, so every guard saw
+    // `timeout` and judged nothing behind it.
+    expect(programWords(['timeout', '120', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['timeout', '30s', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['nice', '-n', '10', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['stdbuf', '-oL', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['ionice', '-c3', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['watch', 'git', 'push'])).toEqual(['git', 'push'])
+  })
+
+  it('steps over every option a wrapper takes, not only the first', () => {
+    expect(programWords(['sudo', '-n', '-u', 'root', 'rm', '-rf', '/'])).toEqual(['rm', '-rf', '/'])
+    expect(programWords(['timeout', '-s', 'KILL', '120', 'git', 'push'])).toEqual(['git', 'push'])
+  })
+
+  it('reads a wrapper option value from that wrapper, not from a shared table', () => {
+    // `sudo -p` takes a value, `time -p` does not. One global set of value
+    // options skipped the program after `time -p` and left `sudo -p` reading its
+    // prompt text as the program.
+    expect(programWords(['time', '-p', 'git', 'push'])).toEqual(['git', 'push'])
+    expect(programWords(['sudo', '-p', 'Password:', 'git', 'push'])).toEqual(['git', 'push'])
+  })
+
+  it('leaves the command after a boolean wrapper flag in place', () => {
+    expect(programWords(['env', '-i', 'git', 'push'])).toEqual(['git', 'push'])
+  })
 })
 
 describe('shellArgument', () => {
