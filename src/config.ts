@@ -31,6 +31,13 @@ export const COMMIT_TYPES = [
 export const SUBJECT_MAX_LENGTH = 50
 
 /**
+ * Sections the specification's pull request template asks for. A repository
+ * whose own template names them differently overrides this; the names are a
+ * property of the template, not of the workflow.
+ */
+export const PR_SECTIONS = ['What', 'Why', 'How to verify'] as const
+
+/**
  * Files whose change normally implies a README update. Used by
  * `docsCheck.requireReadmeOnConfig`.
  */
@@ -135,6 +142,23 @@ export const Config = z.object({
       subjectMaxLength: z.number().step(1).min(1).default(SUBJECT_MAX_LENGTH).volatile(),
     })
     .default({}),
+  /**
+   * The `##` sections a pull request description must fill in.
+   *
+   * Defaults to the specification's template ({@link PR_SECTIONS}). A
+   * repository whose own `.github/pull_request_template.md` names the sections
+   * differently — in another language, or with different headings — lists them
+   * here; otherwise every one of its pull requests is told it is missing
+   * sections its template never asked for.
+   *
+   * File-only: the settings panel has no text control, so this is declared in
+   * the profile file rather than rendered as a field. Order matters only for
+   * the order the missing names are reported in.
+   */
+  prSections: z
+    .array(z.string())
+    .default([...PR_SECTIONS])
+    .volatile(),
   /** Which release rules the pre-release check applies. */
   releaseCheck: z
     .object({

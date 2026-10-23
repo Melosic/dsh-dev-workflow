@@ -268,8 +268,9 @@ not permission to skip the asking.
 - [ ] Documentation touched by the change is updated in the same commit or PR.
 - [ ] `CHANGELOG.md` carries an `[Unreleased]` entry for the change.
 
-Pull request description template. The three section names must be kept verbatim
-(in English — the gate matches them literally); the text under them may be in any
+Pull request description template. These are the default section names; the gate
+matches them literally, so a repository that renames them in its own template
+lists the new names in `prSections`. The text under each heading may be in any
 language:
 
 ```markdown
@@ -673,7 +674,8 @@ configured:
   files took their documentation with them.
 - **Before a pull request** — check the title with the commit-message rules (under
   squash merge it becomes the commit on the main branch) and the description
-  against the template's `What` / `Why` / `How to verify` sections.
+  against the template's sections — `What` / `Why` / `How to verify` unless
+  `prSections` says otherwise.
 - **Before a release** — check the version, the tag against `package.json`, and
   whether the changelog carries the release.
 - **No trigger watches branch creation.** Branch naming is a convention this

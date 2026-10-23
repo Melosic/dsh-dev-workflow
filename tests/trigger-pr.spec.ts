@@ -248,6 +248,53 @@ describe('src/triggers/pre-pr.ts', () => {
     expect(outcome.warnings).toContain(t('trigger.pre_pr.warn.issue'))
   })
 
+  // The section names are a property of the repository's template, not of the
+  // workflow. A repository that writes its template in another language would
+  // otherwise be told on every pull request that it is missing sections its
+  // template never asked for.
+  it('judges the sections the repository configured, not the default names', () => {
+    const renamed = Config({ prSections: ['改了什么', '为什么', '怎么验证'] })
+    const body = [
+      '## 改了什么',
+      '',
+      '加一个 flag。',
+      '',
+      '## 为什么',
+      '',
+      '脚本要解析。',
+      '',
+      '## 怎么验证',
+      '',
+      '跑一遍。',
+    ].join('\n')
+
+    expect(evaluatePullRequest({ body }, config, t).ok).toBe(false)
+    expect(evaluatePullRequest({ body }, renamed, t).ok).toBe(true)
+  })
+
+  it('still requires every configured section, by its configured name', () => {
+    const renamed = Config({ prSections: ['改了什么', '为什么'] })
+    const body = ['## What', '', 'Add a flag.', '', '## Why', '', 'Scripts need it.'].join('\n')
+    const outcome = evaluatePullRequest({ body }, renamed, t)
+
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toContain(
+      t('trigger.pre_pr.error.description', { sections: '改了什么, 为什么' }),
+    )
+  })
+
+  it('counts unticked boxes only inside the configured sections', () => {
+    const renamed = Config({ prSections: ['What'] })
+    const body = ['## What', '', 'Add a flag.', '', '## Checklist', '', '- [ ] Tests added'].join(
+      '\n',
+    )
+
+    // The box is under `## Checklist`, which is not a configured section, so it
+    // is not a task this check counts — the same rule that lets a richer
+    // template coexist with the gate.
+    expect(evaluatePullRequest({ body }, renamed, t).ok).toBe(true)
+  })
+
   // The note is advisory, so it must not become a question. Under a `never`
   // approval policy a question with nothing in it is refused, which turned this
   // one into a blocked pull request the moment the description named no issue.

@@ -18,9 +18,6 @@ import type { TriggerOptions } from './shared.js'
 // catalogue has no "a pull request is about to be created" event, so the action
 // is recognised by the shell command that performs it (`gh pr create`).
 
-/** Sections the specification's pull request template asks for. */
-const REQUIRED_SECTIONS = ['What', 'Why', 'How to verify'] as const
-
 /** `gh pr create` options that take a separate value, so it is not a title. */
 const GH_VALUE_OPTIONS = new Set([
   '-t',
@@ -156,11 +153,12 @@ function sectionContent(body: string): Map<string, string[]> {
  * A heading with nothing under it is as absent as no heading at all: an
  * untouched template describes the change no better than an empty box.
  * @param body - the pull request description.
+ * @param sections - the section names this repository's template asks for.
  * @returns the section names that carry no content, in template order.
  */
-function missingSections(body: string): string[] {
+function missingSections(body: string, sections: readonly string[]): string[] {
   const content = sectionContent(body)
-  return REQUIRED_SECTIONS.filter((section) => {
+  return sections.filter((section) => {
     const lines = content.get(section.toLowerCase())
     return lines === undefined || lines.join('\n').trim().length === 0
   })
@@ -169,12 +167,13 @@ function missingSections(body: string): string[] {
 /**
  * Count the checkboxes in a description that are still unticked.
  * @param body - the pull request description.
+ * @param sections - the section names this repository's template asks for.
  * @returns how many `- [ ]` lines the template sections contain.
  */
-function uncheckedBoxes(body: string): number {
+function uncheckedBoxes(body: string, sections: readonly string[]): number {
   const content = sectionContent(body)
   let total = 0
-  for (const section of REQUIRED_SECTIONS) {
+  for (const section of sections) {
     for (const line of content.get(section.toLowerCase()) ?? []) {
       if (/^\s*[-*]\s+\[ \]/.test(line)) total += 1
     }
@@ -257,11 +256,12 @@ export function evaluatePullRequest(
       warnings.push(t('trigger.pre_pr.warn.body_literal'))
     } else {
       const described = withoutComments(input.body)
-      const missing = missingSections(described)
+      const sections = config.prSections.get()
+      const missing = missingSections(described, sections)
       if (missing.length > 0) {
         errors.push(t('trigger.pre_pr.error.description', { sections: missing.join(', ') }))
       }
-      const unchecked = uncheckedBoxes(described)
+      const unchecked = uncheckedBoxes(described, sections)
       if (unchecked > 0) {
         errors.push(t('trigger.pre_pr.error.checklist', { count: unchecked }))
       }
