@@ -22,8 +22,18 @@
   强制填 DSH 版本与 `/dev-workflow status` 输出——「插件没反应」的报障多数是配置值或版本差异。
 - **PR 段落名可配置（`prSections`）。** 段落名属于仓库模板，不属于工作流；中文模板的仓库
   此前只能整体关掉触发器。默认是与模板一致的七节，只在配置文件里声明。
+- **发版检查的三条约定可配置。** `releaseCheck.publishers`（哪些包管理器的 publish 算发版，
+  默认 npm/pnpm/yarn/bun）、`releaseCheck.unreleased`（未发布段落的名字，默认 `Unreleased`）、
+  `releaseCheck.categories`（分类标题，默认 Keep a Changelog 六类）。用 cargo 发版、或
+  changelog 写「未发布」的仓库，此前只能把三个触发器整体关掉。默认值复现旧行为。
 - **技能补上「什么时候该开 issue」的判断**（推迟的缺陷、需要先达成一致的提议、横跨多次改动
   的发版清单；本次会话就能做完的不开），此前只写在本仓库的 `CONTRIBUTING.md` 里。
+
+### Changed
+
+- **changelog 条目写成一两句，发布页才短。** 发布页是从 `[<版本号>]` 段逐字抄的，
+  长度完全由条目决定，不能在 `gh release create` 之后再补摘要。技能里写明了这条字数标准，
+  发布指引里写明了「逐字抄、不重写」。
 
 ### Fixed
 
