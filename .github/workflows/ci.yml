@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+# A push to a branch whose run is still going cancels it: the newer commit is the
+# only one whose result anyone reads, and PR #55's three rapid pushes spent two
+# runner slots on superseded trees. Keyed on the ref, not the SHA — a per-SHA
+# group never repeats, so nothing would ever be cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Early phases run a single Node version, and it is the current LTS rather than
 # the declared floor: Node 20 reached end of life in April 2026, so a matrix that
 # only proves the plugin works there proves it works nowhere anyone deploys it.
@@ -12,6 +20,10 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Without this the job inherits GitHub's 360-minute default: a hung
+    # `pnpm install` or spec would hold a runner for six hours before anyone
+    # learned it had failed. Recent runs finish in 25-35 seconds.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
