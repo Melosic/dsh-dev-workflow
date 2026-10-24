@@ -38,6 +38,12 @@
 //    merges, and the message describes the first concern only. The number is a
 //    warning because at that size splitting is expensive and a hard gate only
 //    teaches people to re-cut the branch instead of the change.
+// 9. The DSH requirement has two homes, `engines.dsh` and the `@deepseek-ai/dsh`
+//    peer range, and they must say the same thing. DSH reads `engines.dsh` first
+//    and skips the peer check once it is present, so a package whose two copies
+//    disagree enforces whichever one it happened to write first — and a
+//    marketplace that reads only `engines.dsh` reports "author declares no DSH
+//    requirement" for a package that does declare one.
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -334,6 +340,25 @@ if (size !== undefined && size > CHANGE_SIZE_LIMIT) {
 } else if (size !== undefined) {
   console.log(`[ok] ${size} changed lines, under the ${CHANGE_SIZE_LIMIT}-line guidance`)
 }
+
+// 9. The DSH requirement is written down twice: `engines.dsh` and the
+//    `@deepseek-ai/dsh` peer range. DSH reads `engines.dsh` first and skips the
+//    peer check entirely once it is present (`unmetRequirements()` in
+//    `dsh-app-boot`), so the two copies are one fact with two homes — and a
+//    marketplace that reads only `engines.dsh` reports "author declares no DSH
+//    requirement" for a package that does declare one. Comparing them here is
+//    cheaper than remembering to edit both.
+before = mark()
+const enginesDsh = pkg.engines?.dsh
+const peerDsh = pkg.peerDependencies?.['@deepseek-ai/dsh']
+if (typeof enginesDsh !== 'string' || enginesDsh.trim() === '') {
+  failures.push('package.json: engines.dsh is not declared (DSH falls back to the peer ranges)')
+} else if (enginesDsh !== peerDsh) {
+  failures.push(
+    `package.json: engines.dsh (${enginesDsh}) and the @deepseek-ai/dsh peer (${peerDsh}) disagree`,
+  )
+}
+ok('DSH requirement declared consistently', before)
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`error: ${failure}`)

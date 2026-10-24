@@ -178,29 +178,61 @@ npm view @melosic/dsh-dev-workflow   version --registry=https://registry.npmjs.o
 首次发布前的 `E404` 是**好**消息。已发布之后这里会返回版本号，那就不再是可用性检查，
 而是「上一个版本是什么」的查询。
 
-## DSH peerDependencies 的分段枚举规则
+## DSH 版本要求：`engines.dsh` 与 peerDependencies
 
 这一节是 `.dev-docs/PROGRESS.md` 「待决策 / 遗留问题」第 4 条要求的落地。
 **写错这里，后果不是安装失败，而是插件被静默禁用。**
 
-DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `preflight()`）。规则如下：
+DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `preflight()`）。
+判定函数叫 `unmetRequirements(manifest, runtimeVersion)`，骨架是：
 
-1. **只读 `peerDependencies`。** `dependencies` 完全不参与兼容判断
-   （`if (!Object.hasOwn(fields, "peerDependencies")) return void 0;`）。
-   把 DSH 域内的包写进 `dependencies` 而不是 `peerDependencies`，等于没声明兼容范围。
-2. **只校验 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` 前缀的 peer。**
+```js
+const engines = Object.hasOwn(fields, 'engines') ? fields.engines : {}
+if (Object.hasOwn(engines, 'dsh')) {
+  return satisfies(runtimeVersion, engines.dsh) ? {} : { 'engines.dsh': engines.dsh }
+}
+if (!Object.hasOwn(fields, 'peerDependencies')) return {}
+// …then every @deepseek-ai/dsh and @deepseek-ai/dsh-* peer
+```
+
+规则如下：
+
+1. **`engines.dsh` 优先，且一旦写了就完全取代 peer 校验。** 不是「两者取交集」——写了
+   `engines.dsh` 之后，`@deepseek-ai/dsh-skill`、`dsh-tools` 的 peer 范围**不再参与**兼容判断。
+   本项目两处写同一个范围，并有一条 CI 检查（`ci:checks` 第 9 项）盯着它们不许漂移；
+   只写一处而另一处留在旧值，等于让校验结果取决于哪一处被先读到。
+2. **`dependencies` 完全不参与兼容判断。** 把 DSH 域内的包写进 `dependencies` 而不是
+   `peerDependencies`，等于没声明兼容范围。`peerDependenciesMeta.optional` 也不救场——
+   校验只遍历 `peerDependencies` 本身。
+3. **只校验 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` 前缀的 peer。**
    `@deepseek-ai/cordis`、`react` 之类的 peer 会被跳过——它们仍是正常的 npm peer，
    只是不参与 DSH 的兼容判断。
-3. **`0.x` 下不要用 `^` 或 `~`。** 判定是
-   `semver.satisfies(runtimeVersion, requirement, { includePrerelease: true })`，
-   而 `0.x` 的次版本位可以携带破坏性变更，`^0.2.0` 的语义在这里会误导人。
-   官方包对 DSH 域内 peer 一律写精确版本（`0.2.0-rc.2`）。
-4. **按实测基线写下界，暂不写上界（本项目的当前选择）。** 本项目采用的写法是：
+4. **`0.x` 下不要用 `^` 或 `~`。** 判定是同一文件里的
+   `satisfies(runtimeVersion, range)`，展开就是
+   `range.trim() !== '' && semver.satisfies(runtimeVersion, range, { includePrerelease: true })`，
+   而 `0.x` 的次版本位可以携带破坏性变更，
+   `^0.2.0` 的语义在这里会误导人。官方包对 DSH 域内 peer 一律写精确版本（`0.2.0-rc.2`）。
+   另外 `engines.dsh` 写成非字符串会直接**抛错**，不是判为不兼容。
+5. **`includePrerelease: true` 是 DSH 的宽容，不是你的范围写对了。** 同一个范围拿严格
+   semver 去判会是另一个答案：
+
+   ```
+   0.2.1-rc.2  vs  >=0.2.0-rc.2  → false（严格）
+   0.2.1-rc.2  vs  >=0.2.0-rc.2  → true （includePrerelease，DSH 用的就是这个）
+   ```
+
+   原因：预发布版本只在「比较器里带同一 `major.minor.patch` 的预发布」时才被算进范围，
+   而 `0.2.1-rc.2` 的元组是 `0.2.1`、范围的元组是 `0.2.0`。**任何第三方只要用严格 semver
+   读这个范围，就会认为本插件与当前 DSH 不兼容**——所以「DSH 没拒装」不能当作范围写对了的证据。
+6. **按实测基线写下界，暂不写上界（本项目的当前选择）。** 本项目采用的写法是：
 
    ```json
-   "@deepseek-ai/dsh":       ">=0.2.0-rc.2",
-   "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
-   "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
+   "engines": { "dsh": ">=0.2.0-rc.2" },
+   "peerDependencies": {
+     "@deepseek-ai/dsh":       ">=0.2.0-rc.2",
+     "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
+     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
+   }
    ```
 
    下界是「本插件实测可用过的最低版本」——三个包都在 `0.2.0-rc.2` 上实测过，所以下界写
@@ -214,24 +246,24 @@ DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `pre
    说明「CI 每次真正跑在哪」。两者会分开漂移：`latest` 渠道仍是 `0.2.0-rc.2`，而新的候选版本
    先在 `next` 渠道发布，所以本插件当前把开发基线钉在 `0.2.1-rc.2`，同时把下界留在
    `0.2.0-rc.2`——若为了跑测试就把下界抬到 `rc.2` 系列，所有还在 `latest` 上的用户会**被静默
-   禁用**（见第 6 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
+   禁用**（见第 8 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
 
    升级开发基线时的最小动作：改 `package.json` 的 `devDependencies` 三个精确版本 → 跑
    `pnpm install`（本机 `~/.npmrc` 的 `minimum-release-age` 会挡住 24 小时内的新版本，此时加
    `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test`
    → 再决定下界动不动。`minimumReleaseAge` 只拦**解析**，不拦 `--frozen-lockfile` 的下载，
-   所以 CI 不需要任何额外参数。下界若确实要抬，按第 8 条先查真实版本列表。
-5. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
+   所以 CI 不需要任何额外参数。下界若确实要抬，按第 10 条先查真实版本列表。
+7. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
    不读 `peerDependenciesMeta`。把某个 DSH 包标成 optional 不会让它跳过校验。
-6. **不兼容的后果是「被禁用」而非「安装失败」。** `preflight()` 把该行 `row.disabled = true`
+8. **不兼容的后果是「被禁用」而非「安装失败」。** `preflight()` 把该行 `row.disabled = true`
    后**照常加载其余行**，stderr 打印
    `disabling profile plugin <label>: <reason>`。用户看到的是功能不见了，不是一条报错。
-7. **豁免机制存在，但不要依赖它。** 每个 profile 目录下有一份 `compatibility.json`
+9. **豁免机制存在，但不要依赖它。** 每个 profile 目录下有一份 `compatibility.json`
    （`exact package@version → [exact dsh versions]`，规范 SemVer 精确匹配，范围/前缀一律拒绝），
    对应 CLI 是 `dsh plugin version-exemptions` 与
    `dsh plugin allow-version <package@version> --dsh-version <runtime> --accept-risk`。
    这是给用户应急用的，不是包作者的正规出路。
-8. **声明前先看真实版本列表**，不要凭记忆写范围：
+10. **声明前先看真实版本列表**，不要凭记忆写范围：
 
    ```bash
    npm view @deepseek-ai/dsh versions --registry=https://registry.npmjs.org
