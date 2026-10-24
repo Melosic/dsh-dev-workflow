@@ -45,6 +45,13 @@
 
 ### Fixed
 
+- **`/dev-workflow status` 不报生效范围，报障时无从判断。** `scope: 'marked'` 是唯一会让插件在
+  某个仓库里完全静默的设置，而「它在仓库 X 里没管我的提交」正是最常见的报障——状态里却没有
+  `scope`，只能再问一轮。现在多一行生效范围，`marked` 时按当前工作目录判定，未标记就给出该建的
+  标记文件完整路径。
+- **bug 表单里的版本号是写死的。** 占位符写着 `DSH 0.2.1-rc.2, @melosic/dsh-dev-workflow 0.4.2`，
+  下次发版就过期，还会把人往错误的版本上引。改成 `0.2.x` / `0.4.x` 的形状，并写明两个版本各自
+  从哪里读。
 - **`timeout 120 <命令>` 让所有守卫和触发器都看不见被包住的命令。** `timeout`、`nice`、
   `stdbuf`、`ionice`、`watch` 不在包装词表里，程序名就成了包装词本身，于是
   `timeout 120 git push --force`、`timeout 120 rm -rf /`、`timeout 120 cat .env` 全部放行。
