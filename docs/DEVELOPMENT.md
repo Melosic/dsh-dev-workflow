@@ -145,6 +145,9 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 `format:check`、`test`、`build`、`ci:checks`。
 （单个 Node 版本而非矩阵：`engines.node` 声明的是代码所需的下限，CI 跑的是当前 LTS。）
 `main` 分支的保护规则要求 `verify` 这个检查通过、要求 PR、且禁止强制推送。
+job 声明了 `timeout-minutes: 10`（不声明就是 GitHub 的 360 分钟默认值，卡死的 run 会占用
+runner 六小时才报错），并按 ref 配了 `concurrency` 取消进行中的旧 run —— 实测一次 `verify`
+25–35 秒，10 分钟留了十几倍余量。
 
 `pnpm ci:checks`（`scripts/ci-checks.mjs`）跑一组不需要额外依赖的守卫：
 
