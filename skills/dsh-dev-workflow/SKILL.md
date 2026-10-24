@@ -646,12 +646,18 @@ upgrade: *what changed for me?* It is not a summary of the commit log.
 - One entry per change.
 - Say what it means for the user, not what the code does.
 - For a breaking change, give the migration path.
-- Keep an entry to one or two sentences. If it needs three or more, it is either
-  several changes that want separate entries, or an explanation of *how* the fix
-  works — and that belongs in the commit message and the pull request, which is
-  where someone debugging it will look. A changelog long enough to be skimmed is
-  a changelog nobody reads; the release notes are copied from it verbatim, so
-  this is also what decides how long the release page is.
+- One entry, one sentence, at most 120 characters — `ci:checks` measures it. The
+  release notes are copied from these entries verbatim, so entry length is
+  release-page length.
+- Write the state after the change, never the state before it. The "this used to
+  be broken because X, and now it is Z" belongs in the commit message and the
+  pull request, where someone debugging it will look; a reader of the release
+  page only wants to know what is true now.
+- No bold lead-in. `**Headline.** Then the explanation` is a second title: it
+  spends characters and then repeats itself in the sentence that follows.
+- If an entry needs three or more sentences, it is either several changes that
+  want separate entries, or an explanation of *how* the fix works. A changelog
+  long enough to be skimmed is a changelog nobody reads.
 
 ### Examples
 

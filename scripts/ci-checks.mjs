@@ -44,6 +44,12 @@
 //    disagree enforces whichever one it happened to write first — and a
 //    marketplace that reads only `engines.dsh` reports "author declares no DSH
 //    requirement" for a package that does declare one.
+// 10. An entry in `[Unreleased]` stays under 120 characters. The release page is
+//    copied from these entries verbatim, so this is the release page's length —
+//    and the skill's guidance ("one or two sentences") did not hold in practice,
+//    because an entry that narrates the before-state and the mechanism reads as
+//    thoroughness while writing it. Only `[Unreleased]` is checked; released
+//    sections are history and rewriting them changes no past page.
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -359,6 +365,30 @@ if (typeof enginesDsh !== 'string' || enginesDsh.trim() === '') {
   )
 }
 ok('DSH requirement declared consistently', before)
+
+// 10. Every entry in `[Unreleased]` stays under the ceiling the skill states.
+//     The release page is copied from these entries verbatim, so an entry that
+//     explains *how* a fix works — the before-state, the mechanism, the after —
+//     reads as diligence here and makes the release page unreadable there. The
+//     rule text alone did not hold; a measurable ceiling does. Released sections
+//     are history and are not checked.
+before = mark()
+const ENTRY_LIMIT = 120
+const unreleased = changelog.split(/^## \[Unreleased\][^\n]*$/m)[1]?.split(/^## \[/m)[0] ?? ''
+for (const raw of unreleased.split(/^- /m).slice(1)) {
+  const entry = raw
+    .split(/\n(?=- |### )/)[0]
+    .replace(/\s+/g, ' ')
+    .trim()
+  const length = [...entry].length
+  if (length > ENTRY_LIMIT) {
+    failures.push(
+      `CHANGELOG.md: [Unreleased] entry is ${length} characters (over ${ENTRY_LIMIT}): ` +
+        `${entry.slice(0, 24)}…`,
+    )
+  }
+}
+ok('CHANGELOG entries stay within the length ceiling', before)
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`error: ${failure}`)

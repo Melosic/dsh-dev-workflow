@@ -350,10 +350,10 @@ gh release create v<版本号> --title "v<版本号>" --notes-file .dev-docs/_re
 本机做法是先写文件再传入。）
 
 **条目逐字抄，不重写，也不要在发布页上再加摘要。** 发布页的篇幅因此主要由
-`CHANGELOG.md` 的条目决定：条目写成一两句话，发布页就是短的；条目写成三段小作文，
-发布页就是一篇没人读的长文。要改发布页的条目，改 changelog，不要在 `gh release create`
-之后再补一段「本次亮点」。SKILL.md 的 `### What to Write` / `### How to Write`
-给的就是这个字数标准。
+`CHANGELOG.md` 的条目决定：一条一句话、120 字以内，发布页就是短的。要改发布页的条目，
+改 changelog，不要在 `gh release create` 之后再补一段「本次亮点」。SKILL.md 的
+`### What to Write` / `### How to Write` 给的就是这个字数标准，`ci:checks` 第 10 项量
+`[Unreleased]` 的每一条——超了会红。
 
 ### 发布页的模板（中英双语）
 
