@@ -45,6 +45,11 @@
 
 ### Fixed
 
+- **清单没声明 `engines.dsh`，市场和第三方无从判断兼容范围。** DSH 的兼容性校验
+  （`unmetRequirements()`）先读 `engines.dsh`，没有才回落到 `@deepseek-ai/dsh` 的 peer 范围；
+  本项目只写了后者，于是 dsh.so 的市场页显示「作者未声明 dsh 版本要求」，而它自己那一栏
+  `DSH 版本已声明` 又打了勾——两份事实各读一处。现在 `engines.dsh` 与 peer 范围写同一个值，
+  `ci:checks` 新增一项盯着它们不许漂移（写成不一致、或删掉任一处都会红）。
 - **`/dev-workflow status` 不报生效范围，报障时无从判断。** `scope: 'marked'` 是唯一会让插件在
   某个仓库里完全静默的设置，而「它在仓库 X 里没管我的提交」正是最常见的报障——状态里却没有
   `scope`，只能再问一轮。现在多一行生效范围，`marked` 时按当前工作目录判定，未标记就给出该建的
