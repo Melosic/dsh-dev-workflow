@@ -231,6 +231,24 @@ export function askOf(decision: PreToolDecision): {
 }
 
 /**
+ * A configuration for a spec that builds a real runtime, with the audit trail
+ * switched off.
+ *
+ * The default `audit.path` is relative and the audit resolves it against the
+ * session's working directory, which a spec never overrides — so a spec that
+ * drives a tool call through the real chain appends its fixtures to this
+ * repository's own `.dev-docs/audit-log.jsonl`. That directory is gitignored, so
+ * the pollution is invisible in a diff and only shows up as records a reviewer
+ * cannot tell from real ones. A spec that is about the audit passes its own path;
+ * every other spec keeps the sink silent.
+ * @param over - the values the spec is actually exercising.
+ * @returns a resolved configuration.
+ */
+export function harnessConfig(over: Record<string, unknown> = {}): Config {
+  return Config({ audit: { enabled: false }, ...over })
+}
+
+/**
  * A git runner whose answers are whatever the spec says the repository holds.
  *
  * Both questions the checks ask are answered from the same list: `status

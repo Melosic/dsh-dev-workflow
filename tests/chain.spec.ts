@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import type { GitResult, GitRunner } from '../src/git.js'
 import { createTranslator } from '../src/i18n.js'
-import { Config } from '../src/config.js'
 import { createRuntime } from '../src/index.js'
-import { createHarness, askOf, makeExec } from './harness.js'
+import { createHarness, askOf, harnessConfig, makeExec } from './harness.js'
 
 // The guards and the convention triggers ride on the same event, in one
 // waterfall, and the order between them is not the order they were written in:
@@ -71,17 +70,13 @@ async function run(
   // `en-US` explicitly: the prompts are bilingual, the model-facing reason is
   // not, and a runtime reading the machine's locale would assert differently on
   // a different machine.
-  const runtime = createRuntime(harness.ctx, Config({ locale: 'en-US', ...options.config }))
+  const runtime = createRuntime(harness.ctx, harnessConfig({ locale: 'en-US', ...options.config }))
   // The runtime builds its own runner per working directory, so the spec asks it
   // once for the directory the call runs in — that answer is the cache entry the
   // triggers will read — and then hands back its own repository for every
   // directory. Running against the real checkout is what the suite must never do.
-  const realGit = runtime.git.bind(runtime)
   runtime.git(process.cwd())
-  runtime.git = (cwd) => {
-    console.log('GITASK', JSON.stringify(cwd), realGit.name)
-    return repo
-  }
+  runtime.git = () => repo
   const exec = makeExec(command)
 
   // `harness.listeners` is in registration order, outermost first — the same
