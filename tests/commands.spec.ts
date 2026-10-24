@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
 import { Config } from '../src/config.js'
 import { createRuntime } from '../src/index.js'
+import { SCOPE_MARKER } from '../src/scope.js'
 import { createHarness } from './harness.js'
 
 // `/dev-workflow` is the door a user reaches this plugin through, and it is the
@@ -13,14 +17,26 @@ import { createHarness } from './harness.js'
 //      compares signatures, and `off` clears the one it compares against.
 //   3. `status` says *which* kind of off it is, because "off because the config
 //      says so" and "off because you asked" answer differently to `/dev-workflow on`.
+//
+// A fourth property joined them with `scope`: the status is what a bug report
+// quotes, so it has to name the scope and, for a marked-only configuration, the
+// path of the marker — otherwise the commonest report cannot be diagnosed.
+
+/** Throwaway repositories the scope case builds. */
+const roots: string[] = []
+
+afterAll(() => {
+  for (const root of roots) rmSync(root, { recursive: true, force: true })
+})
 
 /**
  * The invocation slice the handler reads.
+ * @param cwd - the working directory the session reports.
  * @returns a command invocation for one session and working directory.
  */
-function invocation() {
+function invocation(cwd: string = process.cwd()) {
   return {
-    agent: { session: { id: { toString: () => 'session-1' }, header: { cwd: process.cwd() } } },
+    agent: { session: { id: { toString: () => 'session-1' }, header: { cwd } } },
     rawInput: '',
     signal: new AbortController().signal,
   }
@@ -43,12 +59,17 @@ function commit(leaf: unknown, value: unknown): void {
  * Run the registered command.
  * @param harness - the harness whose command registry to read.
  * @param input - everything after the command name.
+ * @param cwd - the working directory the session reports.
  * @returns the settlement text.
  */
-async function run(harness: ReturnType<typeof createHarness>, input: string): Promise<string> {
+async function run(
+  harness: ReturnType<typeof createHarness>,
+  input: string,
+  cwd?: string,
+): Promise<string> {
   const command = harness.commands[0]
   if (command === undefined) throw new Error('the command was not registered')
-  const result = (await command.handler({ ...invocation(), rawInput: input })) as {
+  const result = (await command.handler({ ...invocation(cwd), rawInput: input })) as {
     text?: string
   }
   return result.text ?? ''
@@ -125,5 +146,41 @@ describe('/dev-workflow', () => {
     // The two are distinguishable in text, not just in the `active` flag: one is
     // undone by `/dev-workflow on`, the other only by the configuration.
     expect(runtimeOff).not.toBe(configuredOff)
+  })
+
+  it('says whether this repository is in scope, because the status is a bug report', async () => {
+    // `scope: 'marked'` is the one setting that makes the plugin do nothing at
+    // all, silently. The most likely per-repository report is therefore "it
+    // ignored my commit here", and a status that omits the scope cannot answer
+    // it — the reader would have to be asked for a second round trip.
+    const root = mkdtempSync(join(tmpdir(), 'dsh-command-scope-'))
+    roots.push(root)
+    const unmarked = join(root, 'unmarked')
+    const marked = join(root, 'marked')
+    for (const dir of [unmarked, marked]) {
+      mkdirSync(join(dir, '.git'), { recursive: true })
+    }
+    mkdirSync(join(marked, dirname(SCOPE_MARKER)), { recursive: true })
+    writeFileSync(join(marked, SCOPE_MARKER), '')
+
+    const harness = createHarness({ commands: true })
+    const config = Config({ mode: 'on', locale: 'en-US' })
+    createRuntime(harness.ctx, config)
+
+    // The default is `all`, and it says so for a repository with no marker.
+    expect(await run(harness, 'status', unmarked)).toContain('Scope: every repository')
+
+    commit(config.scope, 'marked')
+    for (const listener of harness.volatile) listener()
+
+    // Same configuration, two repositories: the answer differs, and the
+    // unmarked one names the file that would opt it in.
+    const off = await run(harness, 'status', unmarked)
+    expect(off).toContain('NOT marked')
+    expect(off).toContain(join(unmarked, SCOPE_MARKER))
+
+    const on = await run(harness, 'status', marked)
+    expect(on).toContain('is marked')
+    expect(on).not.toContain('NOT marked')
   })
 })

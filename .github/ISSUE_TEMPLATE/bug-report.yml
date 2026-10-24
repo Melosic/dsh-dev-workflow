@@ -38,8 +38,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: DSH version and plugin version.
-      placeholder: 'DSH 0.2.1-rc.2, @melosic/dsh-dev-workflow 0.4.2'
+      description: The DSH version (`dsh --version`) and the plugin version (`/dev-workflow status`, or the version in your profile's `package.json`).
+      placeholder: 'e.g. DSH 0.2.x, @melosic/dsh-dev-workflow 0.4.x'
     validations:
       required: true
 

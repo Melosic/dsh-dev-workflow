@@ -71,7 +71,7 @@ pnpm pack --dry-run                                  # 产物里有 cordis.patch
 dsh plugin --profile <scratch> add @melosic/dsh-dev-workflow   # 装完能挂载、命令能出现
 ```
 
-最可靠的验收是**装到一个空 profile 里**跑一次：`/dev-workflow status` 能出五行、
+最可靠的验收是**装到一个空 profile 里**跑一次：`/dev-workflow status` 能出六行、
 两个工具出现在工具列表里，就说明 manifest 的整条链路是通的。这一步不能靠「CI 绿了」代替。
 
 ### 2. 打包产物

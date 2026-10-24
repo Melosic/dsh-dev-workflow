@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import type { Config } from '../config.js'
 import type { Locale, Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
@@ -5,6 +6,8 @@ import type { WorkflowState } from '../state.js'
 import { renderCheck } from '../tools/result.js'
 import { listChangedFiles } from '../tools/check-doc-sync.js'
 import { evaluate, summarize } from '../checks.js'
+import { SCOPE_MARKER, marked, projectRoot } from '../scope.js'
+import type { Scope } from '../scope.js'
 
 // `/dev-workflow` — the manual half of the plugin. A human command runs without
 // becoming a model message, so it is the right place for "turn this off" and
@@ -94,9 +97,11 @@ function messageArgument(rawInput: string): string | undefined {
  * Render the status report: what the plugin is doing, in which language, what it
  * last found, and how often a guard has fired.
  * @param options - the live plugin state.
+ * @param cwd - the session's working directory, so `scope` can be answered for
+ *   this repository rather than for the configuration in the abstract.
  * @returns one line per fact, in reading order.
  */
-function statusLines(options: DevWorkflowCommandOptions): string[] {
+function statusLines(options: DevWorkflowCommandOptions, cwd: string): string[] {
   const t = options.t
   const lines = [
     options.active()
@@ -113,6 +118,26 @@ function statusLines(options: DevWorkflowCommandOptions): string[] {
       locale: options.locale(),
       setting: options.config.locale.get(),
     }),
+  )
+
+  // `scope: 'marked'` is the one setting that makes the plugin do nothing at
+  // all, silently, in a repository that is not opted in. A status report that
+  // omits it cannot answer the most likely per-repository complaint — "the
+  // plugin ignored my commit" — without a round trip, so the line states the
+  // configuration and this repository's own answer, not just the former.
+  const scope = options.config.scope.get() as Scope
+  lines.push(
+    scope === 'all'
+      ? t('command.toggle.status.scope.all')
+      : t(
+          marked(cwd)
+            ? 'command.toggle.status.scope.marked.on'
+            : 'command.toggle.status.scope.marked.off',
+          // The full path, built with `join` rather than assembled in the string:
+          // a Windows report that prints `.dsh/dev-workflow.yml` sends the reader
+          // to a file that does not exist there.
+          { file: join(projectRoot(cwd), SCOPE_MARKER) },
+        ),
   )
 
   const last = options.state.lastOutcome()
@@ -225,22 +250,23 @@ export function createDevWorkflowCommand(
       const t = options.t
       const input = invocation.rawInput.trim()
       const requested = input.split(/\s+/)[0] ?? ''
+      const cwd = invocation.agent?.session.header.cwd ?? process.cwd()
       if (requested.length === 0) {
-        return { kind: 'success', text: statusLines(options).join('\n') }
+        return { kind: 'success', text: statusLines(options, cwd).join('\n') }
       }
       if (!(SUBCOMMANDS as readonly string[]).includes(requested)) {
         return { kind: 'error', text: t('command.toggle.unknown', { input: requested }) }
       }
 
       if (requested === 'status') {
-        return { kind: 'success', text: statusLines(options).join('\n') }
+        return { kind: 'success', text: statusLines(options, cwd).join('\n') }
       }
       if (requested === 'on' || requested === 'off') {
         options.setActive(requested === 'on')
         // Computed once and reported whole: two calls would recount the guard
         // tally, and the first line is not the answer the user asked for anyway —
         // an `off` that does not say how to come back is a one-way door.
-        const lines = statusLines(options)
+        const lines = statusLines(options, cwd)
         return {
           kind: 'success',
           text: [lines[0] ?? '', t(`command.toggle.${requested}_done`)].join('\n'),
