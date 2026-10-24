@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Config } from '../src/config.js'
 import * as plugin from '../src/index.js'
-import { createHarness } from './harness.js'
+import { createHarness, harnessConfig, plain } from './harness.js'
 
 // `tests/harness.ts` stands in for the DSH services, and fifteen other specs
 // trust it. Nothing checked that it was still a faithful stand-in: a service the
@@ -64,5 +64,22 @@ describe('createHarness', () => {
     const harness = createHarness({ settings: true })
     plugin.apply(harness.ctx, Config({}))
     expect(harness.volatile).toHaveLength(1)
+  })
+
+  it('keeps a spec-built runtime out of the repository audit log', () => {
+    // `audit.path` is relative and resolves against the session's working
+    // directory, which a spec never overrides — so a spec that drives the real
+    // chain would append to this repository's own log, inside a gitignored
+    // directory where nobody would ever see it.
+    expect(plain(Config({}).audit)).toEqual({
+      enabled: true,
+      path: '.dev-docs/audit-log.jsonl',
+    })
+    expect(plain(harnessConfig().audit)).toEqual({
+      enabled: false,
+      path: '.dev-docs/audit-log.jsonl',
+    })
+    // Overrides still reach the configuration; only the sink is switched off.
+    expect(plain(harnessConfig({ locale: 'en-US' }).locale)).toBe('en-US')
   })
 })

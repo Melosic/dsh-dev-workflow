@@ -76,7 +76,8 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 **`tests/harness.ts` 不是测试文件**，它不匹配 Vitest 的用例收集规则，只被各个 spec
 导入。加新 spec 时优先复用它，而不是再写一份假的 context——假 ctx 一旦出现两份，
 它们迟早会对不上真实注册契约。每个 `tests/*.spec.ts` 文件顶部有一行注释说明它覆盖什么，
-新增文件时照做；`tests/` 下当前有 23 个 spec。
+新增文件时照做（`tests/` 下当前有几个 spec 不写在这里：这个数字每次加测试都会变，
+写在这里只会腐化，`ls tests/*.spec.ts | wc -l` 才是答案）。
 
 几个写测试时必须知道的约定：
 
@@ -92,6 +93,11 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 - **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 111 个 key、扁平化后 112 个叶子路径。
   这个数字会随每条新文案变化，所以 `tests/i18n.spec.ts` 断言的是两边键集相等，而不是写死常量
   ——写死的常量正是它和本文件对不上的原因。数 key 时想清楚数的是哪一层。
+- **建 runtime 的 spec 用 `harnessConfig()`，不要直接 `Config({})`。** 默认 `audit.path` 是相对
+  路径，审计按会话工作目录解析，而 spec 不改工作目录——于是驱动工具调用的 spec 会把测试夹具
+  追加进本仓库自己的 `.dev-docs/audit-log.jsonl`。那个目录被 gitignore 忽略，污染在 diff 里
+  看不见，只有翻文件时才会发现真假记录混在一起。`harnessConfig()` 默认关掉审计落盘，
+  要测审计本身的 spec 自己传 `audit.path`。
 
 ## 加一条新规则要动什么
 
