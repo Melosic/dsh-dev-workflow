@@ -47,6 +47,14 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
 调用也能命中同一个根。目录的向上查找会缓存，标记文件的存在性不缓存：会话进行中新建或删掉标记，
 下一次工具调用就生效，不需要重启。
 
+标记不用手写：在要启用的仓库里敲 `/dev-workflow mark` 就会建好（连 `.dsh/` 目录一起），
+它建的文件带三行注释说明自己是什么，可以直接提交；`/dev-workflow unmark` 删掉它。
+`status` 在 `marked` 档下会说明当前仓库在不在范围内，没标记时那句提示里直接给出 `mark` 的用法——
+不用先知道路径。
+
+面板上没有「选文件夹」的等价控件：面板只写 profile 的配置值，而这件事是**逐仓库**的，落的是
+仓库里的文件，不是 profile 里的字段。所以它只能是一个命令。
+
 默认是 `all`。反过来把 `marked` 设成默认，等于让所有还没建标记的仓库静默失去检查——那是把安全
 放松伪装成默认值。
 
@@ -429,7 +437,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | 想要的行为 | 配置 |
 | --- | --- |
 | 完全关掉插件（零常驻、零介入） | `mode: 'off'` |
-| 只在部分仓库生效（未标记仓库不检查、无目录行） | `scope: 'marked'`，然后在要检查的仓库根目录建 `.dsh/dev-workflow.yml` |
+| 只在部分仓库生效（未标记仓库不检查、无目录行） | `scope: 'marked'`，然后在要检查的仓库里跑 `/dev-workflow mark` |
 | 只关掉自带检查（交给 husky / commitlint） | `enableOwnTrigger: false`（管提交 / PR / 发版三个触发器） |
 | 只关掉提交信息检查 | `commitCheck.enabled: false`（PR 标题同样不再按提交规范判） |
 | 只关掉文档同步检查 | `docsCheck.enabled: false` |

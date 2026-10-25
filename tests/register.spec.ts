@@ -209,7 +209,7 @@ describe('createRuntime', () => {
     const runtime = plugin.createRuntime(harness.ctx, Config({ locale: 'zh-CN' }))
     expect(runtime.locale()).toBe('zh-CN')
     expect(runtime.t()('command.toggle.hint')).toBe(
-      'on | off | status | check [--message "type: subject"]',
+      'on | off | status | check [--message "type: subject"] | mark | unmark',
     )
   })
 

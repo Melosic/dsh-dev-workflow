@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -182,6 +182,39 @@ describe('/dev-workflow', () => {
     const on = await run(harness, 'status', marked)
     expect(on).toContain('is marked')
     expect(on).not.toContain('NOT marked')
+  })
+
+  it('opts a repository in and out without the user creating the file by hand', async () => {
+    // The hint used to end at "create this path", which is where the feature
+    // stops being usable: the directory does not exist, the file has no content
+    // to copy, and nothing says whether it should be committed.
+    const root = mkdtempSync(join(tmpdir(), 'dsh-command-mark-'))
+    roots.push(root)
+    mkdirSync(join(root, '.git'), { recursive: true })
+
+    const harness = createHarness({ commands: true })
+    const config = Config({ mode: 'on', locale: 'en-US' })
+    createRuntime(harness.ctx, config)
+    commit(config.scope, 'marked')
+    for (const listener of harness.volatile) listener()
+
+    expect(await run(harness, 'status', root)).toContain('/dev-workflow mark')
+
+    const marked = await run(harness, 'mark', root)
+    expect(marked).toContain(join(root, SCOPE_MARKER))
+    // The marker is on disk and the status line already agrees, so one command
+    // answers both "did that work" and "what changed".
+    expect(existsSync(join(root, SCOPE_MARKER))).toBe(true)
+    expect(marked).toContain('is marked')
+
+    const again = await run(harness, 'unmark', root)
+    expect(again).toContain(join(root, SCOPE_MARKER))
+    expect(existsSync(join(root, SCOPE_MARKER))).toBe(false)
+
+    // Unmarking twice is a mistake worth naming rather than a silent success.
+    const nothing = await run(harness, 'unmark', root)
+    expect(nothing).toContain('already opted out')
+    expect(nothing).toContain(join(root, SCOPE_MARKER))
   })
 
   it('says when a guard hit was waved through rather than stopped', async () => {

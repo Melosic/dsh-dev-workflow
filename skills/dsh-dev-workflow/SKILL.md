@@ -823,6 +823,8 @@ configured:
   interrupts. The default is `all`, which checks every working directory as
   before. If a repository has no marker and you are unsure whether the rules
   apply, ask before assuming they do — silence from the guards is not agreement.
+  `/dev-workflow mark` writes the marker (and `unmark` removes it), so opting a
+  repository in never means hand-creating a path.
 
 ## Automatic Triggers
 

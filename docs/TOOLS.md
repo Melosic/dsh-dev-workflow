@@ -133,7 +133,14 @@ rename 形态（`old -> new`）取右侧，并还原 git 的 C 风格转义（`\
 | `on` | 注册全部资源，并回显状态行 |
 | `off` | 注销工具、技能 provider 与八个监听器，并回显状态行；命令自身保留，否则用户没有命令可以敲回来 |
 | `check [--message "type: subject"]` | 对当前工作区跑一次 `evaluate()`，结果记入状态，输出 `✖` / `⚠` 清单；给了 `--message` 就一并校验提交信息，没给会输出一条说明「本次未含提交信息规则」 |
+| `mark` | 在项目根目录建 `.dsh/dev-workflow.yml`（连同目录），并回显生效范围那一行；`scope` 不是 `marked` 时同样可建，只是暂时用不上 |
+| `unmark` | 删掉该标记文件；本来就没有时返回 `{kind: 'error'}` 并说明 |
 | 其它 | `{kind: 'error'}`，提示可用取值 |
+
+`mark` / `unmark` 存在的原因是 `scope: 'marked'` 下的提示原来止于「去建这个路径」：目录不存在、
+文件没有内容可抄、也没说该不该提交。标记文件只看在不在，所以它由插件生成是安全的——建出来的
+文件是带三行注释的空标记，可以直接提交。面板上没有等价控件：面板写的是 profile 的配置值，
+而这件事落的是仓库里的文件，两者不是同一层。
 
 `status` 的守卫命中计数把字典 key 渲染成可读文本并带上次数，例如
 `Guard hits: A force push rewrites remote history…×2, git clean -f deletes untracked files permanently.×1`；
