@@ -17,6 +17,7 @@
 
 - `docs/assets/how-it-works.png`：一张能一眼看完的机制图，替代 README 里那段 ASCII 框图。
 - `scope: 'marked'` 让规则只在项目根带 `.dsh/dev-workflow.yml` 的仓库生效；默认 `all`，现有安装行为不变。
+- `/dev-workflow mark` / `unmark` 直接建或删那个标记文件，不用再照提示手建路径；`status` 的未标记提示也改成指向 `mark`。
 - 仓库级 PR 模板：七节全部由 `gh pr create` 前的检查读取，缺一段或段内为空都会被拦下；另附 issue 的 bug 报告表单。
 - PR 段落名可配置（`prSections`），用中文段落名的仓库不必再整体关掉触发器。
 - 发版检查的三条约定可配置：哪些命令算发版（`releaseCheck.publishers`）、未发布段落叫什么、分类标题有哪些。

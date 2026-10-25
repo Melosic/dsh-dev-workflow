@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Config } from '../config.js'
 import type { Locale, Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
@@ -75,7 +76,7 @@ export interface DevWorkflowCommandOptions {
 }
 
 /** The subcommands this command accepts. */
-const SUBCOMMANDS = ['on', 'off', 'status', 'check'] as const
+const SUBCOMMANDS = ['on', 'off', 'status', 'check', 'mark', 'unmark'] as const
 
 /**
  * The commit message a `check` invocation states, when it states one.
@@ -185,6 +186,32 @@ function statusLines(options: DevWorkflowCommandOptions, cwd: string): string[] 
 }
 
 /**
+ * Write the opt-in marker into a repository.
+ *
+ * The marker is presence-only, which is what makes it safe to generate: there is
+ * nothing in it to get wrong. The text it is created with is a comment, so the
+ * file explains itself to whoever finds it in `git status` — a marker is a
+ * tracked file that shows up in every clone, and one that says why it exists
+ * saves the next reader a search through the docs.
+ * @param cwd - a working directory inside the repository.
+ * @returns the absolute path of the marker.
+ */
+function writeMarker(cwd: string): string {
+  const file = join(projectRoot(cwd), SCOPE_MARKER)
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(
+    file,
+    [
+      '# Presence of this file opts the repository into the dsh-dev-workflow guard',
+      '# when its `scope` is `marked`. The contents are never read — delete the file',
+      '# (or run /dev-workflow unmark) to opt the repository back out.',
+      '',
+    ].join('\n'),
+  )
+  return file
+}
+
+/**
  * Check the working tree on demand, with the same rules the trigger applies.
  *
  * Two facts keep this report from reading as "everything passed" when the
@@ -283,6 +310,26 @@ export function createDevWorkflowCommand(
         return {
           kind: 'success',
           text: [lines[0] ?? '', t(`command.toggle.${requested}_done`)].join('\n'),
+        }
+      }
+      // `mark` exists because the alternative was a path in a hint: when the
+      // scope is `marked`, the one thing a user needs is the file, and walking
+      // them to a directory to create it by hand is where the feature stops
+      // being usable. Both directions report the scope line afterwards, so the
+      // answer to "did that work" is the same answer `status` would give.
+      if (requested === 'mark' || requested === 'unmark') {
+        const file = join(projectRoot(cwd), SCOPE_MARKER)
+        if (requested === 'mark') {
+          writeMarker(cwd)
+        } else if (!existsSync(file)) {
+          return { kind: 'error', text: t('command.toggle.unmark.nothing', { file }) }
+        } else {
+          rmSync(file)
+        }
+        const lines = statusLines(options, cwd)
+        return {
+          kind: 'success',
+          text: [t(`command.toggle.${requested}.done`, { file }), lines[2] ?? ''].join('\n'),
         }
       }
       return runCheck(options, invocation)

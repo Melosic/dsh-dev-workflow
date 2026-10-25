@@ -121,7 +121,7 @@ describe('src/i18n.ts', () => {
   it('leaves a placeholder intact when its parameter is missing', () => {
     const english = createTranslator('en-US')
     expect(english('command.toggle.unknown')).toBe(
-      'Unknown subcommand "{input}". Use on, off, status, or check.',
+      'Unknown subcommand "{input}". Use on, off, status, check, mark, or unmark.',
     )
   })
 
