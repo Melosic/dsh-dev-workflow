@@ -348,6 +348,13 @@ A pull request is mergeable only when CI is green, the branch is up to date with
 `main`, and every review conversation is resolved. Never merge by bypassing a
 failing check: fix the cause, or report the blocker.
 
+**Two pull requests in flight will meet in the changelog.** Both add a line under
+the same unreleased heading, so each is clean against the base and the second one
+to merge conflicts there. Decide the merge order before opening the second one:
+merge the first, then rebase. The gate names the conflicting branch and files
+before the pull request is created — do not read that as a warning to click past;
+it is the cheapest moment to avoid the conflict entirely.
+
 **Pushing, tagging, opening the pull request, and publishing each need their own
 answer from the user first.** These leave this machine under their name; they are
 not steps an assistant completes on its own initiative. Show the branch, the

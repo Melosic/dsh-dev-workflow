@@ -44,12 +44,13 @@ src/
 ├── skills/provider.ts        技能 provider：目录条目 + 按需全文
 ├── tools/
 │   ├── result.ts             CheckResult 与统一的渲染格式
+│   ├── merge-preview.ts      两条分支合并会不会冲突（只读，git merge-tree）
 │   ├── check-commit-message.ts
 │   └── check-doc-sync.ts
 ├── triggers/
 │   ├── shared.ts             三个触发器共用的截断、双语提示与文件读取
 │   ├── pre-commit.ts         tools/pre-execute 上的提交前检查
-│   ├── pre-pr.ts             gh pr create 的标题与描述检查
+│   ├── pre-pr.ts             gh pr create 的标题、描述与并行分支冲突检查
 │   └── pre-release.ts        git tag / npm publish 的发版检查
 ├── guard/
 │   ├── shared.ts             五道守卫共用的事件接线与档位决策
@@ -233,6 +234,11 @@ guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上
 
 工作区只读一次（`git status --porcelain=v1 --untracked-files=all`，由调用方执行），
 之后所有判断都是对文件列表与字符串的操作——这也是 `evaluate` 能重跑的前提。
+
+PR 检查多问一次仓库：`src/tools/merge-preview.ts` 用
+`git merge-tree --write-tree --name-only` 算一遍「本分支与本地另一个未合并分支会不会冲突」。
+它只写对象库，不碰工作区、索引与网络，所以放在 `tools/pre-execute` 上是安全的。两个分支各自
+对基线干净、合起来才冲突，正是并行 PR 最难自己发现的一类问题。
 
 ## 不跑 shell 的命令行解析
 

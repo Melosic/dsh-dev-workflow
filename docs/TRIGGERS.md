@@ -436,6 +436,7 @@ PR 与发版两个断点的核对结论见上文「为什么三个触发器都�
 | `-F` 指向的文件由同一条命令稍后写入 | 判定时读不到 → 报「信息不可读」而非沉默 |
 | agent 通过 `bash` / `pwsh` 执行 `gh pr create` | 检查标题与描述并提示 |
 | `gh pr create --fill` / 命令行没给标题 | 标题规则不跑，记一条 warning 说明「填充后的标题无法校验」 |
+| 本地还有未合并的分支，与本分支会冲突 | 记一条 warning，点名分支与冲突文件；判定用 `git merge-tree`，只写对象库、不碰工作区与索引 |
 | PR 描述由 `--body-file -` 从 stdin 读 | 跳过描述规则，标题照常检查 |
 | PR 描述由 shell 组装（`-b "$(cat pr.md)"`） | 跳过描述规则并记 warning，不再把 `$(cat pr.md)` 当正文误拦 |
 | agent 通过 `bash` / `pwsh` 执行 `git tag` / `npm publish` / `yarn publish` / `bun publish` | 检查发版并提示 |
@@ -452,7 +453,7 @@ PR 与发版两个断点的核对结论见上文「为什么三个触发器都�
 | 本会话审批策略为 `never`（如 `danger-full-access` 预设） | 不再返回没人会回答的 `ask`：插件自己 `deny`，理由追加 `approval.disabled` 说明没有人被问到、两条放行路径，以及「设为『允许』会一直生效直到改回『询问』」的代价 |
 | `mode: 'off'` | 监听器根本不注册，零常驻成本、零介入 |
 | `enableOwnTrigger: false` / 某个守卫 `enabled: false` | 对应的监听器不注册（前者管三个约定触发器），其余照常工作 |
-| 运行时没有 `subprocess` 服务 | `git` 读不到改动文件集，提交判定只跑消息规则并说明原因；守卫不受影响（它不需要读仓库） |
+| 运行时没有 `subprocess` 服务 | `git` 读不到改动文件集，提交判定只跑消息规则并说明原因；PR 检查不比对分支冲突；守卫不受影响（它不需要读仓库） |
 
 「插件管会话内，husky 管会话外」是这套机制与 git 钩子的分工：作者在自己的终端里
 `git commit` 时，唯一能拦住的仍然是 `.husky/` 里的钩子；插件的价值在于让 agent 在提交之前

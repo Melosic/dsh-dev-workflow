@@ -98,6 +98,7 @@
   "trigger.pre_pr.error.checklist": "PR 描述里还有 {count} 项检查清单未勾选。请逐项勾选；不适用的请删掉该行。",
   "trigger.pre_pr.warn.issue": "这个 PR 没有关联 Issue。如果有对应 Issue，请引用它（`Closes #12`），以便追溯到这次改动的起因。",
   "trigger.pre_pr.warn.filled": "标题与描述来自提交记录（`--fill` 或交互式输入），此处无法检查。squash 合并时这些标题会成为主干上的提交信息，合并前请自行确认。",
+  "trigger.pre_pr.warn.conflict": "`{branch}` 尚未合并，与本分支在 {files} 上会冲突。两个分支各自对基线都是干净的，所以后合并的那个要付冲突的代价——先合另一个再 rebase 本分支，或者换一个合并顺序。",
   "trigger.pre_pr.warn.title_literal": "标题由 shell 组装（`$(...)`、变量或反引号），这里只能读到字面文本。请自行检查最终标题。",
   "trigger.pre_pr.warn.body_literal": "描述由 shell 拼装（`$(...)`、变量或反引号），因此无法检查段落。请自行核对模板要求的段落。",
   "trigger.pre_pr.detail": "PR 检查还发现：\n{details}",

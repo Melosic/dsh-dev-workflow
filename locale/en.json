@@ -98,6 +98,7 @@
   "trigger.pre_pr.error.checklist": "The pull request description leaves {count} checklist item(s) unticked. Tick each one, or delete the line if it does not apply.",
   "trigger.pre_pr.warn.issue": "The pull request names no issue. Reference one (`Closes #12`) when an issue exists, so the change can be traced back to its reason.",
   "trigger.pre_pr.warn.filled": "The title and description come from the commits (`--fill`, or an interactive prompt), so they could not be checked here. Under squash merge the filled title becomes the commit on the main branch — check it before merging.",
+  "trigger.pre_pr.warn.conflict": "`{branch}` is still unmerged and would conflict with this branch on {files}. Each branch merges cleanly against the base on its own, so whichever lands second pays for the conflict — rebase this branch after the other one merges, or merge them in the other order.",
   "trigger.pre_pr.warn.title_literal": "The title is assembled by the shell (`$(...)`, a variable, or backticks), so only its literal text could be read. Check the resulting title yourself.",
   "trigger.pre_pr.warn.body_literal": "The description is assembled by the shell (`$(...)`, a variable, or backticks), so its sections could not be checked. Check the template sections yourself.",
   "trigger.pre_pr.detail": "The pull-request check also found this:\n{details}",

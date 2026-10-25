@@ -6,6 +6,8 @@ import type { CheckResult } from '../tools/result.js'
 import { evaluateMessage, fingerprint, summarize } from '../checks.js'
 import { commandOf, quoteCommandWords, shellWordIsLiteral, wordInvocations } from '../shell.js'
 import type { CommandWord } from '../shell.js'
+import { conflictingBranches } from '../tools/merge-preview.js'
+import type { PendingConflict } from '../tools/merge-preview.js'
 import { readText, settleAbout } from './shared.js'
 import type { TriggerOptions } from './shared.js'
 
@@ -66,6 +68,13 @@ export interface PullRequestInput {
   readonly body?: string
   /** Whether the description is literal text; omitted means it is. */
   readonly bodyLiteral?: boolean
+  /**
+   * Local branches this one would conflict with once both are merged.
+   *
+   * Read from the repository rather than from the command line, so it is present
+   * only when a git runner was available.
+   */
+  readonly conflicts?: readonly PendingConflict[]
 }
 
 /**
@@ -276,6 +285,20 @@ export function evaluatePullRequest(
     warnings.push(t('trigger.pre_pr.warn.filled'))
   }
 
+  // A branch that would conflict with another one still in flight is not a
+  // problem with this pull request: each branch is clean against the base, and
+  // the conflict only exists once both are merged. Saying so now is the one
+  // moment it is cheap — before review, before CI, before the merge that makes
+  // somebody redo the work.
+  for (const conflict of input.conflicts ?? []) {
+    warnings.push(
+      t('trigger.pre_pr.warn.conflict', {
+        branch: conflict.branch,
+        files: conflict.files.join(', '),
+      }),
+    )
+  }
+
   // The reference is looked for in the same text the section rules read: a
   // template hint of the form `<!-- Closes #123 -->` is an instruction to the
   // author, not a reference the author wrote.
@@ -331,11 +354,17 @@ export function createPrePrTrigger(
     // whatever the command line said about where it came from.
     const stated = pullRequest.body !== undefined
     const literal = stated ? (pullRequest.bodyLiteral ?? true) : true
+    // Which other branches this one would clash with. A profile with no
+    // subprocess provider has no runner, and the check then says nothing about
+    // conflicts rather than claiming there are none.
+    const runner = options.git?.(cwd)
+    const conflicts = runner === undefined ? [] : await conflictingBranches(runner, exec.signal)
     const input: PullRequestInput = {
       ...(pullRequest.title === undefined
         ? {}
         : { title: pullRequest.title, titleLiteral: pullRequest.titleLiteral ?? true }),
       ...(body === undefined ? {} : { body, bodyLiteral: literal }),
+      ...(conflicts.length === 0 ? {} : { conflicts }),
     }
     const outcome = evaluatePullRequest(input, options.config(), t)
     options.state.record({

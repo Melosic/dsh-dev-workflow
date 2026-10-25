@@ -3,6 +3,7 @@ import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import type { ApprovalPolicyReporter } from '../approval-policy.js'
 import { unaskable } from '../approval-policy.js'
 import type { Config } from '../config.js'
+import type { GitRunner } from '../git.js'
 import { createTranslator } from '../i18n.js'
 import type { Translate } from '../i18n.js'
 import type { WorkflowState } from '../state.js'
@@ -34,6 +35,14 @@ export interface TriggerOptions {
    * profile with no approval service composed already gets.
    */
   readonly approval?: () => ApprovalPolicyReporter | undefined
+  /**
+   * A git runner for one working directory.
+   *
+   * Optional for the same reason as `approval`: a trigger that has no repository
+   * to read still judges the text it was given, and one that has one can say
+   * more. A profile with no subprocess provider yields no runner at all.
+   */
+  readonly git?: (cwd: string) => GitRunner
 }
 
 /**
