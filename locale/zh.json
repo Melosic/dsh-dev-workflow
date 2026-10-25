@@ -18,6 +18,7 @@
   "command.toggle.status.never": "本会话还没有跑过检查。",
   "command.toggle.status.last": "最近一次检查：{kind} —— {summary}",
   "command.toggle.status.guards": "守卫命中次数：{tally}",
+  "command.toggle.status.guards.relaxed": "{reason}（已放行）×{count}",
   "command.toggle.status.guards.none": "守卫命中次数：无。",
   "command.toggle.kind.commit": "提交信息",
   "command.toggle.kind.doc": "文档同步",

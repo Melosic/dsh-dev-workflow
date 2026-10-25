@@ -90,7 +90,7 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
   一半」和「`feat` 没补 CHANGELOG」这类 `errors` 才会。断言这类行为时写清楚断言在哪一层。
 - **断言报错文本用 `t()` 而不是字面量。** 字典改动时测试会跟着动，而不是留下一条
   读不出意图的字符串比较。
-- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 111 个 key、扁平化后 112 个叶子路径。
+- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 116 个 key、扁平化后 117 个叶子路径。
   这个数字会随每条新文案变化，所以 `tests/i18n.spec.ts` 断言的是两边键集相等，而不是写死常量
   ——写死的常量正是它和本文件对不上的原因。数 key 时想清楚数的是哪一层。
 - **建 runtime 的 spec 用 `harnessConfig()`，不要直接 `Config({})`。** 默认 `audit.path` 是相对
@@ -195,7 +195,8 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   排查「为什么问了却没弹窗」时先确认 profile 是否装了审批能力。
 - **DSH 版本有两处，方向不能一致漂移。** `peerDependencies` 的下界是「支持到多老」，
   `devDependencies` 的三个精确版本是「CI 跑在哪」。测试跑通一个新版本**不是**抬下界的理由：
-  下界一抬，还留在旧版本上的用户会被 `preflight()` 静默禁用（见 `docs/PUBLISHING.md` 第 6 条），
+  下界一抬，还留在旧版本上的用户要么装不上、要么装上了在启动时被禁用并看到一行说明
+  （见 `docs/PUBLISHING.md` 第 6、8 条），
   而 `latest` 渠道往往比 `next` 渠道落后一截。升级开发基线的最小步骤写在 `docs/PUBLISHING.md` 第 4 条。
 - **本机 `~/.npmrc` 的 `minimum-release-age=1440` 会挡住刚发布不到一天的版本。** 注意它来自
   **用户级** npmrc，不是仓库里那份（仓库 `.npmrc` 只有 `auto-install-peers` /

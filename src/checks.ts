@@ -28,6 +28,15 @@ export interface CommitCommand {
    */
   readonly amend?: boolean
   /**
+   * Whether the command stages every tracked change before committing
+   * (`-a` / `--all`).
+   *
+   * This changes what the commit will contain, not what is in the index now:
+   * with `-a` the index is filled at commit time, so reading it before the
+   * command runs yields a set that does not describe the commit.
+   */
+  readonly all?: boolean
+  /**
    * A message the command names in a form this check cannot read.
    *
    * `git commit -m "$msg"`, `-F` with a file another part of the same command
@@ -83,12 +92,16 @@ function commitArguments(args: readonly CommandWord[]): CommitCommand {
   const messages: string[] = []
   let file: string | undefined
   let amend = false
+  let all = false
   let unreadable: string | undefined
 
   for (let index = 0; index < args.length; index += 1) {
     const word = args[index]
     const token = word?.value ?? ''
     if (token === '--amend') amend = true
+    // `-a` is `--all`: every tracked change joins the commit at commit time,
+    // so the index read before the command runs is not what it will record.
+    if (token === '--all') all = true
     if (!token.startsWith('-') || token === '--' || token === '-') continue
 
     // A long option names itself and may carry its value after `=`, which is how
@@ -130,6 +143,7 @@ function commitArguments(args: readonly CommandWord[]): CommitCommand {
       // quoting: `-mfeat: x` is text git will record, `-m$(cat m)` is not.
       const inline: CommandWord | undefined =
         rest.length > 0 ? { value: rest, literal: word?.literal ?? false } : args[index + 1]
+      if (name === 'a') all = true
       if (name !== 'm' && name !== 'F') continue
       if (rest.length === 0) index += 1
       if (inline === undefined) break
@@ -145,10 +159,14 @@ function commitArguments(args: readonly CommandWord[]): CommitCommand {
 
   // Git joins repeated `-m` bodies as separate paragraphs.
   if (messages.length > 0) {
-    return { message: messages.join('\n\n'), ...(amend ? { amend } : {}) }
+    return { message: messages.join('\n\n'), ...(amend ? { amend } : {}), ...(all ? { all } : {}) }
   }
-  if (file !== undefined) return { file, ...(amend ? { amend } : {}) }
-  return { ...(amend ? { amend } : {}), ...(unreadable === undefined ? {} : { unreadable }) }
+  if (file !== undefined) return { file, ...(amend ? { amend } : {}), ...(all ? { all } : {}) }
+  return {
+    ...(amend ? { amend } : {}),
+    ...(all ? { all } : {}),
+    ...(unreadable === undefined ? {} : { unreadable }),
+  }
 }
 
 /**

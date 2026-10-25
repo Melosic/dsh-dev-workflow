@@ -46,17 +46,6 @@ export interface WorkflowState {
    */
   remember(sessionId: string, kind: CheckKind, targetId: string): void
   /**
-   * Drop a target, so the next attempt asks again.
-   *
-   * A refusal is an answer about one attempt, not about the target: the user
-   * who declined a commit with a bad message must be asked again after fixing
-   * it, and asked again if they change nothing at all.
-   * @param sessionId - the session the tool call belongs to.
-   * @param kind - which check.
-   * @param targetId - hash of what was checked.
-   */
-  forget(sessionId: string, kind: CheckKind, targetId: string): void
-  /**
    * Whether the user already approved this exact operation in this session.
    * @param sessionId - the session the tool call belongs to.
    * @param targetId - hash of the operation.
@@ -97,6 +86,12 @@ export interface WorkflowState {
 // reported hundreds of commits ago is worth re-reporting anyway.
 const MAX_TARGETS_PER_SESSION = 512
 
+// The bucket map needs a ceiling too: a long-lived process serves session after
+// session, and an empty bucket per finished session is still a leak. Keeping the
+// most recently active sessions is enough — an old one being forgotten only
+// means its next check asks again, which is the safe direction.
+const MAX_SESSIONS = 32
+
 /**
  * Create the state for one plugin instance.
  * @returns an empty state; nothing is remembered yet.
@@ -109,9 +104,20 @@ export function createWorkflowState(): WorkflowState {
 
   const bucket = (sessionId: string): Set<string> => {
     const existing = targets.get(sessionId)
-    if (existing !== undefined) return existing
+    if (existing !== undefined) {
+      // Re-inserting keeps `targets` in most-recently-used order, so the session
+      // ceiling below drops the least recently active one.
+      targets.delete(sessionId)
+      targets.set(sessionId, existing)
+      return existing
+    }
     const created = new Set<string>()
     targets.set(sessionId, created)
+    while (targets.size > MAX_SESSIONS) {
+      const oldest = targets.keys().next().value
+      if (oldest === undefined) break
+      targets.delete(oldest)
+    }
     return created
   }
 
@@ -132,9 +138,6 @@ export function createWorkflowState(): WorkflowState {
   return {
     seen: (sessionId, kind, targetId) => bucket(sessionId).has(`${kind}:${targetId}`),
     remember: (sessionId, kind, targetId) => add(sessionId, `${kind}:${targetId}`),
-    forget: (sessionId, kind, targetId) => {
-      targets.get(sessionId)?.delete(`${kind}:${targetId}`)
-    },
     // A remembered approval is keyed apart from the checks: the same operation
     // being approved says nothing about a check having run over it.
     approved: (sessionId, targetId) => bucket(sessionId).has(`approved:${targetId}`),
