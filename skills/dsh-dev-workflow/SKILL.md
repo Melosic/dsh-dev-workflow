@@ -8,8 +8,15 @@ description: >
 
 # dsh-dev-workflow
 
-This file is the single source of truth for how this project is developed. It is
-read on demand — nothing below is resident context.
+This file is the default specification the plugin ships to everyone who installs
+it. It is read on demand — nothing below is resident context.
+
+**The repository you are working in outranks this file.** If its own `AGENTS.md`,
+`CONTRIBUTING.md`, or contributor guide says something different — a branch
+prefix, a commit type, a changelog heading, a review rule — follow that document
+and treat this one as the fallback it is. Where the plugin enforces a rule, the
+matching configuration field is what it actually enforces, so check the field
+before quoting a number from here.
 
 ## How to Read This Document
 
@@ -25,17 +32,21 @@ from treating a convention as a gate:
 - **The human decides.** Anything that leaves this machine, anything
   irreversible, and every judgement call marked "ask the user" belongs to them.
 
-Three documents hold the rules, and they are not interchangeable:
+Three documents usually hold the rules in a repository, and they are not
+interchangeable:
 
-| File             | Holds                                                     | Resident |
-| ---------------- | --------------------------------------------------------- | -------- |
-| `AGENTS.md`      | the stable rules that must hold on every turn             | yes      |
-| `CONTRIBUTING.md`| the expansion for humans working on the workflow plugin   | no       |
-| this file        | the specification the plugin ships to everyone who installs it | no    |
+| File              | Holds                                                        | Resident |
+| ----------------- | ------------------------------------------------------------ | -------- |
+| `AGENTS.md`       | the stable rules that must hold on every turn                 | yes      |
+| `CONTRIBUTING.md` | the expansion for humans contributing to the repository        | no       |
+| this file         | the default specification the plugin ships to every installer | no       |
 
-Write a rule here only if it applies to any repository that installs the plugin.
-Repository-specific detail — this project's own commands, its CI layout, its
-release mechanics — belongs in the other two.
+A repository may use other names — `CLAUDE.md`, `.cursor/rules`, a `docs/`
+page. What matters is the split, not the filenames: the always-on rules, the
+long form, and this fallback. Write a rule here only if it applies to any
+repository that installs the plugin. Repository-specific detail — a project's own
+commands, its CI layout, its release mechanics — belongs in that repository's own
+documents, and outranks anything below.
 
 Two interaction rules follow from the actor split. When you advise, give **one**
 primary recommendation, not a menu of five — a list of options is a way of
@@ -226,9 +237,11 @@ reviewed at all.
   pull request description already are that record; a second copy is a second
   thing to keep in sync, and it goes stale the moment the code moves.
 - A bypass — a rule that should have caught something and did not, or one that can
-  be skipped without a trace — goes to a private security advisory where the host
-  offers one, not to a public issue. Publishing the bypass before the fix
-  publishes an exploit.
+  be skipped without a trace — is a defect, and a public issue is fine. This plugin
+  is not a security boundary, so a bypass is not a vulnerability; publishing it is
+  how the next person finds it and adds "me too".
+  The one exception is a report that has to quote a live credential. Replace the
+  value first — otherwise the report itself completes the leak.
 - Then reference it from the commit: `Closes #12` — once this commit lands, issue
   #12 can be closed.
 - `Refs #12` — this commit relates to issue #12 but does not close it.

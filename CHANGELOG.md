@@ -13,6 +13,7 @@
 
 ### Added
 
+- `docs/assets/how-it-works.png`：一张能一眼看完的机制图，替代 README 里那段 ASCII 框图。
 - `scope: 'marked'` 让规则只在项目根带 `.dsh/dev-workflow.yml` 的仓库生效；默认 `all`，现有安装行为不变。
 - 仓库级 PR 模板：七节全部由 `gh pr create` 前的检查读取，缺一段或段内为空都会被拦下；另附 issue 的 bug 报告表单。
 - PR 段落名可配置（`prSections`），用中文段落名的仓库不必再整体关掉触发器。
@@ -25,6 +26,11 @@
 - `/dev-workflow status` 把放宽成 `allow` 的守卫命中标为「已放行」，不再和拦下的次数混在一起。
 - `scope: 'marked'` 的常驻成本写准了：它省掉的是技能目录行，两个工具定义是进程级注册，未标记的仓库里仍然常驻。
 - 过期的数字与引用一次性对齐实现：locale 键数、`ci:checks` 的项数、监听器数量、技能正文的字符与行数，以及四处漂移的源码行号和一个失效的 ADR 链接。
+- README 重写为「这是什么、什么时候说话、边界在哪」，不再以本仓库的约定做卖点。
+- 技能开头声明：所在仓库自己的 `AGENTS.md`/贡献者指南优先级高于本文件，本文件只是默认兜底。
+- `CONTRIBUTING.md` 重写：删掉与 `docs/DEVELOPMENT.md` 重复的工程实践、早就没人测的覆盖率要求、以及本机私有的阶段编号；PR 模板段落数改回真实的七节。
+- README 两张图都指向仓库里的真实截图；`ci:checks` 的阶段编号豁免只剩 `CHANGELOG.md` 一个。
+- 发现绕过不再要求走私密渠道：公开 issue 即可，只有报告本身要贴真实凭据时才走 advisory。
 
 ### Fixed
 

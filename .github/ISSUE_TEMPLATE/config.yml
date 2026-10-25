@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Report a security issue
+  - name: Report a secret leak
     url: https://github.com/Melosic/dsh-dev-workflow/security/advisories/new
-    about: Do not open a public issue for a bypass or a leaked-secret path.
+    about: Use this only when the report itself contains a live credential. A way around a guard is a bug — open a public issue for it.
