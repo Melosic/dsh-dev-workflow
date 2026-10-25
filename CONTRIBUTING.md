@@ -1,30 +1,43 @@
 # 贡献指引
 
-感谢你愿意为 dsh-dev-workflow 花时间。本文说明本仓库的协作规则——不只是「怎么做」，
-还有「为什么这样做」，因为规则背后的理由决定了它什么时候该被修改。
+感谢你愿意为 dsh-dev-workflow 花时间。本文是本仓库的**协作规则**：怎么报、怎么提、怎么合并。
+「怎么在本仓库里改代码」——目录职责、本地循环、测试怎么组织、有哪些坑——在
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。两份文档互补，不重复。
 
-在动手之前，请先读 [`AGENTS.md`](AGENTS.md)：那是本仓库的稳定规则清单。
-本文是它的展开版本。
+动手前请先读 [`AGENTS.md`](AGENTS.md)：那是稳定规则清单，本文是它的展开。
+
+## 这个插件怎么工作
+
+改任何一行代码之前，先建立这张图。所有能力都长在同一个点上。
+
+![dsh-dev-workflow 怎么工作](docs/assets/how-it-works.png)
+
+一次工具调用进入 DSH 后，插件最多挂上八个监听器，分两层：
+
+- **三个触发器**判「合不合规范」——提交信息、PR 描述、版本号与 CHANGELOG。纯函数加一次文件读。
+- **五道守卫**判「回不回得来」——命令、git、对外操作、读文件、凭据外泄。默认 `ask`，不替用户决定。
+
+两层都命中时只出一条提示，两边的理由合并显示，不会连问两次。
 
 ## 报障与提议
 
-报障请用 [bug 报告表单](.github/ISSUE_TEMPLATE/bug-report.yml)，它会强制填两项东西：
-DSH 版本、以及 `/dev-workflow status` 的完整输出。理由是「插件没反应」这类报障里，
-绝大多数最终查明是配置值不同、版本差异，或者规则本就如此设计——缺这两项无法分辨。
+报障请用 [bug 报告表单](.github/ISSUE_TEMPLATE/bug-report.yml)。它强制填两项：DSH 版本、
+以及 `/dev-workflow status` 的完整输出。理由是「插件没反应」这类报障里，绝大多数最终查明
+是配置值不同、版本差异，或者规则本就如此设计——缺这两项无法分辨。
 
-发现绕过（某条该拦的命令被放行、某条规则可以被静默跳过）不要开公开 issue，
-走 [security advisory](https://github.com/Melosic/dsh-dev-workflow/security/advisories/new)。
+发现绕过（某条该拦的命令被放行、某条规则可以被静默跳过）可以直接开公开 issue。本插件不是安全边界，
+绕过属于缺陷而不是漏洞，公开讨论更容易被搜到、被补充「我也遇到了」。
 
-功能提议用普通 issue 的自由文本即可，本仓库不设功能请求表单：没人填的表单比没有更糟。
+唯一的例外是报告里要贴真实凭据——活密钥、真 token、你家 `.env` 里那一行。那会直接泄露到公网，
+请走 [security advisory](https://github.com/Melosic/dsh-dev-workflow/security/advisories/new)，
+或先把值替换成 `xxx` 再开 issue。
 
-## 环境搭建
+功能提议用普通 issue 的自由文本即可。本仓库不设功能请求表单：没人填的表单比没有更糟。
 
-**要求**
+## 环境要求
 
-- Node.js >= 20（`engines.node` 声明的下限；CI 跑当前 LTS，即 Node 22）
-- pnpm 10.x
-
-**步骤**
+- Node.js >= 20（`engines.node` 声明的下限；CI 跑 Node 22）
+- pnpm（版本写在 `packageManager` 字段）
 
 ```bash
 git clone https://github.com/Melosic/dsh-dev-workflow.git
@@ -32,263 +45,107 @@ cd dsh-dev-workflow
 pnpm install
 ```
 
-**常用命令**
+装完先跑一遍完整的本地循环，确认环境是好的：
 
-| 命令 | 作用 |
-|---|---|
-| `pnpm build` | 把 `src/` 编译到 `lib/`（`src/` 不存在时会自动跳过） |
-| `pnpm typecheck` | 只做类型检查，不产出 |
-| `pnpm lint` | ESLint |
-| `pnpm lint:fix` | ESLint 自动修复 |
-| `pnpm format` | Prettier 写入 |
-| `pnpm format:check` | Prettier 校验（CI 用） |
-| `pnpm test` | Vitest 单次运行 |
-| `pnpm test:watch` | Vitest 监听模式 |
+```bash
+pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
+```
 
-**⚠️ 关于 `target` 与 `engines.node`**
+这条命令和 CI 的检查面一致（CI 多一项 commitlint，只在 PR 上跑）。
 
-`tsconfig.json` 的 `target` / `lib` 锁定 `ES2022`，与 `engines.node: ">=20"` 一致。
-**声明支持 Node 20 就不能使用 Node 22 才有的 API。** 要升级 `target`，
-必须同时提升 `engines.node`，并把 CI 矩阵改为对应版本。
+只用 pnpm。`pnpm-lock.yaml` 随仓库提交，不要用 npm / yarn 装依赖，也不要手工编辑 lockfile——
+混用包管理器会让同一个仓库出现两套解析结果。依赖版本锁定的原因（`lint-staged` 与 `@commitlint/*`
+不能随便升，升了会破坏 Node 20 支持）写在 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
 
-**⚠️ 关于依赖版本锁定**
-
-`lint-staged` 锁 `^15.5.2`、`@commitlint/*` 锁 `^19.8.1`，**不能升到 latest**：
-`lint-staged@17` 要求 Node >= 22.22.1，`@commitlint/*@21` 要求 Node >= 22.12.0，
-两者都会破坏 Node 20 支持。升级这些依赖时必须同步提升 `engines.node`。
-
-## 依赖管理
-
-- 包管理器固定为 **pnpm**，不使用 npm，也不使用 yarn。
-- `pnpm-lock.yaml` 提交到仓库；`node_modules/` 不提交。
-- **不要混用包管理器。** `npm install` 或 `yarn add` 会写出与本仓库无关的锁文件，
-  让下一个人装出不同的依赖树。
-- 安装运行时依赖用 `pnpm add <pkg>`，安装开发依赖用 `pnpm add -D <pkg>`，
-  升级依赖用 `pnpm update`。
-
-## 版本号
-
-- 版本号**只在 `package.json` 的 `version` 字段维护**，这是唯一来源。
-- 需要展示版本号的地方（README 徽章、文档里的版本引用）都从它派生，不硬编码字面量。
-- 理由：版本号散落在多处时，总有一处会先过期，而「哪一处是权威」也会随之变得模糊。
-
-## 忽略规则（`.gitignore`）
-
-必须包含以下条目：
-
-- `node_modules/`
-- `lib/`
-- `dist/`
-- `.dev-docs/`
-- `*.log`
-- `.DS_Store`
-
-构建产物、编辑器临时文件、本机开发文档都不进版本控制。
+版本号只有 `package.json` 一个来源，改版本走发版流程，见 [`docs/PUBLISHING.md`](docs/PUBLISHING.md)。
 
 ## 分支命名
 
-采用 GitHub Flow，只使用以下前缀：
+从 `main` 切出，前缀按改动性质选：
 
-| 前缀 | 用途 | 示例 |
-|---|---|---|
-| `feature/` | 新功能 | `feature/commit-message-tool` |
-| `fix/` | 缺陷修复 | `fix/guard-false-positive` |
-| `docs/` | 仅文档 | `docs/contributing-guide` |
-| `hotfix/` | 紧急修复 | `hotfix/release-blocker` |
+| 前缀 | 用于 |
+|---|---|
+| `feature/` | 新功能 |
+| `fix/` | 修缺陷 |
+| `docs/` | 只改文档 |
+| `hotfix/` | 线上问题的紧急修复 |
 
-`main` 分支受保护：禁止直接 push，必须通过 PR 合并，且必须 CI 通过。
+`main` 受保护：禁止直推，必须通过 PR 合并，且 `verify` 必须通过。分支保护对管理员同样生效。
 
-## 提交规范
+## 提交信息
 
-提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)，
-由 commitlint 在提交时校验。
-
-```
-<type>(<scope>): <subject>
-
-[optional body]
-
-[optional footer]
-```
-
-**允许的 type**：`feat`、`fix`、`docs`、`style`、`refactor`、`perf`、`test`、
-`build`、`ci`、`chore`、`revert`。
-
-**示例**
+Conventional Commits，`type(scope): subject`：
 
 ```
-feat(tools): add check_doc_sync tool
-fix(guard): stop treating --force-with-lease as dangerous
-docs(readme): document the /dev-workflow command
+feat(guard): block force-push to a protected branch
+fix(trigger): stop swallowing the pre-PR check when a guard asks
+docs(readme): say what the plugin is for
 ```
 
-### 原子提交是推荐，不是强制
+- `type` 用 feat / fix / docs / style / refactor / perf / test / build / ci / chore / revert
+- `scope` 可选，写模块名（guard、trigger、config、scope、skill…）
+- `subject` 祈使句、小写开头、不加句号，长度上限见插件配置的 `commitCheck.subjectMaxLength`
+- 破坏性变更在 type 后加 `!`，并在脚注写 `BREAKING CHANGE:`
 
-本项目鼓励一个提交做一件事、能独立通过测试、能独立回滚。但这是**推荐实践而非拦截规则**——
-当一次拆分会让历史更难理解时，宁可要一个完整的提交，也不要三个互相依赖的半成品。
-工具不会因为你提交得不够原子而拒绝你，只会因为提交信息不合规范而拒绝你。
+husky 的 `commit-msg` 钩子会跑 commitlint，格式不对提交直接失败。
+
+**原子提交是推荐，不是强制。** 一个提交只做一件事更好读，但不必为了拆而拆。
 
 ## PR 流程
 
-1. 从最新的 `main` 切出符合命名规范的分支。
-2. 提交前本地跑通：`pnpm lint && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test && pnpm format:check`。
-3. 推送分支并开 PR，说明动机（为什么）与做法（是什么），而不只是列出改了哪些文件。
-   一个 PR 只做一件事；改动超过 500 行就拆，或在正文里写清「哪几块、从哪读起」。
-   合并是 squash，分支上的几个关注点在 `main` 上只会剩下一个提交、一条信息，
-   所以拆分要在开 PR 之前做——合并之后再想还原几乎不可能。
-   GitHub 会用 `.github/pull_request_template.md` 预填正文，其中 `## What` / `## Why` /
-   `## How to verify` 三个标题**必须原样保留**（检查按字面匹配，段内文字可任意语言）；
-   提示注释在判定前会被剥掉，删不删都不影响，留着只是给自己看。
-4. 等待 CI 通过。CI 会校验：typecheck（源码 / 测试 / 面板）、lint、test、构建、locale key 对齐、
-   `cordis.patch.yml` 存在于 `files` 字段。
-5. 合并策略：**squash merge**，保持 `main` 历史线性、每个合并对应一个完整意图。
+1. 从 `main` 切分支，按上面的前缀命名
+2. 提交前跑一遍本地循环（见「环境要求」）
+3. 推分支，开 PR，目标是 `main`
+4. 等 `verify` 通过，然后 squash 合并
 
-### 文档与代码同 PR
+PR 模板有七个**不能改名、不能降级、不能删空**的标题：
 
-代码改了，描述它的文档要在同一个 PR 里改。理由：拆成两个 PR 时，
-第二个 PR 几乎总会因为「代码已经能跑了」而被搁置，文档就此腐烂。
+`## What` · `## Why` · `## How to verify` · `## Type of change` · `## Non-goals` · `## Risk and rollback` · `## Checklist`
 
-具体对应关系：
+模板顶部的注释写了细则。要点：
 
-| 改动 | 必须同步 |
+- 标题文字和 `##` 层级都不能改，正文用什么语言都行
+- 「None」「不适用」或一句话就是完整回答；留空或删掉标题会被判失败
+- `## Type of change` 是「删掉不符的行」，不是勾选框
+- `## Checklist` 里每一个 `- [ ]` 都要勾；不适用的行删掉并在 Non-goals 说明
+- `## Where to look first` 是唯一允许删除的标题
+- issue 引用（`Closes #123`）必须是真文本，写在 HTML 注释里不算
+
+**改动超过 500 行时**，`ci:checks` 会提示考虑拆分。这是警告不是失败。
+
+## 文档与代码同 PR
+
+改了行为就要改文档，同一个 PR 里完成。CI 会验的镜像对：
+
+| 改了 | 必须同时改 |
 |---|---|
 | `README.md` | `README.zh.md` |
 | `locale/en.json` | `locale/zh.json` |
-| `skills/dsh-dev-workflow/SKILL.md` | `skills/dsh-dev-workflow/SKILL.zh.md`（章节数量与层级顺序一致） |
-| 行为/配置变化 | `CHANGELOG.md` 的 `[Unreleased]` 段 |
+| `skills/dsh-dev-workflow/SKILL.md` | `SKILL.zh.md` |
 
-## 代码风格
+只改一边，`ci:checks` 直接失败。新增的文档要登记到 [`docs/README.md`](docs/README.md)，否则它不会被任何人找到。
 
-- 格式由 Prettier 决定（`semi: false`、`singleQuote: true`、`printWidth: 100`），不要手工争辩。
-- 规则由 ESLint 9 flat config 决定。
-- **代码注释用英文。**
-- **用户可见文本一律走 `t()`，不得硬编码**（见下节）。
-- 路径处理用 `node:path` / `node:url`，不要拼接正斜杠字符串——本项目的开发环境包含 Windows。
-- 包为 ESM-only，源码必须使用 ESM 语法（`import` / `export`，无 `require`）。
+`CHANGELOG.md` 的 `[Unreleased]` 段常驻顶部。用户能感知的改动记一条，写清「改了什么」和「为什么」。
 
-## 测试
+## 改用户可见文本
 
-- 测试文件放在 **`tests/` 目录下**（`tsconfig.json` 已把 `**/*.test.ts` 排除在构建之外）。
-- 命名：`describe` 用被测模块名，`it` 用行为描述。
-- 覆盖率建议 ≥ 80%，新代码优先。
-- 新功能、修 bug、重构都需要补测试；纯文档、纯配置变更不需要。
+所有面向用户的字符串走 `t()`，不得硬编码。`locale/en.json` 加键，`locale/zh.json` 同步加。
+CI 只校验两边的键对齐，译文对不对仍然要人看——这是 review 的一部分。
 
-测试名用英文、描述行为而非实现：
-
-```ts
-// ✅ 好：描述可观察的行为
-it('rejects a commit message without a type prefix', () => {})
-
-// ❌ 差：描述内部实现
-it('returns false from checkCommitMessage', () => {})
-```
-
-每个非平凡逻辑至少留一个最小可运行检查——一个能捕获破坏的断言就够，
-不引入框架或夹具，除非确实需要。
-
-## 国际化同步规则
-
-本插件有两套彼此独立的 i18n 机制，不要混淆：
-
-### 1. 插件展示元数据 —— `locale/*.json`
-
-用于 Plugin Manager / Settings 里显示的插件标题与描述。
-DSH 约定目录是**单数 `locale/`**，文件名是**短语言 id**：
-
-```
-locale/en.json
-locale/zh.json
-```
-
-内容形态：
-
-```json
-{
-  "meta": {
-    "title": "Dev Workflow",
-    "description": "..."
-  }
-}
-```
-
-**硬性约束**（由 DSH 加载实现决定）：
-
-- 所有语言文件**必须与 `en.json` 同目录**，否则加载器报
-  `... must share the English locale directory ...`。
-- 语言 id 不得重复。
-- `locale/*.json` **必须写进 `package.json` 的 `exports`**，否则会被静默忽略，
-  表现为插件在设置面板里没有标题和描述——这类问题没有任何报错，只能靠知道这条规则来避免。
-
-### 2. 运行时 UI 文本 —— client 侧字典
-
-面向用户的短文本走客户端 `dsh-client-locale` 的 `ctx.locale.register(ns, { zh, en })`。
-**两个 shipped locale 都必须提供每个 key**；插件提供的全部 key 必须与 namespace 的
-typed key union 对应。
-
-### CI 校验的边界
-
-CI **只校验 key 对齐**（两个字典的 key 集合完全一致），不校验翻译正确性。
-**翻译正确性是人工审查项**——一条 key 对齐但语义翻错的字符串，CI 不会有任何意见。
-PR 审查时请把翻译质量当作真实审查内容，而不是走过场。
-
-## 按规范开发（第一到第三阶段）
-
-本项目在开发自己的过程中遵守自己将要强加的规范。这不是仪式感，
-而是唯一能在发布前发现规范是否可用的办法。
-
-- **第一阶段（项目初始化）**：建立仓库、文档、CI、Git Hooks。
-- **第二阶段（SKILL.md）**：写出插件的完整工作流规范正文。
-- **第三阶段（插件核心代码）**：实现工具、触发器与 git-guard。
-- **第三阶段完成后**：补齐 `docs/ARCHITECTURE.md`、`docs/TOOLS.md`、`docs/CONFIGURATION.md`、
-  `docs/I18N.md`、`docs/SECURITY.md`。
-
-分期到此为止：后续工作（测试、发布准备、设置面板等）不再编号，也不要用编号去引用
-某一份文档或某一条决定——那些分期只在本机、不随仓库发布。需要标注一份 ADR 的时间，
-写日期，不写「第几阶段」（见 `docs/ADR/template.md`）。
-
-## 吃自己的狗粮（第四、第五阶段）
-
-- **第四阶段（测试）**：开始用本插件检查本插件自己的提交。
-- **第五阶段（发布准备）**：用本插件的规范检查发布流程所需的文档与提交信息。
-
-一旦进入第四阶段，提交前如果本插件的 git-guard 或 commit 检查报了问题，
-**先修问题，而不是先绕过检查**。绕过检查的手段（`--no-verify`）只在本插件自身有缺陷时使用，
-且必须在 PR 里说明是哪个缺陷。
+面板上的设置项还有一层：新增可编辑字段要同时在 `client.js` 的渲染里登记，否则它出现在配置文件里却没有控件。
 
 ## 安全操作规范
 
-- **安全默认，显式确认，最小权限。** 危险操作默认 `ask`，绝不默认 `allow`。
-- **git-guard 的每条规则都必须默认 `ask`。** 把某条规则改成 `allow` 需要独立审查，
-  且必须在 PR 里说明为什么该操作在这个项目里是无条件安全的。
-- **`--no-verify` 的默认值也是 `ask`**，不是 `deny`。理由：它是紧急场景的逃生通道，
-  直接 deny 会切断这条路。逃生通道的存在不降低门槛，只是保证门可以开。
-- **rebase 默认 `ask`**，不默认 `allow`。理由：rebase 会重写历史，
-  与「危险操作默认 ask」的原则一致。
-- 敏感文件不得读取，密钥不得硬编码。
+- 新增的危险操作检测，默认档位必须是 `ask`，不能是 `allow`
+- 任何会丢弃工作、重写远端历史、外传数据的动作，都要有对应的守卫或触发器
+- 判断失败（解析不了、读不到文件、命令跑不起来）时**不能静默放行**：要么报 warning 说明「这条没查」，要么按最严处理
+- 测试里不要写真实凭据。夹具用的假密钥要符合守卫能识别的模式，但不能是真的
 
-## AGENTS.md 维护规则
+## 给 AI 工具看的规则
 
-- `AGENTS.md` **只放稳定规则，不放进度状态**。进度状态写 `.dev-docs/PROGRESS.md`。
-- 理由：AI 编码工具会在每次会话注入 `AGENTS.md` 全文。里面每一条过期状态
-  都会变成常驻成本，而它提供的信息（「昨天做到哪了」）对一个刚打开仓库的人毫无价值。
-- 新增规则前先问：这条规则在一年后还成立吗？不成立的内容属于 PROGRESS，不属于 AGENTS。
-- `AGENTS.md` 是唯一主文件。若需供其他工具使用，用软链接或构建脚本同步副本，
-  不要手动维护多份内容。
-
-## husky 与插件触发器的分工
-
-两者都会在提交前后介入，但职责不重叠：
-
-| | husky（本仓库开发用） | 插件触发器（用插件的项目用） |
-|---|---|---|
-| 运行位置 | 本仓库的本地 git hooks | DSH 会话内的工具执行前门禁 |
-| 校验内容 | 提交信息格式（commitlint）、暂存文件 lint/format | 工作流规范、文档同步、危险 git 命令 |
-| 是否可绕过 | 是（`--no-verify`） | 是（同一条逃生通道） |
-| 面向谁 | 本仓库的贡献者 | 任何安装了本插件的 DSH 用户 |
-
-**本仓库自己用 husky 做提交信息校验，插件自身的触发器用于它服务的项目。**
-两者互不替代：husky 管的是这个仓库的 git 行为，插件管的是 DSH 会话里的模型行为。
+`AGENTS.md` 只放稳定规则，不放进度。进度写 `.dev-docs/PROGRESS.md`（本机私有，已 gitignore）。
+`AGENTS.md` 改了要同步 `CLAUDE.md` 等副本——用软链接或构建脚本，不要手动维护多份。
 
 ## 许可证
 
-贡献即表示你同意以 [MIT](LICENSE) 许可证授权你的贡献。
+提交即表示你同意以 [MIT](LICENSE) 许可证发布你的贡献。

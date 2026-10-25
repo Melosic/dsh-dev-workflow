@@ -18,8 +18,9 @@
 // 4. No shipped document may cite a development phase by number. The numbered
 //    phases are defined in `.dev-docs/PROGRESS.md`, which is gitignored and
 //    absent from a clone, so a reader on GitHub cannot resolve "已接受（第七阶段）".
-//    The two files that legitimately keep the numbering are exempt: CONTRIBUTING
-//    defines it, and CHANGELOG is a historical record.
+//    CHANGELOG.md is the one exemption left: it is a historical record, and the
+//    entries that named a phase were written when that file was where the plan
+//    lived. New prose must not reintroduce the numbering.
 // 5. The published package must contain the files the host loads. `lib/` is a
 //    build output, absent from a fresh clone, so `prepack` builds first and then
 //    runs this script to prove the entry points exist and that `files` ships
@@ -217,9 +218,9 @@ ok(`skill headings aligned (${enShape.length} sections)`, before)
 //    covers `.dev-docs/`, where the numbering is actually defined, so that
 //    directory is skipped explicitly.
 const PHASE = /第\s*[0-9一二三四五六七八九十]+\s*阶段|\bPhase\s+[0-9]+\b/
-// CONTRIBUTING.md defines the numbered phases; CHANGELOG.md is a historical
-// record of when they happened. Both are the only legitimate citations.
-const phaseExempt = new Set(['CONTRIBUTING.md', 'CHANGELOG.md'])
+// CHANGELOG.md is a historical record of when the phases happened, so it is the
+// only legitimate citation left. New prose must not reintroduce the numbering.
+const phaseExempt = new Set(['CHANGELOG.md'])
 /** Every tracked `.md` file, as repository-relative paths. */
 function trackedMarkdown(directory = '') {
   const found = []

@@ -13,24 +13,15 @@
 
 ### Added
 
-- `scope: 'marked'` 让规则只在项目根带 `.dsh/dev-workflow.yml` 的仓库生效；默认 `all`，现有安装行为不变。
-- 仓库级 PR 模板：七节全部由 `gh pr create` 前的检查读取，缺一段或段内为空都会被拦下；另附 issue 的 bug 报告表单。
-- PR 段落名可配置（`prSections`），用中文段落名的仓库不必再整体关掉触发器。
-- 发版检查的三条约定可配置：哪些命令算发版（`releaseCheck.publishers`）、未发布段落叫什么、分类标题有哪些。
-- 技能补上「什么时候该开 issue」的判断：推迟的缺陷、需要先达成一致的提议、横跨多次改动的发版清单。
+- `docs/assets/how-it-works.png`：一张能一眼看完的机制图，替代 README 里那段 ASCII 框图。
 
 ### Changed
 
-- CHANGELOG 条目限定在一两句、120 字以内，发布页因此是短的；`ci:checks` 新增一项盯着 `[Unreleased]`。
-- 发布页改成「交付说明」：中英双语，除 changelog 条目外还写升级、已知问题、致谢。
-
-### Fixed
-
-- 清单声明了 `engines.dsh`，市场页不再显示「作者未声明 dsh 版本要求」；`ci:checks` 检查它与 peer 范围一致。
-- `/dev-workflow status` 多一行生效范围，`scope: 'marked'` 时按当前目录判定，未标记就给出该建的标记文件路径。
-- bug 表单的版本号占位符改成 `0.2.x` / `0.4.x`，不再随每次发版过期。
-- `timeout 120 <命令>` 之类包装下的命令现在能被守卫和触发器看见。
-- PR 模板里的 HTML 注释不再被当成正文，没填过的 PR 不会静默通过。
+- README 重写为「这是什么、什么时候说话、边界在哪」，不再以本仓库的约定做卖点。
+- 技能开头声明：所在仓库自己的 `AGENTS.md`/贡献者指南优先级高于本文件，本文件只是默认兜底。
+- `CONTRIBUTING.md` 重写：删掉与 `docs/DEVELOPMENT.md` 重复的工程实践、早就没人测的覆盖率要求、以及本机私有的阶段编号；PR 模板段落数改回真实的七节。
+- README 两张图都指向仓库里的真实截图；`ci:checks` 的阶段编号豁免只剩 `CHANGELOG.md` 一个。
+- 发现绕过不再要求走私密渠道：公开 issue 即可，只有报告本身要贴真实凭据时才走 advisory。
 
 ## [0.4.2] - 2026-10-23
 

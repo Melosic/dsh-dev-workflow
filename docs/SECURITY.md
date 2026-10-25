@@ -225,13 +225,28 @@ shell 那一层则恢复了一部分：`sudo` / `env` / `npx` 这类**裸包装�
 `$(...)` 与反引号里的命令同样递归解析。但**解释器本身仍是不透明的**——那需要真正的运行时
 语义，属于已知边界。`flock -c "<命令>"` 也仍是边界：命令藏在选项值里，词法走查取不回来。
 
+## 怎么报告
+
+**绕过直接开 [公开 issue](https://github.com/Melosic/dsh-dev-workflow/issues/new) 就行。**
+本插件不是安全边界（见上一节），所以「某条该拦的命令被放行」是缺陷，不是漏洞：它可复现、应该修、
+而且公开之后别人能补充「我也遇到了」，比藏进私密渠道更容易被发现和修掉。已知的边界在上文与
+[docs/TRIGGERS.md](TRIGGERS.md#我们看不见什么) 里都写着，这一类信息本来就是公开的。
+
+唯一走私密渠道的情形是**报告本身携带真实凭据**——活 token、私有 key、你家 `.env` 里的那一行。
+把它贴进公开 issue 等于亲手完成一次泄漏。这种情况下要么先把值替换成 `xxx`，
+要么走 [security advisory](https://github.com/Melosic/dsh-dev-workflow/security/advisories/new)。
+
+报障请用 [bug 报告表单](../.github/ISSUE_TEMPLATE/bug-report.yml)，它要求填 DSH 版本与
+`/dev-workflow status` 的完整输出——「插件没反应」的报障绝大多数最终查明是配置值、版本差异
+或规则本就如此，缺这两项无法分辨。
+
 ## 依赖与供应链
 
 - **运行期零依赖**：`dependencies` 为空。全部能力来自宿主提供的服务与 Node 内建模块。
 - DSH 域内包用**显式版本范围** `>=0.2.0-rc.2`（下界即实测可用过的最低版本，当前不写上界），
   不用 `^` / `~`：0.x 版本的次版本号可以包含破坏性变更，`^0.2.0` 的语义在这里会误导人。
   `devDependencies` 另把三个包钉在一个精确的实测基线（当前 `0.2.1-rc.2`），那是 CI 跑的版本，
-  不是支持范围——把下界跟着抬，会让仍在旧版本上的用户被静默禁用。
+  不是支持范围——把下界跟着抬，会让仍在旧版本上的用户装不上，或装上了在启动时被禁用。
   范围写法的完整推导、「不写上界的代价」与两者为何分离，见 [docs/PUBLISHING.md](PUBLISHING.md)。
 - 插件通过 `cordis.patch.yml` 声明为 bundle patch，`scripts/ci-checks.mjs` 校验它
   既被 `package.json` 的 `dsh.bundle.patch` 声明，又列入 `files`——避免「发布出去的包缺了
