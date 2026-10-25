@@ -85,6 +85,52 @@ export async function listStagedFiles(
 }
 
 /**
+ * Read the paths the branch already committed, back to where it forked.
+ *
+ * A rule that asks "was this documented with the change?" is answered by the
+ * branch, not by whichever commit is being made now: a feature built over
+ * several commits updates the changelog once. The fork point is the merge base
+ * with the branch's upstream, which is the base a pull request will be judged
+ * against.
+ *
+ * A failure yields an empty list instead of an error: this set can only lift a
+ * block, so an unreadable branch must not be guessed at, and a repository with
+ * no upstream is the normal state of a local branch rather than a problem to
+ * report.
+ * @param git - the runner for the repository.
+ * @param signal - caller-owned cancellation.
+ * @returns repository-relative paths, or an empty list when they cannot be read.
+ */
+export async function listBranchFiles(git: GitRunner, signal?: AbortSignal): Promise<string[]> {
+  const base = await git.run(['merge-base', 'HEAD', '@{upstream}'], signal)
+  if (!base.ok || base.stdout.trim() === '') return []
+  const diff = await git.run(['diff', '--name-only', '-z', `${base.stdout.trim()}..HEAD`], signal)
+  if (!diff.ok) return []
+  return diff.stdout.split('\0').filter((path) => path.length > 0)
+}
+
+/**
+ * Read the tracked paths a `git commit -a` would record.
+ *
+ * `-a` stages every tracked change at commit time, so the index is empty (or
+ * stale) when the check runs and judging it would fail the commit for contents
+ * it does not have. `git diff HEAD` is the same set git is about to stage: it
+ * covers staged and unstaged changes but not untracked files, which `-a` leaves
+ * alone.
+ * @param git - the runner for the repository.
+ * @param signal - caller-owned cancellation.
+ * @returns repository-relative paths, or a failure to report.
+ */
+export async function listTrackedChanges(
+  git: GitRunner,
+  signal?: AbortSignal,
+): Promise<{ ok: true; files: string[] } | { ok: false; failure: string; stderr: string }> {
+  const result = await git.run(['diff', '--name-only', '-z', 'HEAD'], signal)
+  if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
+  return { ok: true, files: result.stdout.split('\0').filter((path) => path.length > 0) }
+}
+
+/**
  * Strip the quoting git adds around paths with unusual characters.
  * @param path - a path as printed by `git status`.
  * @returns the path without surrounding quotes and with its escapes resolved.

@@ -17,17 +17,20 @@ import { createHarness, askOf, harnessConfig, makeExec } from './harness.js'
 const t = createTranslator('en-US')
 
 /**
- * A git runner that answers the three questions the checks ask.
- * @param options - staged paths, working-tree paths, and the current message.
+ * A git runner that answers the questions the checks ask.
+ * @param options - staged paths, working-tree paths, branch paths, and the
+ * current message.
  * @returns the runner, recording every argument list it was asked for.
  */
 function makeRepo(options: {
   staged?: readonly string[]
   worktree?: readonly string[]
+  branch?: readonly string[]
   asks?: string[][]
 }): GitRunner {
   const staged = options.staged ?? []
   const worktree = options.worktree ?? staged
+  const branch = options.branch ?? []
   return {
     cwd: process.cwd(),
     run: async (args): Promise<GitResult> => {
@@ -35,6 +38,18 @@ function makeRepo(options: {
       const joined = args.join(' ')
       if (joined.startsWith('diff --cached')) {
         return { ok: true, stdout: staged.map((path) => `${path}\0`).join('') }
+      }
+      // `-a` asks what the commit will contain, which the index cannot answer
+      // before the command runs: it is every tracked change, staged or not.
+      if (joined.startsWith('diff --name-only -z HEAD')) {
+        const tracked = [...new Set([...staged, ...worktree])]
+        return { ok: true, stdout: tracked.map((path) => `${path}\0`).join('') }
+      }
+      if (joined.startsWith('merge-base')) {
+        return { ok: true, stdout: branch.length === 0 ? '' : 'base000\n' }
+      }
+      if (joined.startsWith('diff --name-only -z base000..HEAD')) {
+        return { ok: true, stdout: branch.map((path) => `${path}\0`).join('') }
       }
       if (joined.startsWith('status --porcelain')) {
         return { ok: true, stdout: worktree.map((path) => ` M ${path}\n`).join('') }
@@ -57,6 +72,7 @@ async function run(
   options: {
     staged?: readonly string[]
     worktree?: readonly string[]
+    branch?: readonly string[]
     config?: Record<string, unknown>
   } = {},
 ): Promise<{
@@ -148,5 +164,30 @@ describe('guard and trigger on one chain', () => {
         missing: 'README.zh.md',
       }),
     )
+  })
+
+  it('reads what `git commit -a` will record instead of the empty index', async () => {
+    // `-a` stages at commit time: the index is empty when the check runs, and
+    // judging it would fail a feature commit whose CHANGELOG is right there in
+    // the working tree.
+    const { decision } = await run('git commit -a -m "feat(core): add a flag"', {
+      staged: [],
+      worktree: ['src/core.ts', 'CHANGELOG.md'],
+    })
+
+    expect(decision.kind).toBe('allow')
+  })
+
+  it('counts a changelog an earlier commit on the branch already carries', async () => {
+    // The feature was split over several commits and the changelog was written
+    // in an earlier one. The rule is about the branch, so the last commit must
+    // not be stopped for a document that is already in history.
+    const { decision } = await run('git commit -m "feat(core): wire the flag"', {
+      staged: ['src/core.ts'],
+      worktree: ['src/core.ts'],
+      branch: ['src/core.ts', 'CHANGELOG.md'],
+    })
+
+    expect(decision.kind).toBe('allow')
   })
 })

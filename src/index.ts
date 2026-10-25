@@ -188,9 +188,9 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
     }
 
   // Registering a gate is `scoped(listener)`, and doing that inline at each of
-  // the seven sites buries the listener in wrapper syntax. Naming the two things
+  // the eight sites buries the listener in wrapper syntax. Naming the two things
   // a gate needs — its body and the event it rides — keeps each registration
-  // readable, and keeps the wrapper from being forgotten at one site out of seven.
+  // readable, and keeps the wrapper from being forgotten at one site out of eight.
   const gate = (
     listener: (
       exec: ToolExecution,

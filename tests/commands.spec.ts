@@ -183,4 +183,24 @@ describe('/dev-workflow', () => {
     expect(on).toContain('is marked')
     expect(on).not.toContain('NOT marked')
   })
+
+  it('says when a guard hit was waved through rather than stopped', async () => {
+    // A bare count reads the same whether the guard blocked three pushes or the
+    // user relaxed the field and it let three through. Only `allow` outlives the
+    // moment it was chosen, so only `allow` gets named here.
+    const harness = createHarness({ commands: true })
+    const runtime = createRuntime(harness.ctx, Config({ mode: 'on', locale: 'en-US' }))
+
+    runtime.state.recordGuardHit('security.guard.force_push', 'deny')
+    runtime.state.recordGuardHit('security.guard.force_push', 'deny')
+    runtime.state.recordGuardHit('security.guard.outward_push', 'allow')
+
+    const text = await run(harness, 'status')
+    expect(text).toContain(
+      "A force push rewrites remote history and can discard other people's commits.×2",
+    )
+    expect(text).toContain(
+      'A push publishes this branch to the remote, where other people can see it. (allowed)×1',
+    )
+  })
 })

@@ -76,7 +76,6 @@ async function run(
   }
   // The sink also reports what a call settled as; this suite only counts hits.
   auditSink.settled = () => {}
-  auditSink.failures = () => 0
   const guard = createGitGuard({
     config: () =>
       Config({

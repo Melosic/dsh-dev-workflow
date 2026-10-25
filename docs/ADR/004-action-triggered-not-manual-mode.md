@@ -95,7 +95,7 @@ commitlint 自己管这事了」。它是**对仓库现状的描述**，不是�
 
 ## 相关
 
-- 实现：`src/config.ts:75`（`mode`）、`src/config.ts:82`（`enableOwnTrigger`）、
+- 实现：`src/config.ts:272`（`mode`）、`src/config.ts:292`（`enableOwnTrigger`）、
   `src/index.ts` 的 `activate()`、`src/triggers/pre-commit.ts`、`src/triggers/pre-pr.ts`、
   `src/triggers/pre-release.ts`
 - 状态与去重：`src/state.ts`（key 形状、每会话去重）

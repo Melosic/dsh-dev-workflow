@@ -159,7 +159,7 @@ window.__ModuleLoader__.load({
       'hint.mode':
         'Off withdraws every tool, skill, command and trigger this plugin registers, so it costs no tokens. The plugin itself stays loaded — enabling or disabling it is the plugin manager\u2019s job.',
       'hint.scope':
-        'Which repositories this profile checks. Marked means only a repository whose project root has .dsh/dev-workflow.yml; the skill line and every guard stay quiet everywhere else, so an unmarked repository pays nothing.',
+        'Which repositories this profile checks. Marked means only a repository whose project root has .dsh/dev-workflow.yml; the skill line and every guard stay quiet everywhere else. The two tool definitions are registered per process, so they still ride along in an unmarked repository.',
       'hint.locale':
         'The language of this plugin\u2019s own text — check results, skill text, approval prompts. It does not decide what language the model writes commits or pull requests in.',
       'hint.localeResolved':
@@ -281,7 +281,7 @@ window.__ModuleLoader__.load({
       'hint.mode':
         '关闭后，本插件注册的工具、技能、命令和触发器全部撤销，不占常驻 token。插件本身仍然加载 —— 启用或停用是插件管理器的事。',
       'hint.scope':
-        '这个 profile 检查哪些仓库。「仅带标记」表示只检查项目根目录下有 .dsh/dev-workflow.yml 的仓库；其余仓库里技能目录行和所有守卫都不出声，也不占常驻 token。',
+        '这个 profile 检查哪些仓库。「仅带标记」表示只检查项目根目录下有 .dsh/dev-workflow.yml 的仓库；其余仓库里技能目录行和所有守卫都不出声。两个工具定义是进程级注册，在未标记的仓库里仍然常驻。',
       'hint.locale':
         '本插件自身文案的语言 —— 检查结果、技能正文、审批提示。它不决定模型用什么语言写提交信息或 PR。',
       'hint.localeResolved': '「自动」跟随本机语言，当前为：{locale}（{tag}）。',

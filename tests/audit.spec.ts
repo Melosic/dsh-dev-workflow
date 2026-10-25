@@ -137,4 +137,19 @@ describe('src/audit.ts', () => {
     expect(messages).toHaveLength(1)
     expect(messages[0]).toContain('audit write failed')
   })
+
+  it('reports a broken trail once, not on every later hit', () => {
+    // A sink that keeps failing would otherwise log for every guarded call for
+    // the rest of the session. One line names the problem; the rest are noise.
+    const blocker = join(root, 'blocker-once')
+    writeFileSync(blocker, 'not a directory', 'utf8')
+    const messages: string[] = []
+    const audit = createAudit({
+      config: () => Config({ audit: { path: join(blocker, 'audit-log.jsonl') } }),
+      log: (message) => messages.push(message),
+    })
+    audit(HIT, makeExec('pnpm test', { cwd: root }))
+    audit(HIT, makeExec('pnpm build', { cwd: root }))
+    expect(messages).toHaveLength(1)
+  })
 })
