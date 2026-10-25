@@ -14,14 +14,35 @@
 ### Added
 
 - `docs/assets/how-it-works.png`：一张能一眼看完的机制图，替代 README 里那段 ASCII 框图。
+- `scope: 'marked'` 让规则只在项目根带 `.dsh/dev-workflow.yml` 的仓库生效；默认 `all`，现有安装行为不变。
+- 仓库级 PR 模板：七节全部由 `gh pr create` 前的检查读取，缺一段或段内为空都会被拦下；另附 issue 的 bug 报告表单。
+- PR 段落名可配置（`prSections`），用中文段落名的仓库不必再整体关掉触发器。
+- 发版检查的三条约定可配置：哪些命令算发版（`releaseCheck.publishers`）、未发布段落叫什么、分类标题有哪些。
 
 ### Changed
 
+- CHANGELOG 条目限定在一两句、120 字以内，发布页因此是短的；`ci:checks` 新增一项盯着 `[Unreleased]`。
+- 发布页改成「交付说明」：中英双语，除 changelog 条目外还写升级、已知问题、致谢。
+- `/dev-workflow status` 把放宽成 `allow` 的守卫命中标为「已放行」，不再和拦下的次数混在一起。
+- `scope: 'marked'` 的常驻成本写准了：它省掉的是技能目录行，两个工具定义是进程级注册，未标记的仓库里仍然常驻。
+- 过期的数字与引用一次性对齐实现：locale 键数、`ci:checks` 的项数、监听器数量、技能正文的字符与行数，以及四处漂移的源码行号和一个失效的 ADR 链接。
 - README 重写为「这是什么、什么时候说话、边界在哪」，不再以本仓库的约定做卖点。
 - 技能开头声明：所在仓库自己的 `AGENTS.md`/贡献者指南优先级高于本文件，本文件只是默认兜底。
 - `CONTRIBUTING.md` 重写：删掉与 `docs/DEVELOPMENT.md` 重复的工程实践、早就没人测的覆盖率要求、以及本机私有的阶段编号；PR 模板段落数改回真实的七节。
 - README 两张图都指向仓库里的真实截图；`ci:checks` 的阶段编号豁免只剩 `CHANGELOG.md` 一个。
 - 发现绕过不再要求走私密渠道：公开 issue 即可，只有报告本身要贴真实凭据时才走 advisory。
+
+### Fixed
+
+- 清单声明了 `engines.dsh`，市场页不再显示「作者未声明 dsh 版本要求」；`ci:checks` 检查它与 peer 范围一致。
+- `/dev-workflow status` 多一行生效范围，`scope: 'marked'` 时按当前目录判定，未标记就给出该建的标记文件路径。
+- bug 表单的版本号占位符改成 `0.2.x` / `0.4.x`，不再随每次发版过期。
+- `timeout 120 <命令>` 之类包装下的命令现在能被守卫和触发器看见。
+- PR 模板里的 HTML 注释不再被当成正文，没填过的 PR 不会静默通过。
+- `git commit -a` / `--all` 的提交信息与文档检查改看 `git diff HEAD`：`-a` 在提交那一刻才填索引，命令执行前读索引会把一次正确的提交拦下来。
+- `feat` 提交的 CHANGELOG 规则兑现了文档里的「分支已有也算」：读 `merge-base HEAD @{upstream}` 到 `HEAD` 的 diff，拆成多次提交的特性不再被最后一次提交误拦。
+- 审计写失败时只报一次，而不是每个命中都刷一行；`AuditSink.failures()` 这个从未被读取的计数连同它那句「status 会报告」的注释一起删掉。
+- 会话记忆的两个上限都真正生效：目标按 LRU 淘汰之外，会话桶本身也有了上限，长进程不再为每个结束的会话留一份空桶。
 
 ## [0.4.2] - 2026-10-23
 

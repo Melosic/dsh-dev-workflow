@@ -131,12 +131,13 @@ rename 形态（`old -> new`）取右侧，并还原 git 的 C 风格转义（`\
 | --- | --- |
 | 无参数 / `status` | 输出六行：开关状态、locale（含配置里的原始值）、生效范围（`scope`，按当前工作目录判定）、最近一次检查结果、守卫命中计数、审计记录状态 |
 | `on` | 注册全部资源，并回显状态行 |
-| `off` | 注销全部资源（工具、技能 provider、命令、七个监听器），并回显状态行 |
-| `check` | 对当前工作区跑一次 `evaluate()`，结果记入状态，输出 `✖` / `⚠` 清单 |
+| `off` | 注销工具、技能 provider 与八个监听器，并回显状态行；命令自身保留，否则用户没有命令可以敲回来 |
+| `check [--message "type: subject"]` | 对当前工作区跑一次 `evaluate()`，结果记入状态，输出 `✖` / `⚠` 清单；给了 `--message` 就一并校验提交信息，没给会输出一条说明「本次未含提交信息规则」 |
 | 其它 | `{kind: 'error'}`，提示可用取值 |
 
 `status` 的守卫命中计数把字典 key 渲染成可读文本并带上次数，例如
 `Guard hits: A force push rewrites remote history…×2, git clean -f deletes untracked files permanently.×1`；
+被配置改成 `allow` 的那一项额外标 `（已放行）`，因为「拦了三次」和「放宽后放了三次」计数一样；
 一次都没命中时输出一条明确的「无」。
 
 生效范围那一行是为 bug 报告存在的：`scope: 'marked'` 是唯一会让插件在某个仓库里

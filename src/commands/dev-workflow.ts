@@ -152,12 +152,25 @@ function statusLines(options: DevWorkflowCommandOptions, cwd: string): string[] 
 
   // Reasons are dictionary keys, so the tally reads as prose rather than as an
   // internal identifier.
+  //
+  // A count alone cannot tell "blocked three times" from "waved through three
+  // times", and `allow` is the one tier that outlives the moment it was chosen:
+  // the field stays that way until someone sets it back. So the tier is printed
+  // for exactly those hits — a guard that recognises an operation and no longer
+  // stops it is the fact a reader has to be able to see.
   const tally = Object.entries(options.state.guardHits())
+  const actions = options.state.guardHitActions()
   lines.push(
     tally.length === 0
       ? t('command.toggle.status.guards.none')
       : t('command.toggle.status.guards', {
-          tally: tally.map(([reason, count]) => `${t(reason)}×${count}`).join(', '),
+          tally: tally
+            .map(([reason, count]) =>
+              actions[reason] === 'allow'
+                ? t('command.toggle.status.guards.relaxed', { reason: t(reason), count })
+                : `${t(reason)}×${count}`,
+            )
+            .join(', '),
         }),
   )
 

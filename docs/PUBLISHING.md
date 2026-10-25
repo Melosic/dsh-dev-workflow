@@ -109,7 +109,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && p
 `ci:checks` 逐项打印，每项一行：
 
 ```
-[ok] locale keys aligned (113 keys)
+[ok] locale keys aligned (117 keys)
 [ok] bundle patch declared and shipped
 [ok] skill headings aligned (35 sections)
 [ok] published entry points present (8 checked)
@@ -118,14 +118,17 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && p
 [ok] no numbered development phases cited
 ```
 
-这就是全部七项结构守卫（外加一行变更行数提示）。**通过的项也打印**：只打错误的话，
+这就是全部九项结构守卫（外加一行变更行数提示）。**通过的项也打印**：只打错误的话，
 「全绿」和「一半检查根本没执行」在日志里一模一样。失败时打印 `error: <原因>` 并以非零码
 退出。（括号里的数字都是当前值，脚本按实际内容算出，不硬编码；换句话说这些数字会随内容变，
 不要拿这里出现的具体数字去断言 CI 是否通过。）
 
-这七项不靠人记得跑：`pnpm publish` / `npm publish` 会先触发 `prepack`
-（`pnpm build && pnpm ci:checks`），所以**打包这一步必然在编译之后、且必然过一遍结构守卫**——
-`lib/` 是 gitignore 的构建产物，`files` 里第一项就是它，少了它发出去的包装上去直接不能用。
+这九项不靠人记得跑：`pnpm publish` / `npm publish` 会先触发 `prepublishOnly`
+（`pnpm lint && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test &&
+pnpm build && pnpm ci:checks`），打包阶段再触发 `prepack`（`pnpm build && pnpm ci:checks`）。
+所以**发布这一步必然先过 lint、三个 typecheck 与测试，打包也必然在编译之后、且必然过一遍结构
+守卫**——`lib/` 是 gitignore 的构建产物，`files` 里第一项就是它，少了它发出去的包装上去直接
+不能用。`pnpm build` 不在发布脚本里单独兜底：`prepack` 已经跑过一遍，重复编译只是拖慢发布。
 
 ### 4. 审计
 
@@ -148,11 +151,12 @@ pnpm audit --registry=https://registry.npmjs.org
 
 以下各项由 `pnpm ci:checks` 与 CI **机械保证**，本文不复述其判定细节：
 
-- `scripts/ci-checks.mjs` 的七项守卫：两个 locale 字典 key 一致；`cordis.patch.yml` 已声明
+- `scripts/ci-checks.mjs` 的九项守卫：两个 locale 字典 key 一致；`cordis.patch.yml` 已声明
   且在 `files` 里；SKILL 双语标题数量与顺序一致；发布入口文件存在于 `files` 白名单内
   （配合 `prepack`）；成对镜像文件同改（`docs.mirrors` 的任一组只改了一半就失败）；
   `package.json` 的版本在 `CHANGELOG.md` 里有对应标题；任何随仓库发布的 `.md` 都不按编号
-  引用开发分期。
+  引用开发分期；`engines.dsh` 在 `package.json` 与文档里一致；`CHANGELOG.md` 每条不超过
+  120 字。
 - 代码中无硬编码用户可见文本：`git grep -P '[\x{4e00}-\x{9fff}]' -- 'src/**/*.ts'` 应无输出；
   英文文案也一律走 `t()`，只在 `locale/*.json` 里出现。
 - `git log` 的**新提交**标题行全部符合 Conventional Commits：`.husky/commit-msg` 管提交那一刻，
@@ -181,7 +185,7 @@ npm view @melosic/dsh-dev-workflow   version --registry=https://registry.npmjs.o
 ## DSH 版本要求：`engines.dsh` 与 peerDependencies
 
 这一节是 `.dev-docs/PROGRESS.md` 「待决策 / 遗留问题」第 4 条要求的落地。
-**写错这里，后果不是安装失败，而是插件被静默禁用。**
+**写错这里，后果分两种：新装会被直接拒绝，已经装着的会在启动时被禁用。**
 
 DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `preflight()`）。
 判定函数叫 `unmetRequirements(manifest, runtimeVersion)`，骨架是：
@@ -245,8 +249,8 @@ if (!Object.hasOwn(fields, 'peerDependencies')) return {}
    **下界与 CI 基线是两件事。** 下界说明「最老支持到哪」，`devDependencies` 里那三个精确版本
    说明「CI 每次真正跑在哪」。两者会分开漂移：`latest` 渠道仍是 `0.2.0-rc.2`，而新的候选版本
    先在 `next` 渠道发布，所以本插件当前把开发基线钉在 `0.2.1-rc.2`，同时把下界留在
-   `0.2.0-rc.2`——若为了跑测试就把下界抬到 `rc.2` 系列，所有还在 `latest` 上的用户会**被静默
-   禁用**（见第 8 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
+   `0.2.0-rc.2`——若为了跑测试就把下界抬到 `rc.2` 系列，所有还在 `latest` 上的用户会**装不上或
+   在启动时被禁用**（见第 8 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
 
    升级开发基线时的最小动作：改 `package.json` 的 `devDependencies` 三个精确版本 → 跑
    `pnpm install`（本机 `~/.npmrc` 的 `minimum-release-age` 会挡住 24 小时内的新版本，此时加
@@ -255,9 +259,10 @@ if (!Object.hasOwn(fields, 'peerDependencies')) return {}
    所以 CI 不需要任何额外参数。下界若确实要抬，按第 10 条先查真实版本列表。
 7. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
    不读 `peerDependenciesMeta`。把某个 DSH 包标成 optional 不会让它跳过校验。
-8. **不兼容的后果是「被禁用」而非「安装失败」。** `preflight()` 把该行 `row.disabled = true`
-   后**照常加载其余行**，stderr 打印
-   `disabling profile plugin <label>: <reason>`。用户看到的是功能不见了，不是一条报错。
+8. **不兼容的后果分两处，都不是静默的。** 安装时 `dsh plugin add` 直接失败：`dsh: installation rejected:
+   <原因>`，随后 `dsh: nothing was installed.` 与 `allow-version` 的应急命令，退出码非 0。已经装着的包
+   在启动时由 `preflight()` 把该行 `row.disabled = true` 后**照常加载其余行**，stderr 打印
+   `disabling profile plugin <label>: <reason>`——用户看到的是一条说明加功能不见了，不是无声无息。
 9. **豁免机制存在，但不要依赖它。** 每个 profile 目录下有一份 `compatibility.json`
    （`exact package@version → [exact dsh versions]`，规范 SemVer 精确匹配，范围/前缀一律拒绝），
    对应 CLI 是 `dsh plugin version-exemptions` 与

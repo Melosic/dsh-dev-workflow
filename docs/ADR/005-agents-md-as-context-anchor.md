@@ -103,7 +103,7 @@ DSH 提供了一个正好填这个空隙的机制。按 `.dev-docs/DSH-API-NOTES
 
 ## 相关
 
-- 锚点文件本身：[../AGENTS.md](../AGENTS.md)
+- 锚点文件本身：[AGENTS.md](../../AGENTS.md)
 - 机制与核对依据：`.dev-docs/DSH-API-NOTES.md`（`AGENTS.md` 机制一行：加载链、候选名、
   `maxBytes` 65536、去重、不 watch）、`.dev-docs/prompt.md`
 - 规范全文（随包发布）：`skills/dsh-dev-workflow/SKILL.md`、`skills/dsh-dev-workflow/SKILL.zh.md`

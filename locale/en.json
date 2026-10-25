@@ -18,6 +18,7 @@
   "command.toggle.status.never": "No check has run in this session yet.",
   "command.toggle.status.last": "Last check: {kind} — {summary}",
   "command.toggle.status.guards": "Guard hits: {tally}",
+  "command.toggle.status.guards.relaxed": "{reason} (allowed)×{count}",
   "command.toggle.status.guards.none": "Guard hits: none.",
   "command.toggle.kind.commit": "commit message",
   "command.toggle.kind.doc": "documentation sync",

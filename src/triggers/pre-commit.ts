@@ -4,7 +4,12 @@ import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
 import type { WorkflowState } from '../state.js'
-import { listChangedFiles, listStagedFiles } from '../tools/check-doc-sync.js'
+import {
+  listBranchFiles,
+  listChangedFiles,
+  listStagedFiles,
+  listTrackedChanges,
+} from '../tools/check-doc-sync.js'
 import {
   amendedMessage,
   detectCommit,
@@ -87,7 +92,13 @@ export function createPreCommitTrigger(
     // a mirrored document left behind from one whose pair is being edited in the
     // same tree.
     const runner = options.git(cwd)
-    const listed = await listStagedFiles(runner, exec.signal)
+    // `-a` fills the index at commit time, so reading it now would describe a
+    // different commit than the one about to run. `git diff HEAD` is the set
+    // git is about to stage.
+    const listed =
+      commit.all === true
+        ? await listTrackedChanges(runner, exec.signal)
+        : await listStagedFiles(runner, exec.signal)
     const files = listed.ok ? listed.files : undefined
     const worktree = files === undefined ? undefined : await listChangedFiles(runner, exec.signal)
     // A degraded listing is not a clean one. The doc rules cannot run, and the
@@ -102,9 +113,19 @@ export function createPreCommitTrigger(
     const message =
       resolved.message ??
       (commit.amend === true ? await amendedMessage(runner, exec.signal) : undefined)
+    // The changelog rule is about the branch, not this commit, so a feature
+    // split over several commits satisfies it once. The read costs two git
+    // calls, so it only runs when that rule can actually fire.
+    const feature = message !== undefined && /^([a-z]+)/.exec(message)?.[1] === 'feat'
+    const branchFiles =
+      feature && config.rules.requireChangelogOnFeat.get()
+        ? await listBranchFiles(runner, exec.signal)
+        : []
     const input = {
       ...(message === undefined ? {} : { message }),
       ...(files === undefined ? {} : { files }),
+      ...(branchFiles.length === 0 ? {} : { branchFiles }),
+
       ...(worktree === undefined || !worktree.ok ? {} : { worktreeFiles: worktree.files }),
     }
 

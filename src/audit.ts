@@ -72,8 +72,6 @@ export interface AuditSink {
    * @param decision - the kind of decision the waterfall returned.
    */
   settled(hit: GuardHit, exec: ToolExecution, decision: string): void
-  /** How many writes have failed since the plugin loaded. */
-  failures(): number
 }
 
 /**
@@ -165,19 +163,21 @@ export function auditRecord(
  * Build the audit sink handed to every guard.
  *
  * The returned function never throws: a guard must not fail a tool call because
- * a log could not be written, so a failed write is reported and counted instead.
- * Appending is synchronous on purpose — an audit line that is buffered when the
- * process dies is not a record.
+ * a log could not be written, so a failed write is reported instead. Appending
+ * is synchronous on purpose — an audit line that is buffered when the process
+ * dies is not a record.
  *
- * A write that fails stays visible: the first failure is reported at warning
- * level rather than debug, because a silent audit trail is worse than none at
- * all — the reader would take an empty log for a quiet session. The count is
- * what `/dev-workflow status` reports.
+ * A failed write is reported once per session, through the caller's log sink.
+ * The caller (`src/index.ts`) binds that sink to the debug logger, so a broken
+ * trail costs the model nothing and never turns into a tool failure; the line
+ * exists for whoever is reading the debug log. Only the first failure is
+ * reported — a sink that keeps failing would otherwise log on every hit for the
+ * rest of the session, which is noise, not a record.
  * @param options - the audit trail's configuration.
  * @returns the sink for {@link GuardOptions.audit}.
  */
 export function createAudit(options: AuditOptions): AuditSink {
-  let failures = 0
+  let reported = false
   const write = (hit: GuardHit, exec: ToolExecution, decision?: string): void => {
     try {
       const config = options.config()
@@ -190,15 +190,14 @@ export function createAudit(options: AuditOptions): AuditSink {
       mkdirSync(dirname(path), { recursive: true })
       appendFileSync(path, `${JSON.stringify(record)}\n`, 'utf8')
     } catch (error) {
-      failures += 1
-      const level = failures === 1 ? 'warning' : 'debug'
-      options.log?.(`[dsh-dev-workflow] audit write failed (${level}): ${String(error)}`)
+      if (reported) return
+      reported = true
+      options.log?.(`[dsh-dev-workflow] audit write failed: ${String(error)}`)
     }
   }
   const sink = (hit: GuardHit, exec: ToolExecution): void => write(hit, exec)
   sink.settled = (hit: GuardHit, exec: ToolExecution, decision: string) =>
     write(hit, exec, decision)
-  sink.failures = () => failures
   return sink
 }
 

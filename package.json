@@ -1,7 +1,7 @@
 {
   "name": "@melosic/dsh-dev-workflow",
   "version": "0.4.2",
-  "description": "Development-workflow gatekeeper and orchestrator plugin for DSH: skill-injected conventions, commit/doc-sync checks, and git-guard.",
+  "description": "Project rules for DSH: check commit messages, PR descriptions and versions before they ship, and ask before destructive or outward-facing commands.",
   "keywords": [
     "dsh",
     "dsh-plugin",
