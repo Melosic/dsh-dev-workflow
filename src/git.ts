@@ -57,7 +57,18 @@ export type GitFailure =
 /** Outcome of one git invocation. */
 export type GitResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false; readonly failure: GitFailure; readonly stderr: string }
+  | {
+      readonly ok: false
+      readonly failure: GitFailure
+      readonly stderr: string
+      /**
+       * What the command wrote before it failed, when that is the answer rather
+       * than noise. `git merge-tree` reports a conflict as a non-zero exit and
+       * names the files on stdout, so a caller that reads only `stderr` would
+       * learn that something went wrong but not what.
+       */
+      readonly stdout?: string
+    }
 
 /** Maximum bytes retained per stream: commit metadata, never file contents. */
 const MAX_STREAM_BYTES = 1024 * 1024
@@ -158,7 +169,10 @@ export function createGitRunner(ctx: Context, cwd: string): GitRunner {
     if (stderr.includes('not a git repository')) {
       return { ok: false, failure: 'not-a-git-repository', stderr }
     }
-    return { ok: false, failure: 'command-failed', stderr }
+    // The stdout is kept only for a command that reports its answer through it;
+    // for everything else it is partial output of a failed run, and a caller
+    // reading it as data would judge a truncated result.
+    return { ok: false, failure: 'command-failed', stderr, stdout }
   }
 
   return { cwd, run, locate }

@@ -276,6 +276,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             config: () => config,
             t: () => t,
             state,
+            git: (cwd) => runtime.git(cwd),
             log: (message) => ctx.logger.debug(message),
             approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
           }),

@@ -296,6 +296,60 @@ export function makeFailingGit(failure: GitFailure = 'not-a-git-repository'): Gi
 }
 
 /**
+ * A git runner that answers `merge-tree` with the conflicts a spec names.
+ *
+ * Only the sibling-branch question is modelled, because that is the only thing
+ * the pull-request check asks a repository. The current branch is `fix/mine` and
+ * the trunk is `main`; every other command answers empty, which is what an
+ * unremarkable repository looks like.
+ * @param branches - branch name to the paths it conflicts on. A branch absent
+ *   from the record merges cleanly.
+ * @param options - `remoteHead: false` models a clone that has never fetched, so
+ *   the trunk has to be found among the local branches instead.
+ * @returns the runner.
+ */
+export function makeConflictGit(
+  branches: Record<string, readonly string[]> = {},
+  options: { readonly remoteHead?: boolean } = {},
+): GitRunner {
+  return {
+    cwd: process.cwd(),
+    run: async (args): Promise<GitResult> => {
+      if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref' && args[2] === 'HEAD') {
+        return { ok: true, stdout: 'fix/mine\n' }
+      }
+      if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref' && args[2] === 'origin/HEAD') {
+        return options.remoteHead === false
+          ? {
+              ok: false,
+              failure: 'command-failed',
+              stderr: "fatal: ambiguous argument 'origin/HEAD'",
+            }
+          : { ok: true, stdout: 'origin/main\n' }
+      }
+      if (args[0] === 'for-each-ref') {
+        return { ok: true, stdout: `${Object.keys(branches).join('\n')}\n` }
+      }
+      if (args[0] === 'merge-tree') {
+        const name = args[4] ?? ''
+        const files = branches[name] ?? []
+        if (files.length === 0) return { ok: true, stdout: '0'.repeat(40) }
+        // A conflict is git's non-zero exit, with the tree on the first line and
+        // one path per line after it.
+        return {
+          ok: false,
+          failure: 'command-failed',
+          stderr: `CONFLICT (content): Merge conflict in ${files.join(', ')}`,
+          stdout: `${'0'.repeat(40)}\n${files.join('\n')}`,
+        }
+      }
+      return { ok: true, stdout: '' }
+    },
+    locate: async () => ({ ok: true, path: 'git' }),
+  }
+}
+
+/**
  * Read a resolved configuration as plain values.
  *
  * `Config` hands every leaf back as a volatile reference — that is what lets the

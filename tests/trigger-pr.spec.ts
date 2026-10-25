@@ -11,7 +11,7 @@ import {
   detectPullRequest,
   evaluatePullRequest,
 } from '../src/triggers/pre-pr.js'
-import { askOf, makeExec } from './harness.js'
+import { askOf, makeConflictGit, makeExec } from './harness.js'
 
 const t = createTranslator('en-US')
 const config = Config({})
@@ -60,6 +60,7 @@ function trigger(
   options: {
     config?: Record<string, unknown>
     state?: ReturnType<typeof createWorkflowState>
+    git?: ReturnType<typeof makeConflictGit>
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
@@ -68,6 +69,7 @@ function trigger(
     config: () => resolved,
     t: () => t,
     state,
+    git: () => options.git ?? makeConflictGit(),
     log: () => {},
   })
   return { listener, state, config: resolved }
@@ -347,6 +349,96 @@ describe('src/triggers/pre-pr.ts', () => {
 
     expect(decision.kind).toBe('allow')
     expect(state.lastOutcome()).toMatchObject({ kind: 'pr', ok: true })
+  })
+
+  it('says which branch this one would conflict with, before either merges', async () => {
+    const { listener, state } = trigger({
+      git: makeConflictGit({ 'fix/other': ['CHANGELOG.md', 'src/index.ts'] }),
+    })
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a json flag" --body ${quoted(GOOD_BODY)}`,
+    )
+
+    // A clean pull request that would clash later is not a clean pull request:
+    // approving here means approving a conflict the author has not seen.
+    expect(decision.kind).toBe('ask')
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('fix/other')
+    expect(reason).toContain('CHANGELOG.md')
+    // The two branches are each clean against the base; the finding has to say
+    // that, or it reads as "this branch is broken".
+    expect(reason).toContain('cleanly against the base')
+    expect(state.lastOutcome()).toMatchObject({ kind: 'pr', ok: true })
+  })
+
+  it('does not call the branch it is heading for a conflict', async () => {
+    // A branch behind `main` is the ordinary state of a working branch. If the
+    // merge target were treated as a sibling, every stale branch would get a
+    // warning telling the author to rebase — advice for a problem that does not
+    // exist until somebody else's work actually lands.
+    const { listener } = trigger({
+      git: makeConflictGit({ main: ['CHANGELOG.md'], 'fix/other': ['CHANGELOG.md'] }),
+    })
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a json flag" --body ${quoted(GOOD_BODY)}`,
+    )
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('`fix/other` is still unmerged')
+    expect(reason).not.toContain('`main` is still unmerged')
+  })
+
+  it('finds the trunk without a fetched remote, so a stale branch is not a conflict', async () => {
+    // A clone that has never fetched has no `origin/HEAD`. The trunk then has to
+    // be recognised by name, or every branch behind it gets the rebase advice.
+    const { listener } = trigger({
+      git: makeConflictGit(
+        { main: ['CHANGELOG.md'], 'fix/other': ['CHANGELOG.md'] },
+        { remoteHead: false },
+      ),
+    })
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a json flag" --body ${quoted(GOOD_BODY)}`,
+    )
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('`fix/other` is still unmerged')
+    expect(reason).not.toContain('`main` is still unmerged')
+  })
+
+  it('says nothing about conflicts when the repository cannot be read', async () => {
+    // correct here — an unreadable repository is not a conflict.
+    const state = createWorkflowState()
+    const listener = createPrePrTrigger({
+      config: () => Config({}),
+      t: () => t,
+      state,
+      log: () => {},
+    })
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a json flag" --body ${quoted(GOOD_BODY)}`,
+    )
+    expect(decision.kind).toBe('allow')
+  })
+
+  it('lists at most two conflicting branches, so the prompt stays readable', async () => {
+    const { listener } = trigger({
+      git: makeConflictGit({
+        'fix/one': ['CHANGELOG.md'],
+        'fix/two': ['CHANGELOG.md'],
+        'fix/three': ['CHANGELOG.md'],
+      }),
+    })
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a json flag" --body ${quoted(GOOD_BODY)}`,
+    )
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('fix/one')
+    expect(reason).toContain('fix/two')
+    expect(reason).not.toContain('fix/three')
   })
 
   it('reads a description given as a file', async () => {
