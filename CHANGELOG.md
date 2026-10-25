@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-25
+
 ### Added
 
 - `/dev-workflow mark` / `unmark` 直接建或删 `.dsh/dev-workflow.yml`，`scope: 'marked'` 不用再照提示手建路径；`status` 的未标记提示也改成指向 `mark`。
@@ -779,7 +781,8 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.5.0...main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.6.0...main
+[0.6.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.0...v0.4.1
