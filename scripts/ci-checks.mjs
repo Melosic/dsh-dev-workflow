@@ -50,12 +50,13 @@
 //    marketplace that reads only `engines.dsh` reports "author declares no DSH
 //    requirement" for a package that does declare one.
 //
-//    The range must also be closed above. An open `>=0.2.0-rc.2` admits every
-//    future 0.x release, so a plugin that loaded on 0.2 loads on 0.3 too, and the
-//    first sign of an incompatible API change is a runtime error in a user's
-//    session instead of the host disabling the plugin at startup with a reason.
-//    A closed range is what makes "supported" mean something: below the floor and
-//    above the ceiling are both "not tested", and one of them used to pass.
+//    The value must also be a list of exact versions, not a range. `>=0.2.0-rc.2`
+//    admits every later 0.2 and every 0.3, and `>=0.2.0-rc.2 <0.3.0-0` still
+//    admits 0.2.1-alpha.5 — versions nobody ran this plugin on. A range states a
+//    guess about compatibility; `0.2.0-rc.2 || 0.2.1-rc.2` states what was
+//    checked. The cost is that a new DSH prerelease needs a new release of this
+//    plugin, which is the honest direction: "not tested" should read as
+//    "unsupported", and the fix is to test it, not to widen the range.
 // 10. An entry in `[Unreleased]` stays under 120 characters. The release page is
 //    copied from these entries verbatim, so this is the release page's length —
 //    and the skill's guidance ("one or two sentences") did not hold in practice,
@@ -518,10 +519,11 @@ if (size !== undefined && size > CHANGE_SIZE_LIMIT) {
 //    `dsh-app-boot`), so the two copies are one fact with two homes — and a
 //    marketplace that reads only `engines.dsh` reports "author declares no DSH
 //    requirement" for a package that does declare one. Comparing them here is
-//    cheaper than remembering to edit both. The second half closes the range: an
-//    open upper bound claims compatibility with versions that do not exist yet,
-//    and the claim is only discovered to be false at runtime, in someone else's
-//    profile.
+//    cheaper than remembering to edit both. The second half requires the value to
+//    name exact versions: a range claims compatibility with releases this plugin
+//    has never loaded on, and the false claim surfaces at runtime, in someone
+//    else's profile, as a disabled plugin with no explanation of why it worked
+//    yesterday.
 before = mark()
 const enginesDsh = pkg.engines?.dsh
 const peerDsh = pkg.peerDependencies?.['@deepseek-ai/dsh']
@@ -531,13 +533,19 @@ if (typeof enginesDsh !== 'string' || enginesDsh.trim() === '') {
   failures.push(
     `package.json: engines.dsh (${enginesDsh}) and the @deepseek-ai/dsh peer (${peerDsh}) disagree`,
   )
-} else if (!/<\d+\.\d+\.\d+/.test(enginesDsh)) {
-  failures.push(
-    `package.json: engines.dsh (${enginesDsh}) has no upper bound, so it admits DSH versions ` +
-      `this plugin was never tested against — write the range as ">=<floor> <ceiling>"`,
-  )
+} else {
+  const pins = enginesDsh.split('||').map((part) => part.trim())
+  const exact = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+  const loose = pins.filter((pin) => !exact.test(pin))
+  if (loose.length > 0) {
+    failures.push(
+      `package.json: engines.dsh (${enginesDsh}) is a range, not a list of versions — ` +
+        `${loose.join(', ')} accepts releases this plugin was never loaded on; write the ` +
+        `exact versions that were tested, joined by " || "`,
+    )
+  }
 }
-ok('DSH requirement declared consistently, and closed above', before)
+ok('DSH requirement names the exact versions it was tested on', before)
 
 // 10. Every entry in `[Unreleased]` stays under the ceiling the skill states.
 //     The release page is copied from these entries verbatim, so an entry that

@@ -158,11 +158,11 @@ dev-workflow 已开启。规范以简短摘要常驻，细节按需读取。
 
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
-| DeepSeek Harness 运行时 | `>=0.2.0-rc.2 <0.3.0-0` | `dsh --version` 可查 |
+| DeepSeek Harness 运行时 | `0.2.0-rc.2` 或 `0.2.1-rc.2` | `dsh --version` 可查 |
 | Node.js | `>=20` | dsh 自身的要求 |
 | pnpm | 不校验版本 | 只在 `dsh plugin` 安装时需要，必须在 `PATH` 上 |
 
-上界卡在 `0.3.0-rc.1`——下一条次版本线上的第一个版本，没人拿它测过；`0.x` 的次版本位可以带破坏性变更。写成 `<0.3.0-0` 是为了把 0.3 的预发布版本也挡在外面，只写 `<0.3.0` 拦不住它们。版本不在上面的范围内时，**`dsh plugin add` 会直接拒绝安装**（`dsh: installation rejected: Plugin … is incompatible with dsh …`，什么都不装），并给出 `dsh plugin allow-version` 这条应急口子。已经装着的旧版本则是另一种表现：启动时该插件被禁用，stderr 打印 `dsh: disabling profile plugin …`，其余插件照常加载。两种情况都会明说原因，不会悄无声息。报 bug 之前先用 `dsh --version` 对一下上面的范围，并把 `/dev-workflow status` 的输出贴进 issue；范围怎么定见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
+只有这两个版本，不是一个范围：它们是本插件真正被加载过的版本，写成范围会把中间那些 0.2 预发布和之后的每一个 0.3 一起宣称成兼容。代价是 DSH 每出一个新预发布，本插件就得发一版跟着走——方向是对的，因为「没测过」本来就该读作「不支持」。版本不是这两个时，**`dsh plugin add` 会直接拒绝安装**（`dsh: installation rejected: Plugin … is incompatible with dsh …`，什么都不装），并给出 `dsh plugin allow-version` 这条应急口子。已经装着的旧版本则是另一种表现：启动时该插件被禁用，stderr 打印 `dsh: disabling profile plugin …`，其余插件照常加载。两种情况都会明说原因，不会悄无声息。报 bug 之前先用 `dsh --version` 对一下上面的版本清单，并把 `/dev-workflow status` 的输出贴进 issue；这份清单怎么定见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
 ## 文档
 

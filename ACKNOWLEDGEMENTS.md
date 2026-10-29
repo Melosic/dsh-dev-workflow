@@ -22,10 +22,10 @@ Cordis 与 Schemastery 是上游项目、被该 monorepo vendor 进来的（各�
 | `@deepseek-ai/cordis` | `vendor/cordis` | Shigma \<shigma10826@gmail.com\> | MIT | 微内核框架：`apply(ctx, config)` 插件模型、`ctx.inject`、`ctx.effect`、事件系统 |
 | `@deepseek-ai/schemastery` | `vendor/schemastery` | Shigma \<shigma10826@gmail.com\> | MIT | `src/config.ts` 的配置面声明与默认值校验 |
 
-五个包都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包用显式闭区间
-`>=0.2.0-rc.2 <0.3.0-0`——上界卡在下一条次版本线的起点，没实测过的版本一律读作不支持）。`devDependencies` 里另把 DSH 域内三个包钉在实测基线
-`0.2.1-rc.2`，让 CI 跑在一个确定版本上——下界与开发基线是两个问题，理由与取舍见
-[docs/PUBLISHING.md](docs/PUBLISHING.md)。
+五个包都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包写同一份精确版本清单
+`0.2.0-rc.2 || 0.2.1-rc.2`——没实测过的版本一律读作不支持，不写成范围）。`devDependencies` 里另把 DSH 域内三个包
+钉在实测基线 `0.2.1-rc.2`，让 CI 跑在一个确定版本上——支持名单与开发基线是两个问题，
+理由与取舍见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
 ## 作为实现范式被研读的官方包
 
