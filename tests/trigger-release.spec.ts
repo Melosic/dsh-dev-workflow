@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -167,6 +167,22 @@ describe('src/triggers/pre-release.ts', () => {
     expect((decision as { reason: string }).reason).toContain(
       t('trigger.pre_release.error.version_mismatch', { tag: '0.2.0', version: '0.1.0' }),
     )
+  })
+
+  it('reads the manifest a --filter points at, not the root one', async () => {
+    const { listener } = trigger()
+    // A monorepo release names its package; comparing the tag against the root
+    // version would fail every such release with a mismatch that is not there.
+    const directory = project('0.1.0', FULL_CHANGELOG)
+    mkdirSync(join(directory, 'packages', 'core'), { recursive: true })
+    writeFileSync(
+      join(directory, 'packages', 'core', 'package.json'),
+      JSON.stringify({ version: '0.2.0' }),
+      'utf8',
+    )
+    const decision = await fire(listener, 'pnpm --filter packages/core publish', { cwd: directory })
+
+    expect(decision.kind).toBe('allow')
   })
 
   it('asks when a pre-release is published to latest', async () => {

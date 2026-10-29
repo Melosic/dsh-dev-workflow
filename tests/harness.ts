@@ -271,10 +271,13 @@ export function makeGit(files: () => readonly string[] = () => []): GitRunner {
             .join(''),
         }
       }
+      // `-z` here too: `status --porcelain=v1 -z` is NUL-terminated and
+      // unquoted, and a runner that answers with newline-separated quoted
+      // paths would be answering a command the check no longer runs.
       return {
         ok: true,
         stdout: files()
-          .map((file) => ` M ${file}\n`)
+          .map((file) => ` M ${file}\0`)
           .join(''),
       }
     },

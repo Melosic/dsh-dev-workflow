@@ -76,6 +76,9 @@ const MAX_STREAM_BYTES = 1024 * 1024
 /** Grace period handed to the subprocess provider's termination procedure. */
 const GRACE_MS = 5000
 
+/** Exit code git uses when it cannot run at all: no repository, or bad usage. */
+const NOT_A_REPOSITORY_EXIT = 128
+
 /**
  * Read the optional subprocess service from a context.
  * @param ctx - any DSH context; the service is resolved, not injected.
@@ -133,23 +136,56 @@ export function createGitRunner(ctx: Context, cwd: string): GitRunner {
     }
   }
 
+  /** One spawn, already located: the shape both the caller and the probe use. */
+  const exec = async (
+    path: string,
+    args: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> => {
+    const handle = subprocess!.spawn({
+      argv: [path, ...args],
+      cwd,
+      stdio: {
+        stdin: 'ignore',
+        stdout: { maxBytes: MAX_STREAM_BYTES },
+        stderr: { maxBytes: MAX_STREAM_BYTES },
+      },
+      graceMs: GRACE_MS,
+      signal,
+    })
+    const outcome = await handle.done
+    return {
+      exitCode: outcome.exitCode,
+      stdout: handle.collected.stdout?.readFrom(0).text ?? '',
+      stderr: handle.collected.stderr?.readFrom(0).text ?? '',
+    }
+  }
+
+  /**
+   * Whether the working directory is inside a git work tree.
+   *
+   * Asked of git rather than read off a message: git translates its errors, so
+   * matching the English text of "not a git repository" stops working under any
+   * other locale, and the caller then reports an ordinary command failure for a
+   * directory that simply is not a repository. The probe runs only after a
+   * command has already failed, so the ordinary path pays nothing for it.
+   */
+  const isRepository = async (path: string, signal?: AbortSignal): Promise<boolean> => {
+    try {
+      const probe = await exec(path, ['rev-parse', '--is-inside-work-tree'], signal)
+      return probe.exitCode === 0 && probe.stdout.trim() === 'true'
+    } catch {
+      return false
+    }
+  }
+
   const run: GitRunner['run'] = async (args, signal) => {
     const located = await locate(signal)
     if (!located.ok) return { ok: false, failure: located.failure, stderr: '' }
 
-    let handle: SpawnHandle
+    let outcome: { exitCode: number | null; stdout: string; stderr: string }
     try {
-      handle = subprocess!.spawn({
-        argv: [located.path, ...args],
-        cwd,
-        stdio: {
-          stdin: 'ignore',
-          stdout: { maxBytes: MAX_STREAM_BYTES },
-          stderr: { maxBytes: MAX_STREAM_BYTES },
-        },
-        graceMs: GRACE_MS,
-        signal,
-      })
+      outcome = await exec(located.path, args, signal)
     } catch (error) {
       // A pre-aborted signal and an unlaunchable executable both land here.
       return {
@@ -159,15 +195,15 @@ export function createGitRunner(ctx: Context, cwd: string): GitRunner {
       }
     }
 
-    const outcome = await handle.done
-    const stdout = handle.collected.stdout?.readFrom(0).text ?? ''
-    const stderr = handle.collected.stderr?.readFrom(0).text ?? ''
-
+    const { stdout, stderr } = outcome
     if (outcome.exitCode === 0) return { ok: true, stdout }
     if (signal?.aborted === true) return { ok: false, failure: 'cancelled', stderr }
     if (outcome.exitCode === null) return { ok: false, failure: 'cancelled', stderr }
-    if (stderr.includes('not a git repository')) {
-      return { ok: false, failure: 'not-a-git-repository', stderr }
+    // 128 is git's usual cannot-run-here exit. The probe decides whether that
+    // means "no repository" or an ordinary failure inside one.
+    if (outcome.exitCode === NOT_A_REPOSITORY_EXIT) {
+      const inside = await isRepository(located.path, signal)
+      if (!inside) return { ok: false, failure: 'not-a-git-repository', stderr }
     }
     // The stdout is kept only for a command that reports its answer through it;
     // for everything else it is partial output of a failed run, and a caller

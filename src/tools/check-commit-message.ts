@@ -14,8 +14,16 @@ import { renderCheck } from './result.js'
 // line between a blocking problem and an advisory one is a property of the
 // message, and what the gate does with it belongs to the gate.
 
-/** Body lines the specification asks to wrap at. */
-const BODY_MAX_LENGTH = 72
+/**
+ * Body lines the specification asks to wrap at.
+ *
+ * This is commitlint's `body-max-line-length`, kept as one number rather than
+ * restated here as something tighter: two limits for the same line meant the
+ * plugin warned at 72 while the gate that actually rejects the message allowed
+ * 100, so the warning was noise the author could not act on consistently. The
+ * subject keeps its own, smaller budget — see `commitCheck.subjectMaxLength`.
+ */
+const BODY_MAX_LENGTH = 100
 
 /** Inputs the check needs beyond the message itself. */
 export interface CommitCheckInput {
@@ -59,7 +67,10 @@ export function checkCommitMessage(
     return { ok: false, errors: [t('tool.check_commit_message.error.empty')], warnings }
   }
 
-  const header = /^([a-z]+)(\([^)]*\))?(!)?:\s*(\S.*)$/.exec(subject)
+  // `feat(docs):` with nothing after the colon is not a subject, and an empty
+  // scope `feat():` is not a scope — both used to slip past this pattern and
+  // reach the length check as a zero-character description, which then passed.
+  const header = /^([a-z]+)(\(([^)]*)\))?(!)?:\s*(\S.*)$/.exec(subject)
   if (header === null) {
     errors.push(t('tool.check_commit_message.error.missing_type'))
     errors.push(t('tool.check_commit_message.hint.format'))
@@ -69,9 +80,16 @@ export function checkCommitMessage(
   // Group 1 is guaranteed by the pattern; groups 2 and 3 are optional and are
   // `undefined` when the author omitted the scope or the breaking marker.
   const type = header[1] ?? ''
-  const scope = header[2]
-  const bang = header[3]
-  const rest = header[4] ?? ''
+  const scopeGroup = header[2]
+  const scopeName = header[3]
+  const bang = header[4]
+  const rest = header[5] ?? ''
+  // `feat(): x` names a scope and does not: the parentheses are there, so the
+  // message looks scoped, but there is nothing in them. Conventional Commits
+  // has no such scope, and commitlint rejects the header outright.
+  const emptyScope = scopeGroup !== undefined && (scopeName ?? '').trim() === ''
+  const scope = emptyScope ? undefined : scopeName
+  if (emptyScope) errors.push(t('tool.check_commit_message.error.empty_scope'))
   if (!types.includes(type)) {
     errors.push(
       t('tool.check_commit_message.error.unknown_type', {
@@ -92,10 +110,16 @@ export function checkCommitMessage(
       }),
     )
   }
+  // commitlint's `subject-full-stop` is an error, not a note, so a period is
+  // reported the same way here: one message must not get two verdicts from the
+  // two gates that both read it.
   if (subject.endsWith('.')) {
-    warnings.push(t('tool.check_commit_message.warn.trailing_period'))
+    errors.push(t('tool.check_commit_message.error.trailing_period'))
   }
-  if (bang === '!' && !/^BREAKING CHANGE:/m.test(body)) {
+  // Conventional Commits accepts the footer spelled either way, and `BREAKING
+  // CHANGE:` with no space after the hyphen is the form the specification
+  // itself writes first.
+  if (bang === '!' && !/^BREAKING[ -]CHANGE:/m.test(body)) {
     errors.push(t('tool.check_commit_message.error.breaking_without_footer'))
   }
 
