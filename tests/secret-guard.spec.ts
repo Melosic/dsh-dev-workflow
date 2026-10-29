@@ -147,6 +147,77 @@ describe('src/guard/secret-guard.ts', () => {
     )
   })
 
+  it('lets a documented placeholder through, but not a real key beside it', () => {
+    // Documentation is the one place a credential-shaped string belongs: AWS's
+    // own reference key ends in EXAMPLE, and a tutorial writes YOUR_API_KEY where
+    // the value goes. Refusing those teaches a reader to switch the guard off.
+    const documentKey = `AKIA${'IOSFODNN7EXAMPLE'}`
+    expect(findSecret(documentKey, { genericHighEntropy: false })).toBeUndefined()
+    expect(
+      findSecret(`Bearer ${'YOUR_API_KEY_YOUR_API_KEY'}`, { genericHighEntropy: false }),
+    ).toBeUndefined()
+    expect(findSecret(`ghp_${'x'.repeat(24)}`, { genericHighEntropy: false })).toBeUndefined()
+
+    // The exemption is per match, not per string: a page that shows a placeholder
+    // and then a real key is still a page that leaks one.
+    expect(findSecret(`${documentKey} then ${AWS_KEY}`, { genericHighEntropy: false })).toBe(
+      'AWS access key',
+    )
+  })
+
+  it('recognises the keys of the services that handout a bare prefix', () => {
+    // Each of these is issued with a prefix unique enough to name the service,
+    // so no entropy heuristic is involved and none of them needs a key name
+    // beside it.
+    expect(findSecret(`sk-ant-${'j'.repeat(24)}`, { genericHighEntropy: false })).toBe(
+      'Anthropic key',
+    )
+    expect(findSecret(`sk-${'k'.repeat(24)}`, { genericHighEntropy: false })).toBe('OpenAI key')
+    expect(findSecret(`sk_live_${'l'.repeat(24)}`, { genericHighEntropy: false })).toBe(
+      'Stripe secret key',
+    )
+    expect(findSecret(`AIza${'m'.repeat(35)}`, { genericHighEntropy: false })).toBe(
+      'Google API key',
+    )
+    expect(
+      findSecret(`SG.${'n'.repeat(22)}.${'o'.repeat(22)}`, { genericHighEntropy: false }),
+    ).toBe('SendGrid key')
+    expect(findSecret(`SK${'0123456789abcdef'.repeat(2)}`, { genericHighEntropy: false })).toBe(
+      'Twilio API key',
+    )
+  })
+
+  it('recognises the shapes that only a key name makes specific', () => {
+    // An AWS secret access key has no prefix at all, and a password is a
+    // password only because of the word in front of it. Both are read with the
+    // name required, so ordinary prose about a password field stays allowed.
+    // The alphabet is base64's, and the length is fixed at 40: a shorter run
+    // after the name is an id or an explanation, not the secret half.
+    expect(
+      findSecret('aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYzABCDEFGHI', {
+        genericHighEntropy: false,
+      }),
+    ).toBe('AWS secret access key')
+    expect(findSecret('password="hunter2hunter2"', { genericHighEntropy: false })).toBe(
+      'password assignment',
+    )
+    expect(
+      findSecret(`postgres://user:${'p'.repeat(16)}@db.example.com/app`, {
+        genericHighEntropy: false,
+      }),
+    ).toBe('connection string')
+  })
+
+  it('leaves the same words alone when no value follows them', () => {
+    expect(findSecret('set the password in the environment', { genericHighEntropy: false })).toBe(
+      undefined,
+    )
+    expect(findSecret('aws_secret_access_key', { genericHighEntropy: false })).toBeUndefined()
+    expect(
+      findSecret('postgres://db.example.com/app', { genericHighEntropy: false }),
+    ).toBeUndefined()
+  })
+
   it('does not treat the word Bearer, or short values, as a credential', () => {
     expect(findSecret('Bearer', { genericHighEntropy: false })).toBeUndefined()
     expect(findSecret('Authorization: Bearer', { genericHighEntropy: false })).toBeUndefined()
@@ -174,6 +245,15 @@ describe('src/guard/secret-guard.ts', () => {
     const distinct = '0123456789abcdefghijklmnopqrstuvwxyzABCD'
     expect(findSecret(distinct, { genericHighEntropy: true })).toBe('high-entropy string')
     expect(findSecret('a'.repeat(40), { genericHighEntropy: true })).toBeUndefined()
+  })
+
+  it('stops scanning a structure that points back at itself', () => {
+    // Arguments come from a model, and a cyclic one would otherwise be walked
+    // until the stack ran out — inside the guard that runs *before* the call.
+    const cyclic: Record<string, unknown> = { ok: 'fine' }
+    cyclic.self = cyclic
+    expect(scanForSecret(cyclic, { genericHighEntropy: false })).toBeUndefined()
+    expect(redactSecrets(cyclic, { genericHighEntropy: false })).toMatchObject({ ok: 'fine' })
   })
 
   it('scans arrays as well as objects', () => {
