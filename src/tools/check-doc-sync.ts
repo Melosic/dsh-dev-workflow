@@ -26,20 +26,30 @@ export interface DocSyncInput {
 }
 
 /**
- * Parse the paths out of `git status --porcelain=v1` output.
+ * Parse the paths out of `git status --porcelain=v1 -z` output.
+ *
+ * `-z` matters for paths that are not ASCII: the default rendering quotes them
+ * and escapes every non-ASCII byte as `\303\251`-style octal, which no rule here
+ * can match against a configured document name — a change under `docs/中文.md`
+ * came back as a string that matched nothing and the check reported the tree as
+ * clean. `-z` emits each path raw and NUL-terminated instead. It also changes
+ * the rename shape: with `-z` git prints the new path as the entry and the old
+ * path as the following NUL-separated field, rather than `old -> new`.
  * @param stdout - the command's output.
  * @returns repository-relative paths, in the order git printed them.
  */
 function statusPaths(stdout: string): string[] {
+  const fields = stdout.split('\0')
   const files: string[] = []
-  for (const line of stdout.split('\n')) {
-    if (line.length < 4) continue
-    // `XY path`, or `XY original -> path` for a rename. The second path is the
-    // one that exists now, which is what the rules are written against.
-    const entry = line.slice(3).trim()
-    const arrow = entry.indexOf(' -> ')
-    const path = arrow === -1 ? entry : entry.slice(arrow + 4)
-    files.push(unquote(path))
+  for (let index = 0; index < fields.length; index += 1) {
+    const entry = fields[index] ?? ''
+    // A trailing empty field is the terminator, not a path.
+    if (entry.length < 4) continue
+    const status = entry.slice(0, 2)
+    files.push(entry.slice(3))
+    // A rename or copy prints the original path as its own field. It is not a
+    // path this change touches — the entry above is the name that now exists.
+    if (status.includes('R') || status.includes('C')) index += 1
   }
   return files
 }
@@ -54,7 +64,8 @@ export async function listChangedFiles(
   git: GitRunner,
   signal?: AbortSignal,
 ): Promise<{ ok: true; files: string[] } | { ok: false; failure: string; stderr: string }> {
-  const result = await git.run(['status', '--porcelain=v1', '--untracked-files=all'], signal)
+  // `-z` so the paths arrive as themselves: see `statusPaths`.
+  const result = await git.run(['status', '--porcelain=v1', '-z', '--untracked-files=all'], signal)
   if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
   return { ok: true, files: statusPaths(result.stdout) }
 }
@@ -128,20 +139,6 @@ export async function listTrackedChanges(
   const result = await git.run(['diff', '--name-only', '-z', 'HEAD'], signal)
   if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
   return { ok: true, files: result.stdout.split('\0').filter((path) => path.length > 0) }
-}
-
-/**
- * Strip the quoting git adds around paths with unusual characters.
- * @param path - a path as printed by `git status`.
- * @returns the path without surrounding quotes and with its escapes resolved.
- */
-function unquote(path: string): string {
-  if (!path.startsWith('"') || !path.endsWith('"')) return path
-  const inner = path.slice(1, -1)
-  return inner
-    .replace(/\\(["\\])/g, '$1')
-    .replace(/\\t/g, '\t')
-    .replace(/\\n/g, '\n')
 }
 
 /**

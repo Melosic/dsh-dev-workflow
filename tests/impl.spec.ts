@@ -111,10 +111,18 @@ describe('src/tools/check-commit-message.ts', () => {
     )
   })
 
-  it('warns about a trailing period', () => {
+  it('rejects a trailing period, as commitlint does', () => {
+    // The plugin and commitlint both judge this line, so they must judge it the
+    // same way: `subject-full-stop` is severity 2 in config-conventional.
     const outcome = checkCommitMessage({ message: 'fix(cli): stop crashing.' }, config, t)
-    expect(outcome.ok).toBe(true)
-    expect(outcome.warnings).toContain(t('tool.check_commit_message.warn.trailing_period'))
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toContain(t('tool.check_commit_message.error.trailing_period'))
+  })
+
+  it('rejects an empty scope', () => {
+    const outcome = checkCommitMessage({ message: 'feat(): add a flag' }, config, t)
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toContain(t('tool.check_commit_message.error.empty_scope'))
   })
 
   it('requires a BREAKING CHANGE footer behind a bang', () => {
@@ -133,10 +141,22 @@ describe('src/tools/check-commit-message.ts', () => {
     expect(outcome.errors).toEqual([])
   })
 
+  it('accepts the hyphenated spelling of the breaking footer', () => {
+    // The specification writes `BREAKING CHANGE:` in one place and
+    // `BREAKING-CHANGE:` in another; both are the same footer.
+    const outcome = checkCommitMessage(
+      { message: 'feat(cli)!: drop the old flag\n\nBREAKING-CHANGE: use --new instead' },
+      config,
+      t,
+    )
+    expect(outcome.ok).toBe(true)
+  })
+
   it('reports the first over-wide body line only', () => {
-    const wide = 'w'.repeat(73)
+    // 100 is commitlint's body budget, so 101 is the first line that breaks it.
+    const wide = 'w'.repeat(101)
     const outcome = checkCommitMessage({ message: `fix: thing\n\n${wide}\n${wide}` }, config, t)
-    const lines = outcome.warnings.filter((line) => line.includes('72'))
+    const lines = outcome.warnings.filter((line) => line.includes('100'))
     expect(lines).toHaveLength(1)
   })
 
@@ -154,12 +174,12 @@ describe('src/tools/check-commit-message.ts', () => {
     // Leading-pipe tables are not what the exemption matches, so the warning
     // stands: a false negative here would hide a genuinely unwrapped body.
     const outcome = checkCommitMessage(
-      { message: `docs: thing\n\n| ${'a'.repeat(80)} |` },
+      { message: `docs: thing\n\n| ${'a'.repeat(108)} |` },
       config,
       t,
     )
     expect(outcome.warnings).toContain(
-      t('tool.check_commit_message.warn.body_width', { length: 84, max: 72 }),
+      t('tool.check_commit_message.warn.body_width', { length: 112, max: 100 }),
     )
   })
 
@@ -265,18 +285,22 @@ describe('src/tools/check-doc-sync.ts', () => {
     expect(value.error).toBe(t('error.not_a_git_repository', { detail: 'fatal: nope' }))
   })
 
-  it('parses porcelain status lines, including renames and quoting', async () => {
+  it('parses NUL-separated status entries, including renames and non-ASCII paths', async () => {
+    // `-z` output: `XY path\0`, and a rename or copy is followed by one extra
+    // field holding the path the entry came from.
     const git = {
       cwd: process.cwd(),
       run: async () => ({
         ok: true as const,
-        stdout: ' M src/a.ts\nR  old.md -> "new name.md"\n?? "quote\\"d.ts"\n',
+        stdout: ' M src/a.ts\0R  new name.md\0old.md\0?? docs/中文.md\0',
       }),
       locate: async () => ({ ok: true as const, path: 'git' }),
     }
     expect(await listChangedFiles(git)).toEqual({
       ok: true,
-      files: ['src/a.ts', 'new name.md', 'quote"d.ts'],
+      // The old path of a rename is consumed, not reported: the name that
+      // exists now is what the documentation rules match against.
+      files: ['src/a.ts', 'new name.md', 'docs/中文.md'],
     })
   })
 })

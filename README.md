@@ -158,11 +158,11 @@ The defaults are the common ones (Conventional Commits, Keep a Changelog). Every
 
 | Component | Version | Notes |
 | --- | --- | --- |
-| DeepSeek Harness runtime | `>=0.2.0-rc.2` | `dsh --version` |
+| DeepSeek Harness runtime | `0.2.0-rc.2` or `0.2.1-rc.2` | `dsh --version` |
 | Node.js | `>=20` | required by dsh itself |
 | pnpm | any; not checked | only needed by `dsh plugin`, and it must be on `PATH` |
 
-When the version falls outside that range, **`dsh plugin add` refuses the install outright** (`dsh: installation rejected: Plugin … is incompatible with dsh …`, nothing is installed) and prints the `dsh plugin allow-version` escape hatch. An already-installed older copy behaves differently: the plugin is disabled at startup with `dsh: disabling profile plugin …` on stderr, and the rest of the profile loads normally. Both say why; neither is silent. Check `dsh --version` against the range above before filing a bug, and paste the output of `/dev-workflow status` into the issue; how the range is chosen is in [docs/PUBLISHING.md](docs/PUBLISHING.md).
+Those are the only two versions, not a range: they are the ones this plugin has actually been loaded on, and a range would also claim every 0.2 prerelease in between and every 0.3 after them. The cost is that a new DSH prerelease needs a new release of this plugin — which is the honest direction, because "not tested" should read as "unsupported". When the version is one of the others, **`dsh plugin add` refuses the install outright** (`dsh: installation rejected: Plugin … is incompatible with dsh …`, nothing is installed) and prints the `dsh plugin allow-version` escape hatch. An already-installed older copy behaves differently: the plugin is disabled at startup with `dsh: disabling profile plugin …` on stderr, and the rest of the profile loads normally. Both say why; neither is silent. Check `dsh --version` against the list above before filing a bug, and paste the output of `/dev-workflow status` into the issue; how the list is chosen is in [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 ## Documentation
 

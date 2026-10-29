@@ -50,7 +50,19 @@ const PATH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   write: ['file_path'],
   glob: ['pattern', 'path'],
   grep: ['path', 'include'],
+  // The same argument names under the host's file tools. A tool this table
+  // does not name used to contribute no paths at all, so every spelling it was
+  // missing passed silently - the guard said nothing rather than saying it did
+  // not know the tool.
+  read_file: ['path', 'file_path'],
+  read_files: ['path', 'file_path', 'paths', 'files'],
+  write_file: ['path', 'file_path'],
+  edit_file: ['path', 'file_path'],
+  apply_patch: ['path', 'file_path'],
 }
+
+/** Argument fields that name a path, across the host's own tool spellings. */
+const FIELD_NAMES = new Set(['path', 'paths', 'file', 'files', 'file_path', 'file_paths'])
 
 /** Programs whose job is to print a file, so their path arguments are reads. */
 const READERS = new Set([
@@ -72,6 +84,52 @@ const READERS = new Set([
   'get-content',
   'gc',
   'select-string',
+  // Copying and archiving read the file just as printing it does: `cp .env
+  // /tmp/x` publishes the secret to a place the guard then cannot see, and
+  // `tar cf out.tar .env` puts it in a blob no later check will read.
+  'cp',
+  'mv',
+  'install',
+  'tar',
+  'zip',
+  'unzip',
+  'gzip',
+  'gunzip',
+  'scp',
+  'rsync',
+  'dd',
+  'base64',
+  'xxd',
+  'od',
+  'tee',
+  'sftp',
+  'curl',
+  'wget',
+])
+
+/** Programs that take a path as `if=<path>` / `of=<path>` rather than bare. */
+const KEYED_PATH_PROGRAM = new Set(['dd'])
+
+/** Programs that run another program over their input or arguments. */
+const DELEGATING = new Set(['xargs'])
+
+/** `xargs` options that take a separate value. */
+const DELEGATING_VALUE_OPTIONS = new Set([
+  '-I',
+  '-L',
+  '-n',
+  '-P',
+  '-s',
+  '-a',
+  '-d',
+  '-E',
+  '--arg-file',
+  '--delimiter',
+  '--max-args',
+  '--max-lines',
+  '--max-procs',
+  '--max-chars',
+  '--replace',
 ])
 
 /**
@@ -86,6 +144,51 @@ const READERS = new Set([
  */
 const EXPRESSION_FIRST = new Set(['sed', 'awk', 'grep', 'rg', 'findstr', 'select-string'])
 
+/** Compiled pattern bodies, keyed by the pattern as written. */
+const PATTERN_CACHE = new Map<string, readonly RegExp[]>()
+
+/** How many distinct patterns the cache keeps before it is dropped. */
+const PATTERN_CACHE_LIMIT = 256
+
+/**
+ * Fold a path or pattern for comparison.
+ *
+ * Only Windows is case-insensitive. Folding on every platform made `.ENV` a
+ * secret on Linux, where it is an ordinary file with an ordinary name — the
+ * guard answered a question nobody asked and taught the reader to turn it off.
+ * @param text - a path or pattern.
+ * @returns the text to compare.
+ */
+function fold(text: string): string {
+  const normalised = text.replace(/\\/g, '/')
+  return process.platform === 'win32' ? normalised.toLowerCase() : normalised
+}
+
+/**
+ * The expressions one pattern is tested with: the whole path, and the final
+ * component on its own.
+ * @param glob - the pattern, already folded and slash-normalised.
+ * @returns the regular expressions, in the order they are tried.
+ */
+function compilePattern(glob: string): readonly RegExp[] {
+  const cached = PATTERN_CACHE.get(glob)
+  if (cached !== undefined) return cached
+  const escape = (text: string) => text.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  const body = escape(glob).replace(/\*/g, '[^/]*')
+  // A directory rule covers that directory and everything under it.
+  const directory = glob.endsWith('/')
+    ? new RegExp(`(^|/)${escape(glob.slice(0, -1)).replace(/\*/g, '[^/]*')}(/|$)`)
+    : undefined
+  // `(^|/)` on both ends keeps a pattern with a slash inside a path component:
+  // `config/secrets` covers `app/config/secrets` and not `myconfig/secrets`.
+  const compiled = [directory, new RegExp(`(^|/)${body}$`), new RegExp(`^${body}$`)].filter(
+    (one): one is RegExp => one !== undefined,
+  )
+  if (PATTERN_CACHE.size >= PATTERN_CACHE_LIMIT) PATTERN_CACHE.clear()
+  PATTERN_CACHE.set(glob, compiled)
+  return compiled
+}
+
 /**
  * Whether one path is covered by one configured pattern.
  *
@@ -99,33 +202,26 @@ const EXPRESSION_FIRST = new Set(['sed', 'awk', 'grep', 'rg', 'findstr', 'select
  * @returns whether the path is protected.
  */
 export function matchesPattern(path: string, pattern: string): boolean {
-  const value = path.replace(/\\/g, '/').toLowerCase()
-  const glob = pattern.replace(/\\/g, '/').toLowerCase()
-  const escape = (text: string) => text.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-
-  // A directory rule: the path is that directory or lives under it.
-  if (glob.endsWith('/')) {
-    const directory = glob.slice(0, -1)
-    const expression = new RegExp(`(^|/)${escape(directory).replace(/\*/g, '[^/]*')}(/|$)`)
-    return expression.test(value)
-  }
-
-  // `(^|/)` on both ends is what keeps a pattern with a slash inside a path
-  // component: `config/secrets` covers `app/config/secrets` and does not cover
-  // `myconfig/secrets`.
-  const expression = new RegExp(`(^|/)${escape(glob).replace(/\*/g, '[^/]*')}$`)
-  if (expression.test(value)) return true
-
-  const base = value.split('/').pop() ?? value
-  if (new RegExp(`^${escape(glob).replace(/\*/g, '[^/]*')}$`).test(base)) return true
+  const value = fold(path)
+  const glob = fold(pattern)
+  // The list is [directory?, wholePath, basename]: a directory rule is tested
+  // against the whole path, the other two against the path and its last
+  // component respectively.
+  const [directory, whole, base] = compilePattern(glob)
+  // A directory rule is decisive when it matches, but not when it does not:
+  // `.env` still has its own variants to check below.
+  if (directory !== undefined && directory.test(value)) return true
+  if (whole !== undefined && whole.test(value)) return true
+  const name = value.split('/').pop() ?? value
+  if (base !== undefined && base.test(name)) return true
 
   // `.env` also covers `.env.local` and `.env.production`: the secret is in the
   // variants as much as in the file itself. A documented sample is the one
   // exception, because `.env.example` exists to be read — refusing it teaches
   // the reader nothing and only gets the rule switched off.
   if (!glob.startsWith('.') || glob.includes('*')) return false
-  if (!base.startsWith(`${glob}.`)) return false
-  return !SAMPLE_VARIANTS.has(base.slice(glob.length + 1))
+  if (!name.startsWith(`${glob}.`)) return false
+  return !SAMPLE_VARIANTS.has(name.slice(glob.length + 1))
 }
 
 /**
@@ -154,13 +250,30 @@ function match(
  * @returns the candidate paths.
  */
 function argumentPaths(name: string, args: unknown): string[] {
-  const fields = PATH_FIELDS[name]
-  if (fields === undefined) return []
   if (typeof args !== 'object' || args === null) return []
   const record = args as Record<string, unknown>
-  return fields
-    .map((field) => record[field])
-    .filter((value): value is string => typeof value === 'string')
+  // The table names the fields of the tools this build ships, and is read first
+  // because a tool may pass a path in a field that is not path-shaped
+  // (`glob.pattern`). Everything else — a later built-in, an MCP tool, a name
+  // this plugin has never heard of — is read by argument name instead: the
+  // path-shaped fields are the same few spellings across the host's tools, and
+  // keeping a list of blessed tool names is how the guard ends up protecting
+  // only the tools it knows by heart. Prose fields are not in that set, so a
+  // commit message that merely mentions .env stays harmless.
+  const names = PATH_FIELDS[name] ?? Object.keys(record).filter((field) => FIELD_NAMES.has(field))
+  if (names.length === 0) return []
+  const found: string[] = []
+  for (const field of names) {
+    const value = record[field]
+    // A field may hold one path or a batch: `read_files` takes `paths: [...]`,
+    // and reading only the string-shaped fields let a batch call through with
+    // no candidate at all.
+    if (typeof value === 'string') found.push(value)
+    else if (Array.isArray(value)) {
+      for (const entry of value) if (typeof entry === 'string') found.push(entry)
+    }
+  }
+  return found
 }
 
 /**
@@ -192,7 +305,34 @@ function commandPaths(command: string): string[] {
     const program = words[0]
     if (program === undefined) continue
     const name = baseName(program).toLowerCase()
+    // `xargs cat .env` reads the file just as `cat .env` does, but the program
+    // doing it is the first *free* word, not the first one. Without this the
+    // filter below finds no reader and the command looks harmless.
+    if (DELEGATING.has(name)) {
+      // `xargs` options come first and some of them take a value; the program
+      // it runs starts at the first word that is neither.
+      const rest = words.slice(1)
+      let index = 0
+      while (index < rest.length) {
+        const word = rest[index] ?? ''
+        if (!word.startsWith('-')) break
+        index += 1
+        if (!word.includes('=') && DELEGATING_VALUE_OPTIONS.has(word)) index += 1
+      }
+      const inner = rest.slice(index)
+      if (inner.length > 0) found.push(...commandPaths(inner.join(' ')))
+      continue
+    }
     if (!READERS.has(name)) continue
+    // `dd if=.env of=/tmp/x` names its paths with a key rather than as words, so
+    // the `=` form is read here instead of being filtered out as an option.
+    if (KEYED_PATH_PROGRAM.has(name)) {
+      for (const word of words.slice(1)) {
+        const match = /^(?:if|of|seek|skip)=(.+)$/.exec(word)
+        if (match?.[1] !== undefined) found.push(match[1])
+      }
+      continue
+    }
     const free = words.slice(1).filter((word) => !word.startsWith('-'))
     // `grep 'credentials' .` searches for a word; `grep .env .` reads a file.
     // The first free word is the expression, so it is dropped before the rest

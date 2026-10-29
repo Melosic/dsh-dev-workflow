@@ -52,7 +52,7 @@ function makeRepo(options: {
         return { ok: true, stdout: branch.map((path) => `${path}\0`).join('') }
       }
       if (joined.startsWith('status --porcelain')) {
-        return { ok: true, stdout: worktree.map((path) => ` M ${path}\n`).join('') }
+        return { ok: true, stdout: worktree.map((path) => ` M ${path}\0`).join('') }
       }
       if (joined.startsWith('log -1')) return { ok: true, stdout: 'feat: previous subject\n' }
       return { ok: true, stdout: '' }

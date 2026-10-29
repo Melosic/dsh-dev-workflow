@@ -140,10 +140,19 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 
 ## CI 会拦住什么
 
-`.github/workflows/ci.yml` 在 Node 22 上依次跑：`pnpm install --frozen-lockfile`、
-`typecheck`、`typecheck:tests`、`typecheck:client`、`lint`、对本次 PR 新增提交跑 `commitlint`、
-`format:check`、`test`、`build`、`ci:checks`。
-（单个 Node 版本而非矩阵：`engines.node` 声明的是代码所需的下限，CI 跑的是当前 LTS。）
+`.github/workflows/ci.yml` 有两个 job。
+
+`verify`（ubuntu，Node 22）依次跑：`pnpm install --frozen-lockfile`、`typecheck`、
+`typecheck:tests`、`typecheck:client`、`lint`、对本次 PR 新增提交跑 `commitlint`、
+**对 PR 标题跑一次 `commitlint`**、`format:check`、`test`、`build`、`ci:checks`（带 `PR_TITLE`）。
+
+PR 标题单独校验，因为合并是 squash：落进 `main` 的提交信息就是标题，分支上的提交信息
+不会以任何形式留下来。只校验分支提交的话，唯一真正 seal 进历史的那段文本反而没人看。
+
+`floor`（windows-latest，Node 20）只跑 `install / typecheck / test / build`。它的存在是为了
+`engines.node >= 20` 这句声明：`verify` 跑当前 LTS，永远证明不了下限还在，而 Windows 的
+路径分隔符与大小写语义是这个仓库反复踩过的地方，两者都不该只在 `verify` 里被同一台
+Linux runner 掩盖。
 `main` 分支的保护规则要求 `verify` 这个检查通过、要求 PR、且禁止强制推送。
 job 声明了 `timeout-minutes: 10`（不声明就是 GitHub 的 360 分钟默认值，卡死的 run 会占用
 runner 六小时才报错），并按 ref 配了 `concurrency` 取消进行中的旧 run —— 实测一次 `verify`
@@ -162,13 +171,32 @@ runner 六小时才报错），并按 ref 配了 `concurrency` 取消进行中�
    两份字典、两份 SKILL、补丁文件）。缺 `lib/` 说明没先 `pnpm build`。
 6. **成对镜像文件同改**：改动落在 `docs.mirrors` 某一组的一半上就失败。这同时覆盖了不用 DSH
    的贡献者——会话内的 `check_doc_sync` 对他们不生效。
-7. **版本三处对齐**：`package.json` 的版本在 `CHANGELOG.md` 里必须有对应标题。
+7. **版本三处对齐**：`package.json` 的版本与每个 git tag 在 `CHANGELOG.md` 里都必须有
+   对应标题。反方向（版本已有 tag）不查：tag 是发版动作，开着的发版 PR 里本来就还没有。
 8. **改动超过 500 行给警告**（不失败）：squash 合并把整个 PR 压成一个提交，一个分支里的
    四件不相干的事会在合并那一刻丢掉结构，提交信息只描述第一件。
-9. **DSH 版本要求两处一致**：`engines.dsh` 与 `@deepseek-ai/dsh` 的 peer 范围必须写同一个值。
-   DSH 先读 `engines.dsh`，有它就跳过 peer 检查，所以两份不一致时生效的是先写的那份。
+9. **DSH 版本要求两处一致，且必须写成精确版本清单**：`engines.dsh` 与 `@deepseek-ai/dsh` 的
+   peer 值必须相同（DSH 先读 `engines.dsh`，有它就跳过 peer 检查，两份不一致时生效的是先
+   写的那份）；值还必须是一串由 ` || ` 连接的精确版本，出现范围符号（`>=`、`~`、`^`）
+   就失败——范围会宣称本插件没被加载过的版本也兼容。
 10. **`[Unreleased]` 的每条条目不超过 120 字**：发布页逐字抄这些条目，条目长度就是发布页
     长度。已发布的段落是历史，不检查。
+11. **用户可见的改动必须触碰 `CHANGELOG.md`**：标题以 `feat:` / `fix:` 开头（含 `!` 与
+    `(scope)`）却没有改 changelog，判失败。只看路径时降为警告——内部重构属于 diff，不属于
+    changelog，硬拦只会教人写凑数条目。标题来自 CI 传的 `PR_TITLE`；本地跑没有标题，
+    按路径判。
+12. **`CHANGELOG.md` 底部的链接定义与版本号对齐**：每个已发布的标题都要有链接定义，且指向
+    `v<上一个版本>...v<本版本>`。复制上一条定义忘了改区间，渲染出来是一个能点开的、指向
+    错误 diff 的链接——这是唯一一种「看起来对」的坏结果。
+13. **英文面不得出现 CJK 字符**：`locale/en.json` 的全部值、`client.js` 里 `EN` 到 `ZH`
+    之间的块、以及 `src/` 的代码（注释除外）。这一条接在第 1 条后面：第 1 条只证明两份字典
+    的 key 一样多，不证明每条值待在它该待的语言里——把中文写进 `en.json` 的 key 上，
+    key 对齐照样通过，读者会在英文界面里看到中文。`src/` 放行注释是因为其中几条正是拿中文
+    标题当「配置值可以长这样」的例子（`CHANGELOG_CATEGORIES` 的中文写法）。
+14. **发布页模板的两半与收尾链接对得上**：`docs/PUBLISHING.md` 里的模板必须有中英两个
+    `<h3 id>` 锚点、指向同一个版本号，最后一行的 `Full Changelog:` 从 `CHANGELOG.md` 里
+    该版本的上一个版本比过来。发布页本身在 GitHub 上，仓库里能查的只有这份模板——模板留着
+    旧区间，发出去的就是一个能点开、指向错误 diff 的链接。
 
 CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种语言里语义是否一致，是人工审查项。
 
@@ -193,11 +221,11 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   所以漏传参数在测试里表现为断言失败，而不是运行时崩溃——出现 `{...}` 优先怀疑漏参数。
 - **`ask` 在没有 `approval` 服务的 profile 里会退化成拒绝。** 这是宿主行为，不是插件缺陷；
   排查「为什么问了却没弹窗」时先确认 profile 是否装了审批能力。
-- **DSH 版本有两处，方向不能一致漂移。** `peerDependencies` 的下界是「支持到多老」，
-  `devDependencies` 的三个精确版本是「CI 跑在哪」。测试跑通一个新版本**不是**抬下界的理由：
-  下界一抬，还留在旧版本上的用户要么装不上、要么装上了在启动时被禁用并看到一行说明
-  （见 `docs/PUBLISHING.md` 第 6、8 条），
-  而 `latest` 渠道往往比 `next` 渠道落后一截。升级开发基线的最小步骤写在 `docs/PUBLISHING.md` 第 4 条。
+- **DSH 版本有两处，方向不能一致漂移。** `peerDependencies` 的版本清单是「哪些运行时能装」，
+  `devDependencies` 的三个精确版本是「CI 跑在哪」。测试跑通一个新版本**不是**从清单里
+  删旧版本的理由：删了之后，还留在旧版本上的用户要么装不上、要么装上了在启动时被禁用
+  并看到一行说明（见 `docs/PUBLISHING.md` 第 6、8 条），而默认渠道往往比 `next` 渠道
+  落后一截。升级开发基线、往清单里加版本的最小步骤写在 `docs/PUBLISHING.md` 第 6 条末段。
 - **本机 `~/.npmrc` 的 `minimum-release-age=1440` 会挡住刚发布不到一天的版本。** 注意它来自
   **用户级** npmrc，不是仓库里那份（仓库 `.npmrc` 只有 `auto-install-peers` /
   `strict-peer-dependencies` / `resolution-mode`，故意不含年龄门槛）。它只拦**解析**

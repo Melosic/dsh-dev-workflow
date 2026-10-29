@@ -68,6 +68,9 @@ description: >
   | `docs/*`    | 纯文档                  |
   | `hotfix/*`  | 针对 `main` 的紧急修复  |
 
+- 这四个前缀是独立清单，**不是**从提交 type 派生出来的。没有 `chore/*` 或 `ci/*` 分支，
+  因为分支名哪里都不会落地：squash 之后它被丢掉，留下的是 type。别去「统一」这两份清单——
+  它们回答不同的问题，寿命也不同。
 - 分支名全小写、kebab-case（与提交信息里的 type、scope 同风格）。名字必须自己说得清：
   `feature/skill-md`、`fix/guard-force-push`，而不是 `feature/stuff` 或 `feature/NewStuff`。
 - **分支命名是约定，不是门禁。** 插件里没有任何地方检查分支名，也没有对应的配置项。
@@ -126,8 +129,9 @@ description: >
 - 阈值与接受的 `type` 列表是**配置**，不是本文的常量：`commitCheck.subjectMaxLength`、
   `commitCheck.types`、`commitCheck.requireScope` 都能在设置面板里改，门禁会按改后的值
   执行。在把这里的数字当成规则之前，先跑 `/dev-workflow status` 看当前生效值。
-- **Body**：72 字符换行，解释 *为什么*。不要把 diff 已经写清楚的东西再讲一遍。body 与
-  footer 可以用英文或中文，但一个项目选定一种就保持下去。
+- **Body**：100 字符换行——与 commitlint 的 `body-max-line-length` 同一个数，两个
+  门禁因此不会互相打脸。解释 *为什么*，不要把 diff 已经写清楚的东西再讲一遍。
+  body 与 footer 可以用英文或中文，但一个项目选定一种就保持下去。
 - **Footer**：引用 issue（`Closes #12`），并记录破坏性变更。
 
   | Type       | 含义                               |
@@ -146,9 +150,11 @@ description: >
 
 - 破坏性变更：在 type 或 scope 后加 `!`（`feat(api)!: ...`），**并且**在
   `BREAKING CHANGE:` footer 里解释清楚。
-- footer 必须写成 `BREAKING CHANGE: <说明>`——全大写、冒号后一个空格。带连字符的
-  `BREAKING-CHANGE` 是另一个 token，不被识别。
-- 50/72 规则不是美观问题。很多工具会截断 subject，而按宽度折行的 body 在终端与 diff 里
+- footer 的两种写法都接受：`BREAKING CHANGE: <说明>` 与 `BREAKING-CHANGE: <说明>`。
+  两者都全大写、冒号后一个空格，且都必须与 `!` 标记配对——只写 footer 读者不知道
+  是哪个提交把什么弄坏了。接受两种写法是刻意的：commitlint 的规范本身把带连字符的
+  形式列为等价，过得了其中一道门禁的信息不该因为少个空格或多了个横线在另一道失败。
+- 50/100 规则不是美观问题。很多工具会截断 subject，而按宽度折行的 body 在终端与 diff 里
   都还能读。
 
 ### scope 与示例
@@ -342,8 +348,10 @@ Feature：此前不存在的行为现在有了。
   `docs.docsDir`、`docs.mirrors` 才是检查真正读的路径。没有 `docs/` 目录的项目只是少了
   几行要填；变更日志那一行处处适用。
 - 成对文件要么一起动，要么都不动。半同步的一对比过期的那对更糟，因为它看起来有人维护。
-- CI 强制的是可机械验证的部分：locale 键对齐，两份 SKILL 暴露相同章节、相同顺序。翻译
-  读起来好不好，仍然是人工评审项。
+- 「同步」指结构与关键事实一致，不是逐字对译：相同章节、相同顺序，数字、命令、路径、
+  默认值在两种语言里说的是同一件事。有意保留的差异写进 PR 正文，别让它只能从 diff 里猜。
+- CI 强制的是可机械验证的部分：locale 键对齐，两份 SKILL 暴露相同章节、相同顺序，英文面
+  不出现 CJK 字符。翻译读起来好不好、两侧说的是不是同一件事，仍然是人工评审项。
 - 文档描述 main 分支的当前状态。它不是版本化文档：要读旧版本的行为，checkout 对应的
   git tag。
 

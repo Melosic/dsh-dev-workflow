@@ -61,6 +61,7 @@ function trigger(
     config?: Record<string, unknown>
     state?: ReturnType<typeof createWorkflowState>
     git?: ReturnType<typeof makeConflictGit>
+    logs?: string[]
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
@@ -70,7 +71,9 @@ function trigger(
     t: () => t,
     state,
     git: () => options.git ?? makeConflictGit(),
-    log: () => {},
+    log: (line) => {
+      options.logs?.push(line)
+    },
   })
   return { listener, state, config: resolved }
 }
@@ -125,10 +128,28 @@ describe('src/triggers/pre-pr.ts', () => {
     expect(detectPullRequest('gh pr create --title="feat(a): b"')).toMatchObject({
       title: 'feat(a): b',
     })
+    // `-R` precedes the subcommand and is not the subcommand.
+    expect(detectPullRequest('gh -R owner/repo pr create -t "feat(a): b"')).toMatchObject({
+      title: 'feat(a): b',
+    })
+    // `gh pr merge --subject` is the text squash writes to the base branch, and
+    // `gh pr edit --title` rewrites the title a later squash will use.
+    expect(detectPullRequest('gh pr merge 13 --squash --subject "feat(a): b"')).toMatchObject({
+      title: 'feat(a): b',
+    })
+    expect(detectPullRequest('gh pr edit 13 --title "feat(a): b"')).toMatchObject({
+      title: 'feat(a): b',
+    })
+    // A title the shell builds is not readable text, so it is reported as such
+    // instead of being judged as the literal `$(…)`.
+    expect(detectPullRequest('gh pr create --title=$(cat t.md)')).toMatchObject({
+      titleLiteral: false,
+    })
 
     for (const command of [
       'gh pr view 13',
       'gh pr merge 13 --squash',
+      'gh pr edit 13 --body "x"',
       'gh pr list',
       'git commit -m "feat(a): b"',
       'echo "gh pr create"',
@@ -176,6 +197,56 @@ describe('src/triggers/pre-pr.ts', () => {
     )
     expect(decision.kind).toBe('ask')
     expect((decision as { reason: string }).reason).toContain(SECTIONS)
+  })
+
+  // The one section where "none" is not an answer. A change with no non-goals
+  // honestly has none; this section exists to show the change was run, and
+  // "not applicable" is the author reporting that no evidence exists.
+  it('asks about a verification section that states no evidence', () => {
+    const body = GOOD_BODY.replace(
+      'Run `/dev-workflow status --json` and check that it parses.',
+      'None.',
+    )
+    const outcome = evaluatePullRequest({ title: 'feat(cli): add a flag', body }, config, t)
+
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toContain(
+      t('trigger.pre_pr.error.verification', { section: 'How to verify' }),
+    )
+  })
+
+  it('asks about the same answer spelled as a dismissal', () => {
+    for (const dismissal of ['n/a', 'Not applicable.', '**None**', '无', '（不适用）']) {
+      const body = GOOD_BODY.replace(
+        'Run `/dev-workflow status --json` and check that it parses.',
+        dismissal,
+      )
+      const outcome = evaluatePullRequest({ body }, config, t)
+      expect(outcome.ok, dismissal).toBe(false)
+    }
+  })
+
+  // The rule has to let through a sentence that merely starts with the same
+  // word: "none of the fixtures cover this, so I ran it by hand" is the answer
+  // the section is asking for, not a refusal to give one.
+  it('accepts a verification section that goes on to say what was run', () => {
+    const body = GOOD_BODY.replace(
+      'Run `/dev-workflow status --json` and check that it parses.',
+      'None of the fixtures cover this, so I started a scratch profile and ran the command there.',
+    )
+    const outcome = evaluatePullRequest({ title: 'feat(cli): add a flag', body }, config, t)
+    expect(outcome.errors).not.toContain(
+      t('trigger.pre_pr.error.verification', { section: 'How to verify' }),
+    )
+  })
+
+  // The section names belong to the template. A repository that renamed the
+  // headings has no "How to verify" for this rule to read, and inventing one
+  // would report every such pull request as broken.
+  it('has no verification rule when the template has no such section', () => {
+    const renamed = Config({ prSections: ['What'] })
+    const body = ['## What', '', 'None.'].join('\n')
+    expect(evaluatePullRequest({ body }, renamed, t).ok).toBe(true)
   })
 
   it('asks about a checklist left unticked', async () => {
@@ -338,6 +409,21 @@ describe('src/triggers/pre-pr.ts', () => {
       `gh pr create --title "feat(cli): add a flag" --body ${quoted(body)}`,
     )
     expect(decision.kind).toBe('allow')
+  })
+
+  // Not asking is not the same as not saying. A note that only reached the
+  // status record was read by nobody, so it goes to the log at the same moment.
+  it('still says out loud that the description names no issue', async () => {
+    const logs: string[] = []
+    const { listener } = trigger({ logs })
+    const body = GOOD_BODY.replace(' Closes #7.', '')
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(body)}`,
+    )
+
+    expect(decision.kind).toBe('allow')
+    expect(logs).toContain(t('trigger.pre_pr.warn.issue'))
   })
 
   it('passes a compliant pull request without a word', async () => {

@@ -28,7 +28,7 @@
   },
   "engines": {
     "node": ">=20",
-    "dsh": ">=0.2.0-rc.2"
+    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2"
   },
   "packageManager": "pnpm@10.30.3",
   "repository": {
@@ -66,15 +66,16 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "ci:checks": "node scripts/ci-checks.mjs",
+    "token:probe": "node scripts/token-probe.mjs",
     "prepack": "pnpm build && pnpm ci:checks",
-    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test && pnpm build && pnpm ci:checks",
+    "prepublishOnly": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test && pnpm build && pnpm ci:checks",
     "prepare": "husky"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh": "0.2.0-rc.2 || 0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2 || 0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2 || 0.2.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "dsh": {

@@ -64,6 +64,10 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
   const deletes =
     args.includes('--delete') ||
     hasShortOption(args, 'd') ||
+    // `--prune` deletes every remote ref this repository does not have. It was
+    // named in this comment before it was named in this list, so the spelling
+    // the comment promised was the one that got through.
+    args.includes('--prune') ||
     args.some((word) => word.startsWith(':') && word.length > 1)
   if (deletes) {
     return { reason: 'security.guard.branch_delete', action: config.gitGuard.branchDelete.get() }
@@ -182,6 +186,37 @@ export function detectAllGuards(command: string, config: Config): GuardHit[] {
       }
     } else if (subcommand === 'switch' && forcedSwitch(args)) {
       hits.push({ reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() })
+    } else if (
+      // Deleting a tag destroys a published name: a release tag is what every
+      // consumer's lockfile and every changelog link points at. Same policy as
+      // deleting a branch — it is the same act on a different kind of ref.
+      subcommand === 'tag' &&
+      (args.includes('--delete') || hasShortOption(args, 'd'))
+    ) {
+      hits.push({ reason: 'security.guard.branch_delete', action: guard.branchDelete.get() })
+    } else if (
+      // `stash drop` and `stash clear` throw away work the author set aside
+      // precisely because they were not ready to lose it.
+      subcommand === 'stash' &&
+      (args[0] === 'drop' || args[0] === 'clear')
+    ) {
+      hits.push({ reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() })
+    } else if (
+      // `gc --prune=now` deletes unreachable objects immediately instead of
+      // keeping the two-week grace period that makes a mistaken reset
+      // recoverable. `--prune` alone is the ordinary form and stays a hit only
+      // when it forces the deadline forward.
+      subcommand === 'gc' &&
+      args.some((word) => word === '--prune=now' || word === '--prune=all')
+    ) {
+      hits.push({ reason: 'security.guard.clean_force', action: guard.cleanForce.get() })
+    } else if (
+      // `update-ref -d` deletes a ref without the checks `branch -D` performs,
+      // so it is the same loss reached around the guard above.
+      subcommand === 'update-ref' &&
+      (args.includes('-d') || args.includes('--delete'))
+    ) {
+      hits.push({ reason: 'security.guard.branch_delete', action: guard.branchDelete.get() })
     }
 
     // `--no-verify` is a property of the invocation rather than of one

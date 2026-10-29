@@ -42,6 +42,32 @@ const GH_VALUE_OPTIONS = new Set([
   '--milestone',
   '-p',
   '--project',
+  // `gh pr merge --subject` (squash) and `--body` write the commit text that
+  // lands on the base branch, so they are read as the title and description.
+  '--subject',
+])
+
+/** `gh` options that take a separate value and may precede the subcommand. */
+const GH_GLOBAL_VALUE_OPTIONS = new Set(['-R', '--repo', '--hostname'])
+
+/**
+ * Section content that answers a question by declining to answer it.
+ *
+ * Normalised to bare letters and digits before lookup (see `isDismissal`), so
+ * the entries here are the spellings without punctuation. Chinese and English
+ * both: the template's headings are English but the text underneath is in
+ * whatever language the author writes in.
+ */
+const DISMISSIVE_ANSWERS = new Set([
+  'none',
+  'n/a',
+  'na',
+  'notapplicable',
+  'nothing',
+  '无',
+  '没有',
+  '不适用',
+  '无影响',
 ])
 
 /** What a `gh pr create` command line states about the pull request. */
@@ -89,17 +115,24 @@ function pullRequestArguments(args: readonly CommandWord[]): PullRequestCommand 
 
   const assign = (name: string, value: CommandWord | undefined): void => {
     if (value === undefined) return
-    if (name === '--title' || name === '-t') title = value
+    // `--subject` is `gh pr merge --squash`'s spelling of the text that becomes
+    // the commit on the base branch — under squash it is the same text as a
+    // pull request title, so it is judged by the same rules.
+    if (name === '--title' || name === '-t' || name === '--subject') title = value
     else if (name === '--body' || name === '-b') body = value
     else if (name === '--body-file' || name === '-F') bodyFile = value.value
   }
 
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index]?.value ?? ''
+    const word = args[index]
+    const token = word?.value ?? ''
     const equals = token.startsWith('--') ? token.indexOf('=') : -1
     if (equals !== -1) {
+      // Attached text inherits the quoting of the word it was cut from, exactly
+      // as the commit-message reader does it: `--title=$(cat t)` is a title this
+      // check cannot read, and calling it unreadable is the point.
       const value = token.slice(equals + 1)
-      assign(token.slice(0, equals), { value, literal: false })
+      assign(token.slice(0, equals), { value, literal: word?.literal ?? false })
       continue
     }
     if (!GH_VALUE_OPTIONS.has(token)) continue
@@ -125,8 +158,25 @@ function pullRequestArguments(args: readonly CommandWord[]): PullRequestCommand 
 export function detectPullRequest(command: string): PullRequestCommand | undefined {
   for (const { program, args } of wordInvocations(quoteCommandWords(command))) {
     if (program !== 'gh' && program !== 'gh.exe') continue
-    if (args[0]?.value !== 'pr' || args[1]?.value !== 'create') continue
-    return pullRequestArguments(args.slice(2))
+    // `gh` takes global options before the subcommand, and `-R owner/repo` is
+    // the usual one in a repository with more than one remote — reading the
+    // first word as the subcommand saw `-R` and recognised nothing.
+    let index = 0
+    while (index < args.length && GH_GLOBAL_VALUE_OPTIONS.has(args[index]?.value ?? '')) index += 2
+    while (index < args.length && (args[index]?.value ?? '').startsWith('--')) index += 1
+    if (args[index]?.value !== 'pr') continue
+    const verb = args[index + 1]?.value
+    // `create` is where the title is written; `edit` rewrites it on an existing
+    // pull request; `merge` under squash sets the commit text through
+    // `--subject`. All three end in the same commit message on the base branch.
+    if (verb !== 'create' && verb !== 'edit' && verb !== 'merge') continue
+    const stated = pullRequestArguments(args.slice(index + 2))
+    // Only the words that reach the base branch's history matter here, and only
+    // `create` always writes them. `edit` and `merge` are recognised solely when
+    // they state a title: `gh pr merge 13 --squash` writes the commit subject
+    // from the pull request itself, which this check cannot read anyway.
+    if (verb !== 'create' && stated.title === undefined) continue
+    return stated
   }
   return undefined
 }
@@ -137,6 +187,10 @@ export function detectPullRequest(command: string): PullRequestCommand | undefin
  * The template's checklist belongs to the section that carries it, and text
  * outside any required section is not the template: a `- [ ]` line elsewhere
  * (in a fenced example, say) is not a box the author forgot to tick.
+ *
+ * A closed ATX heading (`## What ##`, which Markdown allows and some editors
+ * write) names the same section as the bare form. Reading only the open form
+ * made every section of such a description look missing.
  * @param body - the pull request description.
  * @returns the lines under each lowercased section name.
  */
@@ -144,7 +198,7 @@ function sectionContent(body: string): Map<string, string[]> {
   const content = new Map<string, string[]>()
   let current: string | undefined
   for (const line of body.split('\n')) {
-    const heading = /^##\s+(\S.*?)\s*$/.exec(line)
+    const heading = /^##\s+(.+?)\s*#*\s*$/.exec(line)
     if (heading !== null) {
       current = (heading[1] ?? '').toLowerCase()
       if (!content.has(current)) content.set(current, [])
@@ -174,6 +228,41 @@ function missingSections(body: string, sections: readonly string[]): string[] {
 }
 
 /**
+ * The section that asks the author to show the change working, if the template
+ * has one.
+ *
+ * Every other heading can honestly be answered with "none": a change with no
+ * non-goals has none, and a change that cannot break anything has nothing to
+ * roll back. This one is the only place where "none" is not a sentence about
+ * the change but a refusal to answer — it is the one section that can falsify
+ * "the author ran it".
+ * @param sections - the section names this repository's template asks for.
+ * @returns the section's name as the template spells it, when present.
+ */
+function verificationSection(sections: readonly string[]): string | undefined {
+  return sections.find((section) => section.trim().toLowerCase() === 'how to verify')
+}
+
+/**
+ * Whether a section's whole content is one of the answers that assert nothing.
+ *
+ * Only a section whose entire text is a dismissal counts. "None of the
+ * fixtures cover this, so I ran it against a scratch profile" starts with the
+ * same word and says something; the rule has to let it through, which is why
+ * this compares the whole normalised section rather than looking for a word.
+ * @param text - the section's content, HTML comments already removed.
+ * @returns whether the content is a dismissal and nothing else.
+ */
+function isDismissal(text: string): boolean {
+  // Punctuation and emphasis carry no claim either way: "None.", "**n/a**" and
+  // "（无）" are the same non-answer as "none".
+  const normalised = text
+    .toLowerCase()
+    .replace(/[\s.。,，;；:：!！?？*_`'"‘’“”~()（）[\]【】—–-]/g, '')
+  return DISMISSIVE_ANSWERS.has(normalised)
+}
+
+/**
  * Count the checkboxes in a description that are still unticked.
  * @param body - the pull request description.
  * @param sections - the section names this repository's template asks for.
@@ -199,7 +288,8 @@ function uncheckedBoxes(body: string, sections: readonly string[]): number {
  * something the check has no way to know exists. They belong in the record, so a
  * status report shows them, but a question containing only those has nothing to
  * ask: under a `never` approval policy it would be refused outright and turn an
- * advisory note into a blocked pull request.
+ * advisory note into a blocked pull request. They are logged instead, by the
+ * caller, on the path where nothing else would be said.
  * @param outcome - what the check found.
  * @param t - translator, to recognise the notes in the language in effect.
  * @returns whether the prompt has anything to carry.
@@ -269,6 +359,17 @@ export function evaluatePullRequest(
       const missing = missingSections(described, sections)
       if (missing.length > 0) {
         errors.push(t('trigger.pre_pr.error.description', { sections: missing.join(', ') }))
+      }
+      // The one section where "none" is not an answer. Everything else in the
+      // template can be dismissed honestly; this one asks for evidence, and
+      // "not applicable" is the author reporting that no evidence exists — which
+      // is exactly the state the section was added to make visible.
+      const verification = verificationSection(sections)
+      if (verification !== undefined && !missing.includes(verification)) {
+        const lines = sectionContent(described).get(verification.toLowerCase()) ?? []
+        if (isDismissal(lines.join('\n').trim())) {
+          errors.push(t('trigger.pre_pr.error.verification', { section: verification }))
+        }
       }
       const unchecked = uncheckedBoxes(described, sections)
       if (unchecked > 0) {
@@ -377,7 +478,13 @@ export function createPrePrTrigger(
     // carries no title to judge. Asking the user to approve that statement would
     // be a prompt with nothing in it, so the statement is recorded and the call
     // proceeds. Every other warning is a finding and goes to the prompt.
-    if (outcome.ok && !worthAsking(outcome, t)) return downstream
+    if (outcome.ok && !worthAsking(outcome, t)) {
+      // Nothing will be asked, so the notes are logged here. A warning that only
+      // ever reached `/dev-workflow status` was read by nobody: the pull request
+      // went through and the description kept naming no issue.
+      for (const line of outcome.warnings) options.log(line)
+      return downstream
+    }
 
     const target = fingerprint(pullRequest.title ?? body ?? command)
     // Asked once and not answered? `settleAbout` records the check only once the

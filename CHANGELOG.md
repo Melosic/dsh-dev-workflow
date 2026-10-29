@@ -11,6 +11,57 @@
 
 ## [Unreleased]
 
+### Added
+
+- `ci:checks` 从十项变十四项：英文面的 CJK、CHANGELOG 配对、底部 compare 链接、发布页模板。
+- 英文面（`locale/en.json`、`client.js` 的 `EN` 块、`src/` 非注释代码）出现 CJK 就失败。
+- `feat:`/`fix:` 标题或 `src/` 的改动不碰 `CHANGELOG.md` 会失败；只改 `src/` 时降为警告。
+- `CHANGELOG.md` 底部每个版本链接都要指向正确的 compare 区间，抄错的链接能点开但指向错 diff。
+- 发布页模板必须中英两个锚点同版本，收尾的 `Full Changelog:` 接着 `CHANGELOG.md` 的上一个版本。
+- `.github/workflows/release.yml`：`v*` 触发，tag 与 `package.json` 对不上就停，`npm publish --provenance`。
+- 发布后回查 registry 上的 tarball 版本，再建发布页；手动 `npm publish` 那条路留在文档里但不再默认。
+- CI 对 PR 标题单独跑一次 `commitlint`：squash 之后它是唯一进 `main` 的文本。
+- 新的 `floor` 任务在 windows-latest + Node 20 上跑，`engines.node >= 20` 与 Windows 路径语义有人管了。
+- `scripts/token-probe.mjs` 随仓库发布，`docs/TOKEN-BUDGET.md` 的字数可以自己复算。
+- `tests/git.spec.ts` 补上 `src/git.ts` 的失败分类与可执行文件缓存：它此前只有类型引用。
+- `state` 补一条：守卫计数与审批键不共用命名空间，否则跑过的检查会被当成有人批过。
+- `secret-guard` 补文档占位值：示例里的假 key 放行，但占位值与真凭据并排时仍按后者拒。
+
+### Changed
+
+- 支持的 DSH 版本不再是范围，而是两个精确版本 `0.2.0-rc.2 || 0.2.1-rc.2`：范围会宣称没测过的版本也兼容。
+- `ci:checks` 第 9 项跟着收紧：值里出现范围符号就失败，不只比对两处是否一致。
+- 「双语文档必须同步」降级成可执行的标准：结构与关键事实一致，逐字对译不是要求。
+- 机器只验成对同改、locale 键对齐、SKILL 标题形状；两种语言是不是同一个意思归 review。
+- 分支命名的四个前缀不再被当成第二份清单：它和提交 type 不同源，也不该从 `COMMIT_TYPES` 派生。
+- 理由写进 `CONTRIBUTING.md`：分支名被 squash 丢掉，type 才进 `main`，两份清单不必统一。
+- 会发布出去的文档不再引用 `.dev-docs/`：`AGENTS.md` 的三处入口标成「仅本机」，克隆里不存在。
+- `docs/TOKEN-BUDGET.md` 的「复算方法」改指向仓库内的 `scripts/token-probe.mjs`，那份存在。
+- `docs/PUBLISHING.md` 不再让人写 `.dev-docs/_release-notes.md`（被 gitignore），改用 `--generate-notes`。
+- `ci:checks` 的手抄样例输出整段删掉：写这份文档时它就已经少列两项、版本还停在 `0.4.2`。
+- 长度口径收成一个数：body 换行 100 与 commitlint 的 `body-max-line-length` 同值。
+- subject 50 仍然只是警告——比 commitlint 的 100 严，但严的那边只给建议，不制造第二种判定。
+
+### Fixed
+
+- 词法器：单独的 `&` 补进 `OPERATORS`，`cmd & 危险命令` 的后半段不再从守卫视野里消失。
+- `npx -c` / `--call` 不再被当成取值的选项，解析出空程序数组等于整条命令不存在。
+- `quoteCommandWords` 与 `tokenize` 对引号外的反斜杠采用同一口径：`C:\Users\.env` 不再被读成 `C:Users.env`。
+- `-c` 只在 shell 与 `npx` 上被当作命令串，别的程序的 `-c` 不再被误读成脚本。
+- 无空格重定向能被看见：`cat<.env` 此前是一个匹配不到任何程序名的词。
+- `file-guard`：`ops_*` / `read_files` / `write_file` 这类表外工具按字段名取路径，不再等于放行。
+- 读者补 `cp` / `mv` / `tar` / `zip` / `scp` / `rsync` / `dd` / `base64`，`xargs` 作首程序时继续向内看。
+- 大小写折叠只在 Windows 上做：Linux 的 `.ENV` 与 `.env` 是两个文件，拦它没有道理。
+- `git-guard` 补 `--prune`（注释早就这么写，实现一直没跟）、`tag -d`、`stash drop`。
+- `git-guard` 再补 `gc --prune=now` 与 `update-ref -d`：三条都能让提交对象消失。
+- `git.ts` 按退出码判定 not-a-git-repository，不再匹配英文 stderr——git 换个语言就失效。
+- `check-doc-sync` 改用 `git status --porcelain=v1 -z`：中文与 emoji 路径不再被引号包住后静默判 clean。
+- `pre-release` 在 `--filter` 下读被指向的 `package.json`，monorepo 发布不再拿根版本去比对。
+- `pre-pr`：`--title=` / `--body=` 的引号继承与 `checks.ts` 一致，闭合式 ATX 标题被认。
+- `pre-pr` 认 `gh` 的 `-R` / `--repo` 与 `pr edit` / `pr merge`，不再只认 `pr create`。
+- `pre-pr` 的 `How to verify` 不接受「无」/「不适用」，它是唯一能证伪「作者真跑过」的一节。
+- issue 缺失的警告在 PR 那一刻就写进会话日志，不再只躺在 `/dev-workflow status` 里没人看。
+
 ## [0.6.0] - 2026-10-25
 
 ### Added

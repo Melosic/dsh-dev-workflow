@@ -409,6 +409,28 @@ function categoryHeadings(body: string): string[] {
 }
 
 /**
+ * Read the manifest a `--filter` points at.
+ *
+ * `pnpm --filter <dir> publish` publishes that workspace package, so the
+ * version to compare with the tag is that package's. The filter is used as a
+ * path: `./packages/core` and `packages/core` both resolve, which is how the
+ * flag is written in a monorepo release script.
+ *
+ * ponytail: a filter naming a package (`--filter @scope/core`) is not resolved
+ * — that needs the workspace manifest and its globs. The warning below still
+ * says so. Add the `pnpm-workspace.yaml` lookup when a name filter becomes the
+ * normal way this repository releases.
+ * @param cwd - the directory the command runs in.
+ * @param filter - the `--filter` value.
+ * @returns the absolute manifest path, or `undefined`.
+ */
+function filteredManifest(cwd: string, filter: string): string | undefined {
+  const relative = filter.replace(/^\.\//, '')
+  if (relative.startsWith('-') || relative === '') return undefined
+  return join(cwd, relative, 'package.json')
+}
+
+/**
  * Read the `version` field of a `package.json`.
  * @param path - absolute path to the manifest.
  * @returns the version, or `undefined` when it cannot be read.
@@ -537,11 +559,14 @@ export function createPreReleaseTrigger(
     const sessionId = String(agent.session.id)
     options.log(t('trigger.pre_release.detected'))
 
-    // `pnpm --filter <name> publish` publishes another workspace package, whose
-    // version this check cannot read from here. It is said rather than guessed:
-    // comparing the tag against an unrelated manifest would be a wrong answer,
-    // not a missing one.
-    const packageVersion = await readPackageVersion(join(cwd, 'package.json'))
+    // `pnpm --filter <dir> publish` publishes that workspace package, so the
+    // manifest it will read the version from is that one, not the root's —
+    // comparing a monorepo package's tag against the root version fails every
+    // release. A filter that names a package rather than a directory cannot be
+    // resolved here, and saying so is better than comparing the wrong file.
+    const filtered =
+      release.filter === undefined ? undefined : filteredManifest(cwd, release.filter)
+    const packageVersion = await readPackageVersion(filtered ?? join(cwd, 'package.json'))
     const changelog = await readText(join(cwd, config.docs.changelog.get()))
     const version = release.tag?.replace(/^v/, '') ?? packageVersion
 
@@ -558,11 +583,11 @@ export function createPreReleaseTrigger(
     if (!(release.tagLiteral ?? true)) {
       outcome.warnings.push(t('trigger.pre_release.warn.tag_literal'))
     }
-    if (release.filter !== undefined) {
+    if (release.filter !== undefined && packageVersion === undefined) {
       outcome.warnings.push(
         t('trigger.pre_release.warn.filter', {
           name: release.filter,
-          version: packageVersion ?? t('trigger.pre_release.warn.filter_unknown'),
+          version: t('trigger.pre_release.warn.filter_unknown'),
         }),
       )
     }

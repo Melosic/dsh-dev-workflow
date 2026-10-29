@@ -67,6 +67,39 @@ describe('tokenize', () => {
   it('reads a nested substitution', () => {
     expect(tokenize('echo $(echo $(id))')).toEqual(['echo', ';', 'echo', ';', 'id', ';', ';'])
   })
+
+  it('splits on a lone ampersand, which backgrounds a whole command', () => {
+    // `cmd & rm -rf /` runs both. With `&` missing from the operator set the
+    // line read as one command whose program was `cmd`, so the second half was
+    // never a candidate for any of the guards.
+    expect(tokenize('cmd & rm -rf /')).toEqual(['cmd', '&', 'rm', '-rf', '/'])
+    expect(tokenize('cmd&rm -rf /')).toEqual(['cmd', '&', 'rm', '-rf', '/'])
+  })
+
+  it('ends a word at a redirection, whether or not a space is there', () => {
+    // `cat<.env` used to stay one word that matched no program name, which made
+    // "no spaces around the operator" a way to read any file unwatched.
+    expect(tokenize('cat<.env')).toEqual(['cat', '.env'])
+    expect(tokenize('cat < .env')).toEqual(['cat', '.env'])
+    expect(tokenize('cmd &> log')).toEqual(['cmd'])
+  })
+
+  it('reads the digit before a redirect as its descriptor, not a word', () => {
+    // Flushing the `2` made it the program, and the command behind the redirect
+    // — here a read of `.env` — was never seen.
+    expect(tokenize('cmd 2>&1 cat .env')).toEqual(['cmd', 'cat', '.env'])
+    expect(tokenize('cmd 2>/dev/null')).toEqual(['cmd'])
+  })
+
+  it('keeps the file a read redirect opens and drops the one a write redirect writes', () => {
+    // The two are not the same thing to the guards: `cat < .env` reads a
+    // sensitive file and must stay visible, while `2>/dev/null git push` names
+    // no file anyone opens — keeping `/dev/null` split the program list at the
+    // slash and left `null` as the command that ran.
+    expect(tokenize('cat < .env')).toEqual(['cat', '.env'])
+    expect(tokenize('2>/dev/null git push --force')).toEqual(['git', 'push', '--force'])
+    expect(tokenize('git push --force > /tmp/log')).toEqual(['git', 'push', '--force'])
+  })
 })
 
 describe('segments', () => {
@@ -140,6 +173,15 @@ describe('shellArgument', () => {
   it('is undefined for a program that runs no script', () => {
     expect(shellArgument(['git', 'push'])).toBeUndefined()
   })
+
+  it('reads a script only from a program that runs one', () => {
+    // `-c` is a script for a shell and a config flag for anything else. Reading
+    // the flag of *any* program as a command string meant
+    // `git -c core.pager=cat log` was judged as the command `core.pager=cat log`,
+    // and the real one was never looked at.
+    expect(shellArgument(['git', '-c', 'core.pager=cat', 'log'])).toBeUndefined()
+    expect(shellArgument(['-c', 'rm -rf /'])).toBeUndefined()
+  })
 })
 
 describe('programInvocations', () => {
@@ -176,6 +218,22 @@ describe('programInvocations', () => {
       { program: 'git', args: ['push', '--force'] },
     ])
   })
+
+  it('reports the command a leading redirect used to hide', () => {
+    // `2>/dev/null git push --force` is how a force push is written when the
+    // output should stay quiet. It read as a command named `null`, so the git
+    // guard saw nothing at all.
+    expect(programInvocations('2>/dev/null git push --force')).toEqual([
+      { program: 'git', args: ['push', '--force'] },
+    ])
+  })
+
+  it('reports the program a command runner was pointed at', () => {
+    // `npx -c` takes the command as its value. Reading `-c` as a plain wrapper
+    // option skipped the program after it, and the guard saw no program at all.
+    expect(programInvocations(`npx -c 'rm -rf /'`)).toEqual([{ program: 'rm', args: ['-rf', '/'] }])
+    expect(programInvocations('npx -y eslint .')).toEqual([{ program: 'eslint', args: ['.'] }])
+  })
 })
 
 describe('quoteCommandWords', () => {
@@ -188,6 +246,17 @@ describe('quoteCommandWords', () => {
   it('marks a double-quoted word with a substitution as not literal', () => {
     const words = quoteCommandWords('"$(cat x)"')
     expect(words.every((word) => !shellWordIsLiteral(word))).toBe(true)
+  })
+
+  it('reads a redirect target out of the word stream like the tokens do', () => {
+    // One command line, two answers, was the bug: the guards read this through
+    // `tokenize` and the commit checks through `quoteCommandWords`.
+    expect(quoteCommandWords('2>/dev/null git push --force').map((word) => word.value)).toEqual([
+      'git',
+      'push',
+      '--force',
+    ])
+    expect(quoteCommandWords('cat < .env').map((word) => word.value)).toEqual(['cat', '.env'])
   })
 
   it('treats a bare variable as not literal', () => {
