@@ -34,7 +34,18 @@
     /* Interop */
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+
+    /* The Node type environment this plugin runs in.
+     *
+     * An omitted `types` field means "load every @types package you find", and
+     * that is the behaviour TypeScript 7 dropped: with no field the compiler
+     * pulls in nothing, and `node:fs`, `process` and `AbortSignal` all become
+     * "Cannot find name". Spelling the one package this code needs keeps the
+     * file correct under both, and it is the field the TS2304 error message
+     * itself points at. `tsconfig.client.json` overrides it to `[]` on purpose —
+     * that half runs in a browser. */
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "lib", "dist", "**/*.test.ts"]

@@ -60,6 +60,15 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+
+      # `ci:checks` rule 5 asserts the entry points a consumer imports are on
+      # disk — those are `lib/`, which only exists after a build. It has to come
+      # before that gate here exactly as it does in `ci.yml`. `prepublishOnly`
+      # builds too, but it runs inside `npm publish`, i.e. after the gate that
+      # guards the publish — too late to satisfy rule 5.
+      - name: Build
+        run: pnpm build
+
       - name: Verify locale keys and bundle manifest
         run: pnpm ci:checks
 
@@ -85,6 +94,16 @@ jobs:
             echo "That copy was published outside this workflow, so it has no provenance."
             exit 0
           fi
+          # No secret is configured today: this repository publishes from the
+          # maintainer's machine, and a tag run finds the version already there
+          # and takes the branch above. Saying so beats a bare 401 from npm, which
+          # reads like an authentication bug in the workflow rather than a
+          # missing setting with two known fixes.
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "$name@$version is not on the registry, and no NPM_TOKEN secret is configured." >&2
+            echo "Add the secret (Settings -> Secrets and variables -> Actions) or publish from a laptop: docs/PUBLISHING.md step 5." >&2
+            exit 1
+          fi
           npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -106,7 +125,18 @@ jobs:
       # `Full Changelog` link is added by GitHub, so there is no hand-copied notes
       # file to drift. docs/PUBLISHING.md §7 says what a good page still needs on
       # top — upgrade and known issues — and that is an edit, not a rewrite.
+      # Same reasoning as the publish step: creating a release for a tag that
+      # already has one cannot be undone either, and re-running a partially
+      # failed job is the obvious repair. The page is not rewritten when it
+      # exists — a hand-edited bilingual page is what docs/PUBLISHING.md asks
+      # for, and overwriting it with generated notes would lose the edit.
       - name: Create the GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release page for $GITHUB_REF_NAME already exists; leaving it as it is."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

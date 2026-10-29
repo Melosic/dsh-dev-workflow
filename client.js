@@ -859,7 +859,7 @@ window.__ModuleLoader__.load({
         this.saving = true
         this.invalidate()
         const revision = this.baseline === undefined ? undefined : this.baseline.revision
-        let landed = false
+        let landed
         try {
           landed = await this.scope.mutate(ops, revision)
         } catch {

@@ -146,6 +146,14 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 `typecheck:tests`、`typecheck:client`、`lint`、对本次 PR 新增提交跑 `commitlint`、
 **对 PR 标题跑一次 `commitlint`**、`format:check`、`test`、`build`、`ci:checks`（带 `PR_TITLE`）。
 
+`commitlint.config.mjs` 给 dependabot 自己的提交开了一个 `ignores` 例外：它的正文是一行
+一个 release/commits 链接，宽到必然超过 `body-max-line-length`，而敲键盘的不是人。例外按
+**作者**收窄——标题匹配 `chore(deps): bump` **且**带 `Signed-off-by: dependabot[bot]`
+才跳过——而不是把整条规则的宽度放宽给所有人。手写的超宽正文照样被拒，两个方向都有测试
+守住：`tests/commitlint.spec.ts` 让真实的 dependabot 提交通过，同时让一份同样是 150 字的
+人工正文、以及只差那个 trailer 的同一份正文失败。一条「全都放过」的配置从这条 happy path
+上看同样是绿的，所以必须两个方向都钉住。
+
 PR 标题单独校验，因为合并是 squash：落进 `main` 的提交信息就是标题，分支上的提交信息
 不会以任何形式留下来。只校验分支提交的话，唯一真正 seal 进历史的那段文本反而没人看。
 
@@ -207,6 +215,11 @@ CI 只校验 key 对齐，**不校验翻译正确性**——那条 key 在两种
   发布，所以不进构建的 `rootDir`，但类型错误应该在 CI 里现形，而不是等到某条断言以奇怪的方式失败。
   `scripts/` 是 `.mjs`，由 ESLint 覆盖，不在这两份配置里。CI 与 `pnpm ci:checks` 之外，
   `prepublishOnly` 也跑这三个 typecheck。
+  **三份配置都显式写了 `types`。** 省略该字段曾经等于「把 `node_modules/@types` 下的
+  每个包都装进程序」，但那个行为本身是隐式的：TypeScript 7 把它去掉了，于是整个 node
+  类型环境一起消失，报出来的是 `Cannot find name 'node:fs'` 这种指向源码的假错误。
+  `tsconfig.client.json` 写 `[]` 也是同一个理由的反面——那一半是浏览器代码，
+  多装进一个 `@types/node` 会遮蔽工厂自己声明的参数。
 - **`client.js` 由 `tsconfig.client.json` 单独检查，那才是它唯一的编译期保障。** 它是手写的
   浏览器 JS，任何构建都不经过它，`allowJs` + `checkJs` 配上 `client-env.d.ts` 里的宿主类型导入
   才能把「宿主改了方法名」变成编译错误而不是空白面板。`noImplicitAny` 是**故意关**的：文件里没有
