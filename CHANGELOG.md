@@ -23,6 +23,7 @@
 
 - `commitlint.config.mjs` 给 dependabot 自己的提交开例外：正文一行一个 compare 链接，宽是它的格式，不是懒。
 - `.github/dependabot.yml` 按版本区间跳过 TypeScript 7：`typescript-eslint` 的 peer 上界是 `<6.1.0`，装了 7 之后 `pnpm lint` 还没读到文件就退出。
+- 开发依赖里七个 `@deepseek-ai/*` 包退回 `0.2.1-rc.2`，与 `@deepseek-ai/dsh` 和声明支持的名单同版：之前一半在 rc.4，CI 跑的是两个版本的混合树。
 
 ## [0.7.0] - 2026-10-29
 

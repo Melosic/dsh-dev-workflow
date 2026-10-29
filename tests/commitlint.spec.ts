@@ -13,6 +13,11 @@ import { describe, expect, it } from 'vitest'
 
 const LONG_LINE = 'x'.repeat(140)
 
+// Each assertion spawns a real commitlint process. Cold, that costs a few
+// seconds of module loading before the first rule runs, which is over the
+// default 5s budget on a loaded machine.
+const TIMEOUT = 30_000
+
 /**
  * Run the repository's commitlint on one message.
  *
@@ -52,20 +57,32 @@ const HANDWRITTEN_BODY = [
 ].join('\n')
 
 describe('commitlint configuration', () => {
-  it('lets a dependabot commit through, wide body and all', () => {
-    expect(lint(DEPENDABOT_BODY)).toBe(0)
-  })
+  it(
+    'lets a dependabot commit through, wide body and all',
+    () => {
+      expect(lint(DEPENDABOT_BODY)).toBe(0)
+    },
+    TIMEOUT,
+  )
 
-  it('still rejects an over-wide body written by a person', () => {
-    // The pair matters: without this half, the config could be exempting
-    // everything and the first test would still pass.
-    expect(lint(HANDWRITTEN_BODY)).not.toBe(0)
-  })
+  it(
+    'still rejects an over-wide body written by a person',
+    () => {
+      // The pair matters: without this half, the config could be exempting
+      // everything and the first test would still pass.
+      expect(lint(HANDWRITTEN_BODY)).not.toBe(0)
+    },
+    TIMEOUT,
+  )
 
-  it('rejects the same body when only the trailer is missing', () => {
-    // The subject alone is not authorship proof — another bot, or a person,
-    // could produce it. The trailer is what dependabot signs its message with.
-    const unsigned = DEPENDABOT_BODY.replace(/Signed-off-by:.*\n/, '')
-    expect(lint(unsigned)).not.toBe(0)
-  })
+  it(
+    'rejects the same body when only the trailer is missing',
+    () => {
+      // The subject alone is not authorship proof — another bot, or a person,
+      // could produce it. The trailer is what dependabot signs its message with.
+      const unsigned = DEPENDABOT_BODY.replace(/Signed-off-by:.*\n/, '')
+      expect(lint(unsigned)).not.toBe(0)
+    },
+    TIMEOUT,
+  )
 })
