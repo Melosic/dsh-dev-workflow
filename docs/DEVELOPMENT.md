@@ -154,6 +154,13 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 人工正文、以及只差那个 trailer 的同一份正文失败。一条「全都放过」的配置从这条 happy path
 上看同样是绿的，所以必须两个方向都钉住。
 
+**TypeScript 卡在 6.x，不是 7。** `typescript-eslint@8.72.1` 的 peer 范围是
+`typescript: ">=4.8.4 <6.1.0"`，装上 TS 7 之后 `pnpm lint` 在读到第一个文件之前就退出，报
+`typescript-eslint does not support TS 7.0`。这和 `tsconfig.json` 里那个 `types` 字段是两件
+事，别混：那个字段是为了在已装上的 TS 上取到 node 类型，这里的上界是为了让 `pnpm lint`
+能启动。`.github/dependabot.yml` 因此按版本区间（`>=7`）而不是 `semver-major` 跳过 ts 的
+升级提案——6.x 仍可被提，天花板跟着 linter 走。
+
 PR 标题单独校验，因为合并是 squash：落进 `main` 的提交信息就是标题，分支上的提交信息
 不会以任何形式留下来。只校验分支提交的话，唯一真正 seal 进历史的那段文本反而没人看。
 

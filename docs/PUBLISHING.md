@@ -264,6 +264,10 @@ if (!Object.hasOwn(fields, 'peerDependencies')) return {}
    `--config.minimumReleaseAge=0`）→ 跑完 `pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test`
    → 再决定名单加不加这个新版本。`minimumReleaseAge` 只拦**解析**，不拦 `--frozen-lockfile`
    的下载，所以 CI 不需要任何额外参数。要往名单里加版本，按第 10 条先查真实版本列表。
+
+   **基线升级可以先于名单。** 反过来做才是陷阱：先把新版本加进名单、再回头升
+   `devDependencies`，等于在一个自己没跑过的运行时上宣称兼容。CI 跑的是基线，名单是给
+   用户装的范围，前者永远应该先动。
 7. **`peerDependenciesMeta.optional` 不救场。** 兼容性校验只遍历 `peerDependencies` 本身，
    不读 `peerDependenciesMeta`。把某个 DSH 包标成 optional 不会让它跳过校验。
 8. **不兼容的后果分两处，都不是静默的。** 安装时 `dsh plugin add` 直接失败：`dsh: installation rejected:

@@ -27,3 +27,11 @@ updates:
     ignore:
       - dependency-name: '@deepseek-ai/*'
         update-types: ['version-update:semver-major', 'version-update:semver-minor']
+
+      # typescript-eslint 8.x declares `typescript: ">=4.8.4 <6.1.0"` and exits
+      # with "does not support TS 7.0" on anything newer, so a TS 7 bump cannot
+      # land: `pnpm lint` dies before it reads a single file. Written as a
+      # version range rather than `semver-major` so the 6.x line stays
+      # proposable — the ceiling moves with the linter, not with taste.
+      - dependency-name: 'typescript'
+        versions: ['>=7']
