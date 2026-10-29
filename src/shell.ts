@@ -6,8 +6,14 @@
 // where one command ends and the next begins, so the lexing lives here rather
 // than in any of them.
 
-/** Tokens that end one command and begin another. */
-const OPERATORS = new Set(['&&', '||', ';', '|', '\n'])
+/**
+ * Tokens that end one command and begin another.
+ *
+ * A lone `&` belongs here: `cmd & rm -rf /` runs two commands, and without it
+ * the second one was read as an argument of the first, so every guard behind
+ * this lexer saw only the harmless half.
+ */
+const OPERATORS = new Set(['&&', '||', '&', ';', '|', '\n'])
 
 /**
  * Program names that only wrap the real command, so the command line still
@@ -43,6 +49,15 @@ export const TRANSPARENT = new Set([
  * ordinary spellings.
  */
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash'])
+
+/**
+ * Programs that are not shells but still take a command line in `-c`.
+ *
+ * `npx -c 'rm -rf /'` runs what it is given, exactly as a shell does. Leaving
+ * `-c` in the wrapper's value options made the wrapper swallow its own script
+ * and report no program at all, which is the same as no guard.
+ */
+const COMMAND_RUNNERS = new Set(['npx'])
 
 /** A leading `VAR=value` assignment, as in `FOO=1 rm -rf /`. */
 export const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
@@ -85,7 +100,10 @@ const WRAPPER_VALUE_OPTIONS = new Map<string, ReadonlySet<string>>([
   ['doas', new Set(['-u', '-C'])],
   ['env', new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string'])],
   ['exec', new Set(['-a'])],
-  ['npx', new Set(['-p', '--package', '-c', '--call', '--npm', '--registry'])],
+  // `-c`/`--call` are deliberately absent: their value is a command line, and
+  // treating it as an option value swallowed the command (`npx -c 'rm -rf /'`
+  // parsed to nothing). `shellArgument` reads them instead.
+  ['npx', new Set(['-p', '--package', '--npm', '--registry'])],
   ['timeout', new Set(['-s', '--signal', '-k', '--kill-after'])],
   ['nice', new Set(['-n', '--adjustment'])],
   ['stdbuf', new Set(['-i', '-o', '-e', '--input', '--output', '--error'])],
@@ -115,8 +133,19 @@ const SHELL_COMMAND_FLAG = /^-[A-Za-z]*c[A-Za-z]*$/
  * @returns the command line after `-c`, or `undefined` when there is none.
  */
 export function shellArgument(words: readonly string[]): string | undefined {
-  const start = words.length > 0 && SHELLS.has(baseName(words[0] ?? '')) ? 1 : 0
+  // The first word decides, and it must be the program: only a shell — or a
+  // runner that behaves like one — has a command string behind `-c`. Reading
+  // `-c` on any program turned `git -c core.pager=cat log` into a "script"
+  // nobody asked for, so callers pass the program with its arguments.
+  const name = baseName(words[0] ?? '')
+  if (!SHELLS.has(name) && !COMMAND_RUNNERS.has(name)) return undefined
+  const start = 1
   const flag = words[start] ?? ''
+  // `npx --call '<cmd>'` and `npx --call=<cmd>` spell the same thing.
+  if (flag === '--call' || flag.startsWith('--call=')) {
+    const script = flag === '--call' ? words[start + 1] : flag.slice('--call='.length)
+    return script === undefined || script === '' ? undefined : script
+  }
   // `sh -lc 'rm -rf /'` is the login-shell spelling of the same thing and it is
   // how a script is run in CI: only the bare word `-c` used to be recognised, so
   // everything after it went unread. The command string is the next word
@@ -156,6 +185,15 @@ export function skipWrappers(words: readonly string[]): number {
     if (!TRANSPARENT.has(baseName(word))) break
     const wrapper = baseName(word)
     const rest = words.slice(index + 1)
+    // A runner whose `-c` hides a command line is not peeled: the script is an
+    // option value, so peeling the wrapper would leave the script to be read as
+    // the program itself. `shellArgument` reads it instead.
+    if (
+      COMMAND_RUNNERS.has(wrapper) &&
+      rest.some((one) => one === '-c' || one === '--call' || one.startsWith('--call='))
+    ) {
+      break
+    }
     while (rest[0] !== undefined && (ASSIGNMENT.test(rest[0]) || rest[0] === '--')) rest.shift()
     const values = WRAPPER_VALUE_OPTIONS.get(wrapper)
     // Every option the wrapper takes is stepped over, not just the first: a
@@ -285,13 +323,28 @@ export function tokenize(command: string, depth = 0): string[] {
   let started = false
   let quote: '"' | "'" | null = null
   let expansion = false
+  let dropWord = false
 
   const flush = (): void => {
     if (!started) return
+    // A write redirect names a file the command writes; it is not one of its
+    // arguments, and keeping it in the stream made `2>/dev/null git push` read
+    // as a command whose program was `null`. A read redirect (`< file`) is
+    // kept, because the file it opens is exactly what the file guard looks for.
+    if (dropWord) {
+      current = ''
+      started = false
+      dropWord = false
+      return
+    }
     tokens.push(current)
     current = ''
     started = false
   }
+
+  // `2>` and `0<` prefix the operator with the descriptor it applies to, and
+  // that digit is not a word: a shell reads `cmd 2>/dev/null` as one command.
+  const descriptorOnly = (): boolean => started && /^[0-9]+$/.test(current)
 
   for (let index = 0; index < command.length; index += 1) {
     const char = command.charAt(index)
@@ -349,15 +402,53 @@ export function tokenize(command: string, depth = 0): string[] {
       index += 1
       continue
     }
+    // `cmd &> log` redirects both streams; it is not the `&` that backgrounds
+    // a command, and splitting on it would read the redirect target as a
+    // program of its own.
+    if (char === '&' && next === '>') {
+      flush()
+      dropWord = true
+      index += 1
+      continue
+    }
     if (char === '|' && next === '|') {
       flush()
       tokens.push('||')
       index += 1
       continue
     }
-    if (char === '|' || char === ';') {
+    if (char === '|' || char === ';' || char === '&') {
       flush()
       tokens.push(char)
+      continue
+    }
+    // A redirection ends the word the way a space does. `cat<.env` used to stay
+    // one word that matched no program name, so the file it opens was never a
+    // candidate: no spaces around `<` was a way to read any sensitive file. The
+    // operator itself is dropped rather than kept, because nothing downstream
+    // reads it — the path after it is the part that matters.
+    if (char === '<' || char === '>') {
+      // `2>` names the descriptor; the `2` is not a word of its own. Flushing it
+      // left `2>&1 cat .env` reading as a command whose program was `2`, so the
+      // cat behind the redirect was never a candidate.
+      if (!descriptorOnly()) flush()
+      else {
+        current = ''
+        started = false
+      }
+      // `2>&1` and `>>&` carry a descriptor or an ampersand with them; stepping
+      // over the pair keeps the descriptor from being read as an argument and
+      // the `&` from being read as a separator.
+      if (next === '&') {
+        let scan = index + 2
+        while (scan < command.length && /[0-9-]/.test(command.charAt(scan))) scan += 1
+        index = scan - 1
+      } else {
+        if (next === '>') index += 1
+        // Only a write redirect loses its target: `2>/dev/null git push` names no
+        // file a reader would open, while `cat < .env` names exactly one.
+        dropWord = char === '>'
+      }
       continue
     }
     // `echo $(git push --force)` runs what is inside the substitution, so it is
@@ -443,13 +534,19 @@ export function quoteCommandWords(command: string, depth = 0): CommandWord[] {
   let started = false
   let opaque = false
   let expansion = false
+  let dropWord = false
 
   const flush = (): void => {
-    if (started) words.push({ value, literal: !opaque })
+    if (started && !dropWord) words.push({ value, literal: !opaque })
     value = ''
     started = false
     opaque = false
+    dropWord = false
   }
+
+  // Same rule as in {@link tokenize}: the digits before a redirect are its
+  // descriptor, not an argument and not the program.
+  const descriptorOnly = (): boolean => started && /^[0-9]+$/.test(value)
 
   for (let index = 0; index < command.length; index += 1) {
     const char = command.charAt(index)
@@ -479,14 +576,31 @@ export function quoteCommandWords(command: string, depth = 0): CommandWord[] {
       index = scan
       continue
     }
+    // Outside quotes a backslash escapes only the characters a shell gives it a
+    // meaning to, exactly as {@link tokenize} reads it. Swallowing every
+    // backslash turned `C:\Users\x\.env` into `C:Usersx.env` here while the
+    // guards read the path intact — one command line, two answers.
     if (char === '\\' && index + 1 < command.length) {
-      value += next
+      if (ESCAPABLE.has(next)) {
+        value += next
+        index += 1
+      } else {
+        value += char
+      }
       started = true
-      index += 1
       continue
     }
     if (char === '\n' || char === ' ' || char === '\t' || char === '\r') {
       flush()
+      continue
+    }
+    // `cmd &> log` redirects both streams; it is not the `&` that backgrounds a
+    // command, and splitting on it would read the redirect target as a word of
+    // its own.
+    if (char === '&' && next === '>') {
+      flush()
+      dropWord = true
+      index += 1
       continue
     }
     if (char === '&' && next === '&') {
@@ -501,9 +615,33 @@ export function quoteCommandWords(command: string, depth = 0): CommandWord[] {
       index += 1
       continue
     }
-    if (char === '|' || char === ';') {
+    if (char === '|' || char === ';' || char === '&') {
       flush()
       words.push({ value: char, literal: true })
+      continue
+    }
+    // A redirection separates the same way it does in {@link tokenize}. The
+    // operator is dropped: a caller wants the words around it, and the file a
+    // redirection names is a path whichever of `<`, `>` or `>>` introduced it.
+    if (char === '<' || char === '>') {
+      // A bare descriptor belongs to the redirection, exactly as in
+      // {@link tokenize}: `2>&1 cat .env` names `cat`, not `2`.
+      if (!descriptorOnly()) flush()
+      else {
+        value = ''
+        started = false
+        opaque = false
+      }
+      if (next === '&') {
+        let scan = index + 2
+        while (scan < command.length && /[0-9-]/.test(command.charAt(scan))) scan += 1
+        index = scan - 1
+      } else {
+        if (next === '>') index += 1
+        // Same split as {@link tokenize}: a write redirect names no word of the
+        // command, while a read redirect names the file that is the point of it.
+        dropWord = char === '>'
+      }
       continue
     }
     if ((char === '$' && next === '(') || char === '`') {
@@ -641,7 +779,10 @@ export function programInvocations(command: string): ProgramInvocation[] {
     // `sh -c "…"` has already become the words `-c`, `…` — one flag to step over.
     // `shellArgument` still accepts the unpeeled `sh -c …` spelling.
     const rest = words.slice(index + 1)
-    const script = shellArgument(rest)
+    // The program is handed over with its arguments: `shellArgument` only
+    // reads `-c` off a real shell (or `npx`), never off whatever program
+    // happens to be there.
+    const script = shellArgument([program, ...rest])
     if (script !== undefined) {
       found.push(...programInvocations(script))
       continue
@@ -680,7 +821,10 @@ export function wordInvocations(words: readonly CommandWord[], depth = 0): Progr
       // The script is what follows the program, not the program itself:
       // `shellArgument` also accepts `-c script` on its own (a bare `sh` word
       // already peeled by the wrapper walk), so it is handed the arguments.
-      const script = shellArgument(current.slice(index + 1).map((word) => word.value))
+      const script = shellArgument([
+        program.value,
+        ...current.slice(index + 1).map((word) => word.value),
+      ])
       if (script === undefined || depth >= MAX_SUBSTITUTION_DEPTH) {
         // A wrapper whose script cannot be read is still a program: it is the
         // command line's outermost word, and saying so is all this can do.
