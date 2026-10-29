@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-29
+
 ### Added
 
 - `ci:checks` 从十项变十四项：英文面的 CJK、CHANGELOG 配对、底部 compare 链接、发布页模板。
@@ -832,7 +834,8 @@
   默认拒绝任何操作，`'deny'` 只由用户显式配置产生。守卫命中的诊断日志只记规则标识
   （字典 key），不记命令行全文与提交信息内容。
 
-[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.6.0...main
+[Unreleased]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.7.0...main
+[0.7.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/Melosic/dsh-dev-workflow/compare/v0.4.1...v0.4.2

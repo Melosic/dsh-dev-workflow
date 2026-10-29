@@ -70,8 +70,22 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      # Publishing is the one step that cannot be undone, so it is also the one
+      # step that must not fail for having already happened. npm refusing a
+      # republish is correct; a tag that stops halfway because the same version
+      # went out from a laptop first is not. The registry — not this file — is
+      # the authority on whether the version exists, so ask it.
       - name: Publish with provenance
-        run: npm publish --provenance --access public
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already on the registry; skipping the publish step."
+            echo "That copy was published outside this workflow, so it has no provenance."
+            exit 0
+          fi
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -1,6 +1,6 @@
 {
   "name": "@melosic/dsh-dev-workflow",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Project rules for DSH: check commit messages, PR descriptions and versions before they ship, and ask before destructive or outward-facing commands.",
   "keywords": [
     "dsh",
