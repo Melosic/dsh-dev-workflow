@@ -89,7 +89,7 @@ export function releaseRules(config: Config): ReleaseRules {
   // A file-only setting, so it arrives as the plain string the schema resolved
   // rather than as a live reference the panel can change.
   const source = config.releaseCheck.versionPattern
-  let version = SEMVER
+  let version: RegExp
   try {
     version = new RegExp(source)
   } catch {

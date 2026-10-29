@@ -11,6 +11,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 发布工作流在 `ci:checks` 之前先 `pnpm build`：没有 `lib/` 时第 5 项守卫必挂，v0.7.0 的 tag 就是这样停住的。
+- 缺 `NPM_TOKEN` 时工作流明说「secret 没配」并指向手动发布的步骤，不再把 npm 的 401 原样抛出来。
+- `tsconfig.json` 显式写 `types: ["node"]`：TypeScript 7 不再隐式加载 `@types/*`，升级后整个 node 类型环境消失。
+- `client.js` 与 `pre-release.ts` 各有一处赋了值却没用的变量初始化，ESLint 10 的 `no-useless-assignment` 会拦。
+
+### Changed
+
+- `commitlint.config.mjs` 给 dependabot 自己的提交开例外：正文一行一个 compare 链接，宽是它的格式，不是懒。
+
 ## [0.7.0] - 2026-10-29
 
 ### Added

@@ -341,6 +341,12 @@ tag 打在**发布准备这个提交**上，因为「发布什么」由它定义
 4. `npm view` 核对 registry 上的版本等于 `package.json` 的版本。注册表而不是构建日志
    才是记录：报告成功但没落地的情况在这里被抓住，而不是由第一个装包的用户发现。
 
+第 3 步要一个仓库 secret `NPM_TOKEN`（Settings → Secrets and variables → Actions），
+键值用 npm 的 **Automation** 类型，普通 publish token 过不了 2FA。**本仓库目前没有配这个
+secret**：发布是在开发机上手动跑的，tag 推上去时第 3 步会看到版本已在 registry 上而跳过。
+真要交给工作流发布，先把 secret 加上——缺它时工作流会明确写「没有 NPM_TOKEN」并停下，
+而不是把 npm 的 `401` 原样抛出来让人以为是凭据写错了。
+
 本项目是 scoped 包，`package.json` 里已有 `publishConfig.access: "public"`——
 **scoped 包漏掉 public 会导致默认私有、装不到**，这个字段是防呆，工作流里也显式带着
 `--access public`。
