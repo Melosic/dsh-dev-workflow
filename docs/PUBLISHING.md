@@ -333,8 +333,11 @@ tag 打在**发布准备这个提交**上，因为「发布什么」由它定义
    一个名字错的版本是永久的；
 2. 重跑 `test` / `lint` / `typecheck` / `ci:checks` / `format:check`。tag 可以从
    一个从没跑过 CI 的本地分支打出来，所以这里不信任历史；
-3. `npm publish --provenance --access public`，OIDC（`id-token: write`）签出
-   provenance，npm 页面上能看到这个 tarball 由哪次构建产生；
+3. 先问 registry 这个版本在不在：在就**跳过发布**，不在才
+   `npm publish --provenance --access public`（OIDC，`id-token: write`，签出 provenance，
+   npm 页面上能看到这个 tarball 由哪次构建产生）。跳过是为了让「本机先发过一次」不至于
+   把整个 tag 卡死——重发会被 npm 拒绝，而拒绝之后发布页也建不出来。跳过时日志会写一行
+   「这份没有 provenance」，因为确实没有；
 4. `npm view` 核对 registry 上的版本等于 `package.json` 的版本。注册表而不是构建日志
    才是记录：报告成功但没落地的情况在这里被抓住，而不是由第一个装包的用户发现。
 
@@ -344,7 +347,8 @@ tag 打在**发布准备这个提交**上，因为「发布什么」由它定义
 
 **手动发布只剩两个理由**：工作流本身坏了，或者要先发一个 `--tag next` 的预发布。
 两种情况都还是 `npm publish --registry=https://registry.npmjs.org`（预发布加 `--tag next`），
-并且要自己补上工作流会自动做的四步。手动发布没有 provenance。
+并且要自己补上工作流会自动做的四步。手动发布没有 provenance——而且之后 tag 再推上去时，
+工作流看到 registry 上已有这个版本会跳过发布（第 3 步），所以发布页照建，attestation 没有。
 
 **关于 `--tag`：**
 
