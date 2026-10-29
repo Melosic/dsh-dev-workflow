@@ -17,6 +17,7 @@
 - 缺 `NPM_TOKEN` 时工作流明说「secret 没配」并指向手动发布的步骤，不再把 npm 的 401 原样抛出来。
 - `tsconfig.json` 显式写 `types: ["node"]`：TypeScript 7 不再隐式加载 `@types/*`，升级后整个 node 类型环境消失。
 - `client.js` 与 `pre-release.ts` 各有一处赋了值却没用的变量初始化，ESLint 10 的 `no-useless-assignment` 会拦。
+- 建发布页那一步也先问再建：tag 已有发布页就跳过，重跑失败的任务不会把手写的中英页冲掉。
 
 ### Changed
 

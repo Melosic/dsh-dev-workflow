@@ -149,8 +149,10 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 `commitlint.config.mjs` 给 dependabot 自己的提交开了一个 `ignores` 例外：它的正文是一行
 一个 release/commits 链接，宽到必然超过 `body-max-line-length`，而敲键盘的不是人。例外按
 **作者**收窄——标题匹配 `chore(deps): bump` **且**带 `Signed-off-by: dependabot[bot]`
-才跳过——而不是把整条规则的宽度放宽给所有人。手写的超宽正文照样被拒，这一条有测试守住
-（`tests/...` 之外的口径：`pnpm exec commitlint < 一份超宽正文` 必须非零退出）。
+才跳过——而不是把整条规则的宽度放宽给所有人。手写的超宽正文照样被拒，两个方向都有测试
+守住：`tests/commitlint.spec.ts` 让真实的 dependabot 提交通过，同时让一份同样是 150 字的
+人工正文、以及只差那个 trailer 的同一份正文失败。一条「全都放过」的配置从这条 happy path
+上看同样是绿的，所以必须两个方向都钉住。
 
 PR 标题单独校验，因为合并是 squash：落进 `main` 的提交信息就是标题，分支上的提交信息
 不会以任何形式留下来。只校验分支提交的话，唯一真正 seal 进历史的那段文本反而没人看。

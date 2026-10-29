@@ -125,7 +125,18 @@ jobs:
       # `Full Changelog` link is added by GitHub, so there is no hand-copied notes
       # file to drift. docs/PUBLISHING.md §7 says what a good page still needs on
       # top — upgrade and known issues — and that is an edit, not a rewrite.
+      # Same reasoning as the publish step: creating a release for a tag that
+      # already has one cannot be undone either, and re-running a partially
+      # failed job is the obvious repair. The page is not rewritten when it
+      # exists — a hand-edited bilingual page is what docs/PUBLISHING.md asks
+      # for, and overwriting it with generated notes would lose the edit.
       - name: Create the GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release page for $GITHUB_REF_NAME already exists; leaving it as it is."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
