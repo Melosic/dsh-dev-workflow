@@ -184,6 +184,25 @@ describe('src/guard/git-guard.ts', () => {
     expect(classify('git switch --discard-changes main')).toMatchObject({
       reason: 'security.guard.checkout_discard',
     })
+    // Deleting a published name is the same loss as deleting a branch.
+    expect(classify('git push --prune origin')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git tag -d v0.1.0')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git tag --delete v0.1.0')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git update-ref -d refs/heads/topic')).toMatchObject({
+      reason: 'security.guard.branch_delete',
+    })
+    expect(classify('git stash drop')).toMatchObject({
+      reason: 'security.guard.checkout_discard',
+    })
+    expect(classify('git gc --prune=now')).toMatchObject({
+      reason: 'security.guard.clean_force',
+    })
   })
 
   it('leaves the harmless neighbours of those operations alone', () => {
@@ -191,6 +210,10 @@ describe('src/guard/git-guard.ts', () => {
     expect(classify('git clean -d')).toBeUndefined()
     expect(classify('git branch -d topic')).toBeUndefined()
     expect(classify('git branch --delete topic')).toBeUndefined()
+    // `tag -l` lists, and a plain `gc` keeps its grace period.
+    expect(classify('git tag -l "v*"')).toBeUndefined()
+    expect(classify('git gc')).toBeUndefined()
+    expect(classify('git stash list')).toBeUndefined()
     expect(classify('git checkout main')).toBeUndefined()
     expect(classify('git checkout --')).toBeUndefined()
     // Moving changes back to the working tree discards nothing.
