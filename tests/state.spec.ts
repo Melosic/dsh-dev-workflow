@@ -16,6 +16,35 @@ describe('per-session memory', () => {
     expect(state.seen('session', 'commit', 'target-0')).toBe(false)
   })
 
+  it('keys a remembered approval apart from a check that already ran', () => {
+    // Both live in the same bucket, so a shared key space would let a check
+    // over an operation count as an approval of it. That is the dangerous
+    // direction: the guard would skip a prompt nobody answered.
+    const state = createWorkflowState()
+    state.remember('session', 'commit', 'abc')
+    expect(state.approved('session', 'abc')).toBe(false)
+    state.rememberApproval('session', 'abc')
+    expect(state.seen('session', 'commit', 'abc')).toBe(true)
+    // And the same hash means different things under a different kind.
+    expect(state.seen('session', 'pr', 'abc')).toBe(false)
+  })
+
+  it('keeps the last outcome, and the tally the status line reads', () => {
+    const state = createWorkflowState()
+    expect(state.lastOutcome()).toBeUndefined()
+    // Recognition is counted whether or not the policy let the call through —
+    // otherwise "nothing happened" and "everything was downgraded" read alike.
+    state.recordGuardHit('security.force_push', 'deny')
+    state.recordGuardHit('security.force_push', 'deny')
+    state.recordGuardHit('security.force_push', 'allow')
+    state.record({ kind: 'commit', ok: false, summary: 'boom' })
+    expect(state.lastOutcome()).toEqual({ kind: 'commit', ok: false, summary: 'boom' })
+    expect(state.guardHits()).toEqual({ 'security.force_push': 3 })
+    // The action list names the tier that applied last, which is the one that
+    // needs explaining when a guard fired and nothing was blocked.
+    expect(state.guardHitActions()).toEqual({ 'security.force_push': 'allow' })
+  })
+
   it('forgets old sessions rather than keeping an empty bucket each', () => {
     const state = createWorkflowState()
     state.remember('first', 'commit', 'target')
