@@ -18,8 +18,8 @@
 
 于是出现一个空隙：**「必须先知道」和「不必每轮付费」之间的那段内容放在哪里？**
 
-DSH 提供了一个正好填这个空隙的机制。按 `.dev-docs/DSH-API-NOTES.md:630` 的核对结论，
-`@deepseek-ai/dsh-agent-instructions`（dsh-base 已启用）在进入项目时自动读取：
+DSH 提供了一个正好填这个空隙的机制。`@deepseek-ai/dsh-agent-instructions`（dsh-base 已启用）
+在进入项目时自动读取：
 
 | 事实 | 值 |
 | --- | --- |
@@ -104,8 +104,8 @@ DSH 提供了一个正好填这个空隙的机制。按 `.dev-docs/DSH-API-NOTES
 ## 相关
 
 - 锚点文件本身：[AGENTS.md](../../AGENTS.md)
-- 机制与核对依据：`.dev-docs/DSH-API-NOTES.md`（`AGENTS.md` 机制一行：加载链、候选名、
-  `maxBytes` 65536、去重、不 watch）、`.dev-docs/prompt.md`
+- 机制与核对依据：`@deepseek-ai/dsh-agent-instructions` 的源码与文档（加载链、候选名、
+  `maxBytes` 65536、去重、不 watch）。核对时的本机笔记不入库，所以这里只列可核验的入口。
 - 规范全文（随包发布）：`skills/dsh-dev-workflow/SKILL.md`、`skills/dsh-dev-workflow/SKILL.zh.md`
 - 常驻成本的实测数字：[docs/TOKEN-BUDGET.md](../TOKEN-BUDGET.md)
 - 为什么不每轮注入完整规范：[003-summary-plus-on-demand.md](003-summary-plus-on-demand.md)

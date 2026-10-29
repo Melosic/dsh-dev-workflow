@@ -22,15 +22,15 @@ Cordis 与 Schemastery 是上游项目、被该 monorepo vendor 进来的（各�
 | `@deepseek-ai/cordis` | `vendor/cordis` | Shigma \<shigma10826@gmail.com\> | MIT | 微内核框架：`apply(ctx, config)` 插件模型、`ctx.inject`、`ctx.effect`、事件系统 |
 | `@deepseek-ai/schemastery` | `vendor/schemastery` | Shigma \<shigma10826@gmail.com\> | MIT | `src/config.ts` 的配置面声明与默认值校验 |
 
-五个包都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包用显式下界
-`>=0.2.0-rc.2`，当前不写上界）。`devDependencies` 里另把 DSH 域内三个包钉在实测基线
+五个包都以 `peerDependencies` 声明（`@deepseek-ai/cordis` 用 `^4.0.4`，DSH 域内三个包用显式闭区间
+`>=0.2.0-rc.2 <0.3.0-0`——上界卡在下一条次版本线的起点，没实测过的版本一律读作不支持）。`devDependencies` 里另把 DSH 域内三个包钉在实测基线
 `0.2.1-rc.2`，让 CI 跑在一个确定版本上——下界与开发基线是两个问题，理由与取舍见
 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
 ## 作为实现范式被研读的官方包
 
-`.dev-docs/DSH-API-NOTES.md` 是动手写代码之前的 API 核对结论。它不是猜出来的——结论来自逐字阅读
-asar 内随宿主出货的官方包。这些包没有被引入依赖，但**本插件的每个关键写法都能在它们中间找到出处**：
+本插件的 API 用法是先核对、后动手，不是猜出来的——结论来自逐字阅读 asar 内随宿主出货的官方包。
+（核对记录在本机私有目录里，不随仓库发布；下表本身就是那份结论的可核验部分。）这些包没有被引入依赖，但**本插件的每个关键写法都能在它们中间找到出处**：
 
 | 官方包 | 借走的东西 |
 | --- | --- |

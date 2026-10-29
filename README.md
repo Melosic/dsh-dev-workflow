@@ -158,11 +158,11 @@ The defaults are the common ones (Conventional Commits, Keep a Changelog). Every
 
 | Component | Version | Notes |
 | --- | --- | --- |
-| DeepSeek Harness runtime | `>=0.2.0-rc.2` | `dsh --version` |
+| DeepSeek Harness runtime | `>=0.2.0-rc.2 <0.3.0-0` | `dsh --version` |
 | Node.js | `>=20` | required by dsh itself |
 | pnpm | any; not checked | only needed by `dsh plugin`, and it must be on `PATH` |
 
-When the version falls outside that range, **`dsh plugin add` refuses the install outright** (`dsh: installation rejected: Plugin … is incompatible with dsh …`, nothing is installed) and prints the `dsh plugin allow-version` escape hatch. An already-installed older copy behaves differently: the plugin is disabled at startup with `dsh: disabling profile plugin …` on stderr, and the rest of the profile loads normally. Both say why; neither is silent. Check `dsh --version` against the range above before filing a bug, and paste the output of `/dev-workflow status` into the issue; how the range is chosen is in [docs/PUBLISHING.md](docs/PUBLISHING.md).
+The range's ceiling is `0.3.0-rc.1` — the first version of the next minor line, which nothing has been tested against — because a `0.x` minor release may carry breaking changes. `<0.3.0-0` is the spelling that excludes the 0.3 prereleases too; plain `<0.3.0` would still admit them. When the version falls outside that range, **`dsh plugin add` refuses the install outright** (`dsh: installation rejected: Plugin … is incompatible with dsh …`, nothing is installed) and prints the `dsh plugin allow-version` escape hatch. An already-installed older copy behaves differently: the plugin is disabled at startup with `dsh: disabling profile plugin …` on stderr, and the rest of the profile loads normally. Both say why; neither is silent. Check `dsh --version` against the range above before filing a bug, and paste the output of `/dev-workflow status` into the issue; how the range is chosen is in [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 ## Documentation
 

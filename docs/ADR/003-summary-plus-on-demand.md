@@ -11,7 +11,7 @@
 一句话都要重付一次。两份正文的当前体量与复算方法见
 [docs/TOKEN-BUDGET.md](../TOKEN-BUDGET.md)。
 
-约束是硬的：`.dev-docs/prompt.md` 与 `AGENTS.md:17` 都写着「常驻增量控制在几百 token 量级」。
+约束是硬的：[AGENTS.md](../../AGENTS.md)「核心原则」一节写着「常驻增量控制在几百 token 量级」。
 规范全文有 20000 字符量级，按非 CJK 的 4 字符/token 粗估就是 5000 token 量级的开销，比验收线
 高一个数量级。
 
@@ -62,7 +62,7 @@
 **中性后果**
 
 - `docs/TOKEN-BUDGET.md` 成为一份活文档：任何改动常驻内容的 PR 都应重跑
-  `.dev-docs/_probe/tokens-3a.mjs` 并把新数字写回去。
+  `node scripts/token-probe.mjs` 并把新数字写回去。
 - 工具描述必须短。改工具描述等于改常驻成本，评审时要把它当成本改动看，而不是文案改动。
 - 同一时刻只有一种 locale 生效（字典按需解析、只在语言变化时重建），于是常驻的只有一份
   目录行、一份工具描述，而不是两套。
@@ -80,6 +80,6 @@
 ## 相关
 
 - 实现：`src/skills/provider.ts`、`src/index.ts` 的 `activate()`、`src/config.ts` 的 `mode`
-- 实测数字与复算方法：[docs/TOKEN-BUDGET.md](../TOKEN-BUDGET.md)、探针 `.dev-docs/_probe/tokens-3a.mjs`
+- 实测数字与复算方法：[docs/TOKEN-BUDGET.md](../TOKEN-BUDGET.md)、探针 `scripts/token-probe.mjs`
 - 为什么放技能而不是系统提示：[001-skill-first-approach.md](001-skill-first-approach.md)
 - 为什么不靠手动切档：[004-action-triggered-not-manual-mode.md](004-action-triggered-not-manual-mode.md)

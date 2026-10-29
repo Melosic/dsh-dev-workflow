@@ -88,6 +88,10 @@ mentioned and dropped.
   | `docs/*`    | documentation only        |
   | `hotfix/*`  | urgent fix against `main` |
 
+- The four prefixes are their own list, **not** derived from the commit types. There
+  is no `chore/*` or `ci/*` branch because a branch name never lands anywhere: squash
+  merge discards it, while the type is what survives into `main`. Do not "unify" the two
+  lists — they answer different questions and have different lifetimes.
 - Branch names are all lowercase and kebab-case (the same style as the type and
   scope in a commit). A name that reads on its own is required: `feature/skill-md`
   and `fix/guard-force-push`, not `feature/stuff` or `feature/NewStuff`.
@@ -164,9 +168,10 @@ force.
   `commitCheck.requireScope` can be changed from the settings panel, and the gate
   then enforces what they say. Run `/dev-workflow status` to see the values in
   effect before treating a number here as the rule.
-- **Body**: wrap at 72 characters and explain *why*. Do not restate what the
-  diff already shows. A body or footer may be English or Chinese, but one
-  project should pick one and stay with it.
+- **Body**: wrap at 100 characters — the same ceiling commitlint's
+  `body-max-line-length` applies, so the two gates never disagree — and explain
+  *why*. Do not restate what the diff already shows. A body or footer may be
+  English or Chinese, but one project should pick one and stay with it.
 - **Footer**: reference issues (`Closes #12`) and record breaking changes.
 
   | Type       | Meaning                                             |
@@ -185,10 +190,13 @@ force.
 
 - Breaking change: append `!` after the type or scope (`feat(api)!: ...`) **and**
   explain it in a `BREAKING CHANGE:` footer.
-- The footer is written exactly `BREAKING CHANGE: <explanation>` — all uppercase,
-  a single space after the colon. The hyphenated `BREAKING-CHANGE` is a different
-  token and is not recognised.
-- The 50/72 rule is not cosmetic. Many tools truncate a subject, and a wrapped
+- Either spelling of the footer token is accepted: `BREAKING CHANGE: <explanation>`
+  and `BREAKING-CHANGE: <explanation>`. Both are all uppercase, with a single space
+  after the colon, and both must be paired with the `!` marker — a footer alone
+  does not tell a reader which commit broke what. Accepting both is deliberate:
+  commitlint's own spec lists the hyphenated form as equivalent, so a message that
+  passes one gate must not fail the other over a dash.
+- The 50/100 rule is not cosmetic. Many tools truncate a subject, and a wrapped
   body stays readable in a terminal and in a diff.
 
 ### Scope and Examples
@@ -431,9 +439,15 @@ review that skips them is a rubber stamp with a comment attached.
   rows to fill; the changelog row applies everywhere.
 - Paired files move together or not at all. A half-synced pair is worse than a
   stale one, because it looks maintained.
-- CI enforces what is mechanical: locale keys line up, and the two skill files
-  expose the same sections in the same order. Whether a translation reads well
-  stays a human review item.
+- "In sync" means the same structure and the same key facts, not a literal
+  translation: the same sections in the same order, and the numbers, commands,
+  paths and defaults saying the same thing in both languages. A difference you
+  keep on purpose belongs in the pull request description, not left to be
+  guessed from the diff.
+- CI enforces what is mechanical: locale keys line up, the two skill files
+  expose the same sections in the same order, and no CJK reaches an English
+  surface. Whether a translation reads well, and whether both sides say the
+  same thing, stay human review items.
 - The docs describe the current state of the main branch. They are not versioned
   documentation: to read how an older version behaved, check out its git tag.
 

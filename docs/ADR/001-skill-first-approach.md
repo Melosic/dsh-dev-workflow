@@ -55,7 +55,7 @@ DSH 提供两个投递位置：
 - `SKILL.md` 与 `SKILL.zh.md` 必须保持章节数量与层级顺序一致，由 `pnpm ci:checks` 校验。
 - 技能名与插件同名（`dsh-dev-workflow`），这是有意的：用户看到的名字只有一个。
 - `docs/TOKEN-BUDGET.md` 成为一份活的文档——任何改动常驻内容的 PR 都应该重新跑
-  `.dev-docs/_probe/tokens-3a.mjs` 并更新数字。
+  `node scripts/token-probe.mjs` 并更新数字。
 
 ## 被否决的方案
 

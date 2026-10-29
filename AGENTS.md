@@ -22,15 +22,20 @@ dsh-dev-workflow 是 DSH 的开发工作流守门员与编排器插件。
 
 ## 关键约束
 
-- 分支命名：`feature/*`、`fix/*`、`docs/*`、`hotfix/*`（GitHub Flow）。
+- 分支命名：`feature/*`、`fix/*`、`docs/*`、`hotfix/*`（GitHub Flow，清单与细则只写在
+  [`CONTRIBUTING.md`](CONTRIBUTING.md) 的「分支命名」一节，不在这里再抄一份：这四条不是提交
+  type 的子集，两份清单不同源，抄三遍就会有人去「统一」它们）。
 - 一个 PR 只做一件事；改动超过 500 行就拆，或在 PR 正文里写清「哪几块、从哪读起」。
   合并是 squash，分支上的多个关注点落进 `main` 时只剩一个提交、一条信息。
 - 提交信息：Conventional Commits，由 commitlint 在提交时校验。
 - 文档与代码同 PR 更新。
 - CHANGELOG 的 `[Unreleased]` 段常驻顶部。
-- 改 `README.md` 必须同步改 `README.zh.md`。
-- 改 `locale/en.json` 必须同步改 `locale/zh.json`（DSH 约定目录为单数 `locale/`，短语言 id）。
-- 改 `skills/dsh-dev-workflow/SKILL.md` 必须同步改 `skills/dsh-dev-workflow/SKILL.zh.md`，章节数量与层级顺序一致。
+- 成对文件同改（`ci:checks` 强制）：`README.md` → `README.zh.md`；`locale/en.json` →
+  `locale/zh.json`（DSH 约定目录为单数 `locale/`，短语言 id）；
+  `skills/dsh-dev-workflow/SKILL.md` → `SKILL.zh.md`。
+- 「同步」指结构与关键事实一致，不是逐字对译：章节数量与层级顺序一致，数字、命令、路径、
+  默认值说同一件事。有意保留的差异要在 PR 正文里写明。机器能验的只有成对同改、locale 键对齐、
+  SKILL 标题形状；两种语言说的是不是同一件事，是 review 的活。
 - 代码注释用英文；用户可见文本一律走 `t()`，不得硬编码。
 - 敏感文件不得读取，密钥不得硬编码。
 - 包为 ESM-only：`"type": "module"`，源码必须使用 ESM 语法。
@@ -52,9 +57,6 @@ pnpm test:watch     # Vitest 监听模式
 
 ## 详细规范入口
 
-- 完整开发提示词：`.dev-docs/prompt.md`
-- 当前进度：`.dev-docs/PROGRESS.md`
-- API 核对结论：`.dev-docs/DSH-API-NOTES.md`
 - 文档索引：`docs/README.md`
 - 完整工作流规范：`skills/dsh-dev-workflow/SKILL.md`（英文）/ `skills/dsh-dev-workflow/SKILL.zh.md`（中文）
 - 架构说明：`docs/ARCHITECTURE.md`
@@ -68,7 +70,9 @@ pnpm test:watch     # Vitest 监听模式
 - 发布指引：`docs/PUBLISHING.md`
 - 贡献指引：`CONTRIBUTING.md`
 
-`.dev-docs/` 为本机私有目录，已被 `.gitignore` 忽略，克隆仓库后不一定存在。
+本机还有三份 `.dev-docs/` 下的工作文件，**它们不随仓库发布，克隆后不存在**：
+`prompt.md`（完整开发提示词）、`PROGRESS.md`（当前进度）、`DSH-API-NOTES.md`（API 核对结论）。
+引用它们的地方都只在这份 AGENTS.md 与 `docs/DEVELOPMENT.md` 的说明里——会发布给用户的文档不引用。
 
 ## 多 AI 工具协同
 

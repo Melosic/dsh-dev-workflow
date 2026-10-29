@@ -78,6 +78,14 @@ file-guard 管**不该被读**的路径，secret-guard 管**发出即泄漏**的
 **强推同时命中两道守卫。** `git push --force` 既是对外动作、又是破坏性操作，理由由更严者胜出：
 `gitGuard.forcePush` 的解释盖过 `outwardGuard.push`。判定与实测见 [docs/TRIGGERS.md](TRIGGERS.md)。
 
+**上表是全部覆盖面，不是「对外动作」的全集。** 两个同类的动作不在里面：
+
+- `gh release create` / `gh release edit`：发布页同样是公开文本，但标签已经由上一行守着，
+  再挡一次只是同一个决定问两遍，所以没做。它默认不被拦截。
+- 在 GitHub Actions 里跑的 `npm publish`（`.github/workflows/release.yml`，由 `v*` 标签触发）：
+  它发生在 CI 里，不在任何 DSH 会话中，插件的钩子看不到它。这道发布由工作流自己的
+  「tag 与 `package.json` 版本一致」门禁和 provenance 负责，与本插件无关。
+
 ## command-guard 保护什么
 
 命中以下形状的 shell 命令，默认 `ask`（`commandGuard.dangerousShell`）：
@@ -137,25 +145,44 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 ## secret-guard 保护什么
 
 扫描**每一次**工具调用的全部参数（不只是 shell 命令）：把凭据写进源码文件与敲进命令行
-一样是泄漏。识别九种有固定形状的凭据：
+一样是泄漏。识别十八种有固定形状的凭据：
 
 | 模式 | 例子形状 |
 | --- | --- |
 | AWS access key | `AKIA` + 16 位大写字母数字 |
+| AWS secret access key | `aws_secret_access_key` 后跟 40 位 `[A-Za-z0-9/+=]`——它没有自己的前缀，只会以「名字 + 值」的形式出现 |
 | GitHub token | `ghp_` / `gho_` / `ghs_` / `ghr_` + 16 位以上 |
 | GitHub fine-grained token | `github_pat_` + 20 位以上 |
 | Slack token | `xoxb-` / `xoxp-` / `xoxa-` / `xoxr-` / `xoxs-` |
 | npm token | `npm_` + 36 位字母数字 |
 | GitLab token | `glpat-` + 20 位以上 |
+| OpenAI key | `sk-` + 20 位以上（20 位的下限是为了不误伤 `sk-learn` 这类词） |
+| Anthropic key | `sk-ant-` + 20 位以上；排在 `sk-` 之前，否则会被报成上个服务 |
+| Stripe secret key | `sk_live_` / `rk_live_` + 16 位以上；测试键故意不列，它不守钱 |
+| Google API key | `AIza` + 35 位定长 |
+| SendGrid key | `SG.` + 22 位 + `.` + 22 位 |
+| Twilio API key | `SK` + 32 位小写十六进制 |
 | JWT | `eyJ` 开头的三段 base64url |
 | Bearer token | `Authorization: Bearer` 后跟 20 位以上不透明值 |
+| 密码赋值 | `password` / `passwd` / `pwd` 后跟**带引号**的 6 位以上值 |
+| 连接串 | `scheme://user:password@host` 形式 |
 | 私钥头 | `-----BEGIN … PRIVATE KEY-----` |
 
 前缀库只覆盖**有固定形状**的凭据：没有前缀、也没有注册表发行格式的通用密钥仍然识别
 不了，需要时打开下面那条高熵规则。
 
-第十类「无前缀的高熵字符串」（`secretGuard.genericHighEntropy`）**默认关闭**：它是唯一
-会拦下普通文本的规则，误报代价高，需要的人自己打开。
+**密码赋值只认带引号的值。** 不加引号会同时命中类型声明里的 `password: string` 与普通代码里的
+`password = getPassword()`——一个连这两样都拦的守卫，最后一定被人关掉。不带引号的 dotenv
+赋值（`DB_PASSWORD=...`）交给 file-guard：那个文件本身就读不到。这是有意的取舍，写在源码的
+注释里。
+
+**文档里的占位值不算凭据。** 命中之后还要看一眼匹配到的文本：带 `EXAMPLE`（AWS 参考文档里那把
+不能用的键就是这种）、`YOUR_API_KEY` 这类占位词、四个以上连续的 `x`/`X`、八个以上连续的 `0`，
+或者已经被脱敏成 `[REDACTED]` 的，放行。方向是安全的：这些值是任何服务都不会签发的，
+不是「看着不太像」。不放行的后果是文档里的示例命令全被拒，读者学会的第一件事是把这个守卫关掉。
+
+最后一类「无前缀的高熵字符串」（`secretGuard.genericHighEntropy`）**默认关闭**：它没有
+固定形状可依，是唯一会拦下普通文本的规则，误报代价高，需要的人自己打开。
 
 **档位固定为 `deny`，不可配置。** git 与命令守卫拦的是**能重做**的工作，所以给一个
 「我知道我在做什么」的覆盖档是合理的；**凭据一旦发出就收不回来**，因此没有更低的档。
@@ -243,11 +270,13 @@ shell 那一层则恢复了一部分：`sudo` / `env` / `npx` 这类**裸包装�
 ## 依赖与供应链
 
 - **运行期零依赖**：`dependencies` 为空。全部能力来自宿主提供的服务与 Node 内建模块。
-- DSH 域内包用**显式版本范围** `>=0.2.0-rc.2`（下界即实测可用过的最低版本，当前不写上界），
-  不用 `^` / `~`：0.x 版本的次版本号可以包含破坏性变更，`^0.2.0` 的语义在这里会误导人。
+- DSH 域内包用**显式闭区间** `>=0.2.0-rc.2 <0.3.0-0`（下界是实测可用过的最低版本，上界是
+  下一条次版本线的起点），不用 `^` / `~`：0.x 版本的次版本号可以包含破坏性变更，
+  `^0.2.0` 的语义在这里会误导人。上界不能省——省掉之后范围对 `0.3.0` 及其后的每个版本
+  都为真，插件会在没人测过的运行时里被加载，问题推迟到用户会话里才暴露。
   `devDependencies` 另把三个包钉在一个精确的实测基线（当前 `0.2.1-rc.2`），那是 CI 跑的版本，
   不是支持范围——把下界跟着抬，会让仍在旧版本上的用户装不上，或装上了在启动时被禁用。
-  范围写法的完整推导、「不写上界的代价」与两者为何分离，见 [docs/PUBLISHING.md](PUBLISHING.md)。
+  范围写法的完整推导、「上界的代价」与两者为何分离，见 [docs/PUBLISHING.md](PUBLISHING.md)。
 - 插件通过 `cordis.patch.yml` 声明为 bundle patch，`scripts/ci-checks.mjs` 校验它
   既被 `package.json` 的 `dsh.bundle.patch` 声明，又列入 `files`——避免「发布出去的包缺了
   挂载点」这类只在用户机器上暴露的问题。
@@ -297,7 +326,10 @@ pnpm audit --registry=https://registry.npmjs.org
 - 发布命令必须显式带 `--registry=https://registry.npmjs.org`：镜像源是同步端点，不是发布端点，
   把凭据发往它没有意义。
 - **不由本插件自己执行发布。** git-guard 覆盖的是危险 git 命令；`npm publish` 不在它的范围内，
-  它也不会被诱导去执行——插件的唯一子进程是 `git`。
+  它也不会被诱导去执行——插件的唯一子进程是 `git`。真正跑发布的是
+  `.github/workflows/release.yml`：由 `v*` 标签触发，凭据取自仓库 secret `NPM_TOKEN`，
+  带 OIDC provenance，先用「tag 与 `package.json` 版本一致」把自己卡住，发完再回查 registry
+  上的 tarball 版本。
 
 ## 相关文档
 

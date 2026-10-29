@@ -54,8 +54,7 @@ pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm lint && 
 这条命令和 CI 的检查面一致（CI 多一项 commitlint，只在 PR 上跑）。
 
 只用 pnpm。`pnpm-lock.yaml` 随仓库提交，不要用 npm / yarn 装依赖，也不要手工编辑 lockfile——
-混用包管理器会让同一个仓库出现两套解析结果。依赖版本锁定的原因（`lint-staged` 与 `@commitlint/*`
-不能随便升，升了会破坏 Node 20 支持）写在 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
+混用包管理器会让同一个仓库出现两套解析结果。
 
 版本号只有 `package.json` 一个来源，改版本走发版流程，见 [`docs/PUBLISHING.md`](docs/PUBLISHING.md)。
 
@@ -69,6 +68,12 @@ pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm lint && 
 | `fix/` | 修缺陷 |
 | `docs/` | 只改文档 |
 | `hotfix/` | 线上问题的紧急修复 |
+
+这张表与提交的 `type` 是**两份清单，故意不同源**：分支只在 `main` 的合并历史里出现一次
+（squash 之后连分支名都不留），而 type 落进提交信息，多出来的 `chore` / `ci` / `build` 之类
+不该被当成一条功能分支。别指望从 `COMMIT_TYPES` 推导它，也别新增一份派生清单。
+
+名字里的其余部分用小写 kebab-case。前缀是约定，不是门禁：CI 不校验分支名。
 
 `main` 受保护：禁止直推，必须通过 PR 合并，且 `verify` 必须通过。分支保护对管理员同样生效。
 
@@ -124,6 +129,14 @@ PR 模板有七个**不能改名、不能降级、不能删空**的标题：
 | `skills/dsh-dev-workflow/SKILL.md` | `SKILL.zh.md` |
 
 只改一边，`ci:checks` 直接失败。新增的文档要登记到 [`docs/README.md`](docs/README.md)，否则它不会被任何人找到。
+
+**「同步」的标准是结构与关键事实一致，不是逐字对译。** 章节数量与层级顺序要一致；数字、
+命令、路径、默认值要在两种语言里说同一件事；翻译可以有自己的行文。有意保留的差异（某个
+只在一种语言里存在的例子、某段在中文里更长的解释）在 PR 正文里写明即可，不需要为了对称
+硬凑一句。
+
+机器验的只有三件：成对同改、locale 键对齐、SKILL 标题形状。剩下的是 review 的活——
+「这条中文和这条英文说的是同一件事吗」和「这条译文读起来像不像机翻」一样，只能人看。
 
 `CHANGELOG.md` 的 `[Unreleased]` 段常驻顶部。用户能感知的改动记一条，写清「改了什么」和「为什么」。
 

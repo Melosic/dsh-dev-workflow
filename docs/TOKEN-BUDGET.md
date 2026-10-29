@@ -23,18 +23,21 @@
 
 ```bash
 pnpm build
-node .dev-docs/_probe/tokens-3a.mjs
+node scripts/token-probe.mjs
 ```
 
-（该脚本是本地探针，`.dev-docs/` 不纳入版本控制。测法本身记录在此，任何时候都可以
-用同样的口径复算。）
+脚本在仓库里（`scripts/token-probe.mjs`），不是本机私有文件：数字要能被核验，读者
+应当能自己跑出同一组结果，而不是相信一段抄写。
 
 本机实测结果：
 
 | 语言 | 工具定义字符数 | 目录行字符数 | 常驻合计字符数 | 估算 token |
 | --- | --- | --- | --- | --- |
-| `en-US` | 766 | 137 | 903 | ≈ 226 |
-| `zh-CN` | 522 | 50 | 572 | ≈ 240 |
+| `en-US` | 679 | 155 | 834 | ≈ 209 |
+| `zh-CN` | 435 | 68 | 503 | ≈ 223 |
+
+工具定义只计模型能据以行动的部分：名称、描述、参数 schema。输出 schema 不进上下文，
+所以不进这张表。
 
 Token 估算口径（脚本内的 `estimate()`）：非 CJK 字符按 4 字符/token，CJK 字符按
 1 字符/token。这是一个保守的上界——中文目录行短但每字一个 token，所以两种语言的
@@ -46,14 +49,12 @@ Token 估算口径（脚本内的 `estimate()`）：非 CJK 字符按 4 字符/t
 
 | 文件 | 字符数 | 行数 |
 | --- | --- | --- |
-| `skills/dsh-dev-workflow/SKILL.md` | 42701 | 837 |
-| `skills/dsh-dev-workflow/SKILL.zh.md` | 19709 | 666 |
+| `skills/dsh-dev-workflow/SKILL.md` | 44410 | 860 |
+| `skills/dsh-dev-workflow/SKILL.zh.md` | 20345 | 680 |
 
-行数按 `Get-Content` 计（末行换行不算一行）；字符数按 UTF-8 解码后的字符个数（不是字节数）。
-复算方法见 `.dev-docs/_probe/tokens-3a.mjs`。
-
-这两个数字是探针输出的 `bodyChars` / `bodyLines`，即去掉 frontmatter 后、真正交给模型的
-正文——`SkillProvider.get()` 剥掉 frontmatter 才返回内容，所以按文件大小算会偏大。
+这两个数字是 `scripts/token-probe.mjs` 输出的 `bodyChars` / `bodyLines`，即去掉 frontmatter
+后、真正交给模型的正文——`SkillProvider.get()` 剥掉 frontmatter 才返回内容，所以按文件
+大小算会偏大。字符数是 UTF-8 解码后的字符个数（不是字节数），行数不含末尾空行。
 
 这份成本只在模型决定读规范时支付一次，并且每个会话读一次就够。它不受「每轮注入」
 影响，也不随对话轮数增长。
@@ -64,7 +65,7 @@ Token 估算口径（脚本内的 `estimate()`）：非 CJK 字符按 4 字符/t
 | --- | --- | --- |
 | 两个工具定义 | 每轮常驻 | ~520–770 字符 |
 | 技能目录行 | 每轮常驻 | ~50–140 字符 |
-| 规范全文 | 按需，每个会话至多一次 | ~19700–42700 字符 |
+| 规范全文 | 按需，每个会话至多一次 | ~20000–44500 字符 |
 | `mode: 'off'` 时 | 永不 | 0 |
 | `scope: 'marked'` 且仓库没标记 | 每轮常驻 | ~520–770 字符（省掉目录行） |
 

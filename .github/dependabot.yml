@@ -1,0 +1,29 @@
+# Pins without a bumper rot: a SHA frozen at review time is safe only until it is
+# a year old and nobody dares move it. Dependabot rewrites the SHA and the `# vX.Y.Z`
+# comment beside it in one pull request, so the pin stays a reviewed change rather
+# than a manual edit nobody can verify.
+version: 2
+updates:
+  # The workflow pins live here. Grouped so three actions moving at once is one
+  # pull request instead of three that each fail CI on their own.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  # Runtime dependencies are the ones a user installs: a CVE fix here reaches
+  # everyone who updates the plugin. Dev dependencies are deliberately excluded —
+  # they do not ship, and the pinned DSH stack exists to be pinned.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev:
+        dependency-type: development
+    ignore:
+      - dependency-name: '@deepseek-ai/*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']

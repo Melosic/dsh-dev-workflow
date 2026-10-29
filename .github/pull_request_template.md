@@ -84,6 +84,9 @@ one.
       so under Non-goals.
 - [ ] Documentation that describes this behaviour is updated in the same pull
       request.
+- [ ] If this diff is over 500 lines, the description says why it cannot be
+      smaller — which parts there are, and where to start reading. Under 500,
+      delete this line.
 - [ ] The `[Unreleased]` changelog entry is written.
 - [ ] I have read the diff myself, not only the test output.
 - [ ] No secret, token, or credential is added — not in code, not in a test

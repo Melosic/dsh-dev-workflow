@@ -51,25 +51,35 @@
 | `error.empty` | 标题为空 |
 | `error.missing_type` + `hint.format` | 标题不匹配 `^([a-z]+)(\([^)]*\))?(!)?:\s*(\S.*)$` |
 | `error.unknown_type` | 类型不在 `COMMIT_TYPES` 清单里 |
-| `error.breaking_without_footer` | 标题带 `!` 但正文里没有 `BREAKING CHANGE:` |
+| `error.breaking_without_footer` | 标题带 `!` 但正文里没有 `BREAKING CHANGE:` 或 `BREAKING-CHANGE:` |
+| `error.empty_scope` | scope 写了括号但里面是空的（`feat(): x`） |
+| `error.trailing_period` | 标题以 `.` 结尾 |
 
 **建议（`warnings`）**
 
 | 规则 | 触发条件 |
 | --- | --- |
-| `warn.subject_length` | 标题描述部分超过 50 字符（`SUBJECT_MAX_LENGTH`） |
-| `warn.trailing_period` | 标题以 `.` 结尾 |
-| `warn.body_width` | 正文某行超过 72 字符（`BODY_MAX_LENGTH`）。只报第一条；URL 行与表格行豁免 |
+| `warn.subject_length` | 标题描述部分超过 50 字符（`commitCheck.subjectMaxLength`，默认 `SUBJECT_MAX_LENGTH`） |
+| `warn.body_width` | 正文某行超过 100 字符（`BODY_MAX_LENGTH`，与 commitlint 的 `body-max-line-length` 同值）。只报第一条；URL 行与表格行豁免 |
 | `warn.multiple_modules` | `files` 跨了多个顶层目录 |
 | `warn.missing_scope` | 没写 scope，且 `files` 只涉及一个模块 |
 
 标题长度按**描述部分**算：`feat(auth): add login` 里参与长度检查的是 `add login`。
 
+两条长度上限与 commitlint 的关系是刻意的：正文 100 与 `@commitlint/config-conventional` 的
+`body-max-line-length` 取同一个数，两边不会互相打脸；标题 50 比 commitlint 的
+`header-max-length`（100）更严，且只给建议——同一个提交过得了 commitlint、过不了这里的
+建议，是允许的，反过来才不行。
+
 ### 为什么软规则只给建议
 
-标题过长、句尾句号、正文过宽都是风格问题。工作流规范里它们是「应当」，不是「必须」。
+标题过长、正文过宽都是风格问题。工作流规范里它们是「应当」，不是「必须」。
 把它们定为阻塞会让工具在无关紧要的地方拦住提交，而插件在提交前的位置只有一次开口机会——
 用在不值得的地方，下次就会被整体关掉。
+
+句尾句号是例外：它现在是阻塞项。理由是这一条不需要读者判断「多长才算长」——加不加句号
+是一个二选一，而且改法唯一（删掉那个点）。空 scope 同理。
+两者都是 commitlint 也会接受、但本项目明确不要的写法。
 
 ## `check_doc_sync`
 

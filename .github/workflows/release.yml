@@ -1,0 +1,98 @@
+# Publishing by hand is the one step that cannot be undone: npm refuses to
+# republish a version, so a tag that disagrees with `package.json`, or a publish
+# from a checkout that was never tested, is permanent. This workflow makes the tag
+# the trigger and the version the gate — `git push origin v1.2.3` publishes 1.2.3
+# or nothing.
+#
+# `--provenance` needs the OIDC token (`id-token: write`), which is what lets npm
+# show the build that produced the tarball. It only works from a public
+# repository, which this is.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+          # Point npm at the public registry explicitly: a laptop `publishConfig`
+          # or a `.npmrc` that redirects to a mirror would otherwise be inherited
+          # and the provenance attestation would name a registry nobody uses.
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # The tag is the version. A `v0.6.1` tag on a `0.6.0` package publishes the
+      # wrong thing under the wrong name, and npm will not let anyone take it back.
+      - name: Check the tag against package.json
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $version" >&2
+            exit 1
+          fi
+
+      # The same gate a pull request goes through. A tag can be pushed from a
+      # commit that never saw CI — a local branch, a hotfix — so the checks run
+      # again here rather than trusting the history.
+      - name: Test
+        run: pnpm test
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Verify locale keys and bundle manifest
+        run: pnpm ci:checks
+
+      # `prepublishOnly` runs lint, types, tests, build and `ci:checks` again; that
+      # is deliberate repetition — it is the same guard for a laptop publish, and
+      # the cost is seconds. What it does not do is `format:check`, so that is
+      # here too.
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The registry, not the build log, is the record. A publish that reported
+      # success but did not land — a token with the wrong package, a registry
+      # hiccup — is caught here instead of by the first user who tries to install.
+      - name: Verify the published tarball
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          published="$(npm view "@melosic/dsh-dev-workflow@$version" version)"
+          if [ "$published" != "$version" ]; then
+            echo "registry reports $published, expected $version" >&2
+            exit 1
+          fi
+
+      # The release page is generated from the merged commits and the
+      # `Full Changelog` link is added by GitHub, so there is no hand-copied notes
+      # file to drift. docs/PUBLISHING.md §7 says what a good page still needs on
+      # top — upgrade and known issues — and that is an edit, not a rewrite.
+      - name: Create the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

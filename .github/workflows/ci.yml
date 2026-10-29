@@ -13,10 +13,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Early phases run a single Node version, and it is the current LTS rather than
-# the declared floor: Node 20 reached end of life in April 2026, so a matrix that
-# only proves the plugin works there proves it works nowhere anyone deploys it.
-# `engines.node` still states the floor the code needs.
+# Every action is pinned to a commit SHA. A tag is a pointer its author can move
+# after this file is reviewed; the SHA is the code that was. Dependabot bumps the
+# pins (see .github/dependabot.yml) and rewrites the comment beside them.
+#
+# Two jobs. `verify` is the full suite on the current LTS. `floor` proves the
+# declared floor — `engines.node` says `>=20` — on Windows, where the guards under
+# `src/` branch on path separators and case folding and a Linux-only run cannot
+# see the difference. Running the whole matrix everywhere would double the runner
+# cost to prove the same thing.
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -25,7 +30,7 @@ jobs:
     # learned it had failed. Recent runs finish in 25-35 seconds.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # The commit-message check below diffs against the PR's base SHA, which
           # a shallow clone does not contain.
@@ -34,9 +39,9 @@ jobs:
       # The pnpm version comes from package.json `packageManager`; passing
       # `version` here as well makes the action fail with
       # "Multiple versions of pnpm specified".
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -77,6 +82,17 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
 
+      # The title is the only text from a pull request that survives into `main`
+      # — squash merge writes it as the commit message — and it was the one piece
+      # of text nothing checked: the range above covers the branch commits, which
+      # squash discards. commitlint reads a message from stdin when given no
+      # range, so the title goes through the same rules the commits do.
+      - name: Check pull request title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint
+
       - name: Check formatting
         run: pnpm format:check
 
@@ -88,6 +104,31 @@ jobs:
 
       # Locale key alignment, and that the bundle patch is both declared and
       # shipped. Translation *correctness* is intentionally not checked here:
-      # it is a human review item.
+      # it is a human review item. `PR_TITLE` lets the changelog-pairing rule see
+      # the same title the step above judged.
       - name: Verify locale keys and bundle manifest
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: pnpm ci:checks
+
+  # The floor, not the tip. `engines.node` says `>=20` and nothing here ran there,
+  # so the claim was untested. Windows because half the guards under `src/` branch
+  # on path separators and case folding. Only the checks that can fail on a
+  # platform difference run here: the full suite stays in `verify`.
+  floor:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build

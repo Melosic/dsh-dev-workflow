@@ -106,26 +106,18 @@ skills/dsh-dev-workflow/SKILL.md  skills/dsh-dev-workflow/SKILL.zh.md
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm ci:checks
 ```
 
-`ci:checks` 逐项打印，每项一行：
+`ci:checks` 逐项打印，每项一行，通过的项也打印——只打错误的话，「全绿」和「一半检查根本
+没执行」在日志里一模一样。失败时打印 `error: <原因>` 并以非零码退出。括号里的数字都是脚本
+按实际内容算出的当前值，会随内容变，不要拿具体数字去断言 CI 是否通过；要看清单读
+`scripts/ci-checks.mjs` 顶部的注释，那里每条都写了它为什么存在。
 
-```
-[ok] locale keys aligned (117 keys)
-[ok] bundle patch declared and shipped
-[ok] skill headings aligned (35 sections)
-[ok] published entry points present (8 checked)
-[ok] mirrored pairs consistent (3 groups)
-[ok] CHANGELOG records 0.4.2
-[ok] no numbered development phases cited
-```
+**这份输出不在这里抄。** 手抄的样例必然与脚本漂移：写这份文档时它就已经少列了两项、把
+`0.4.2` 留在了 `0.6.0` 的时代。想看当前输出，跑上面那条命令。
 
-这就是全部九项结构守卫（外加一行变更行数提示）。**通过的项也打印**：只打错误的话，
-「全绿」和「一半检查根本没执行」在日志里一模一样。失败时打印 `error: <原因>` 并以非零码
-退出。（括号里的数字都是当前值，脚本按实际内容算出，不硬编码；换句话说这些数字会随内容变，
-不要拿这里出现的具体数字去断言 CI 是否通过。）
-
-这九项不靠人记得跑：`pnpm publish` / `npm publish` 会先触发 `prepublishOnly`
-（`pnpm lint && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client && pnpm test &&
-pnpm build && pnpm ci:checks`），打包阶段再触发 `prepack`（`pnpm build && pnpm ci:checks`）。
+这十四项不靠人记得跑：`pnpm publish` / `npm publish` 会先触发 `prepublishOnly`
+（`pnpm lint && pnpm typecheck && pnpm typecheck:tests && pnpm typecheck:client &&
+pnpm format:check && pnpm test && pnpm build && pnpm ci:checks`），打包阶段再触发
+`prepack`（`pnpm build && pnpm ci:checks`）。
 所以**发布这一步必然先过 lint、三个 typecheck 与测试，打包也必然在编译之后、且必然过一遍结构
 守卫**——`lib/` 是 gitignore 的构建产物，`files` 里第一项就是它，少了它发出去的包装上去直接
 不能用。`pnpm build` 不在发布脚本里单独兜底：`prepack` 已经跑过一遍，重复编译只是拖慢发布。
@@ -151,14 +143,19 @@ pnpm audit --registry=https://registry.npmjs.org
 
 以下各项由 `pnpm ci:checks` 与 CI **机械保证**，本文不复述其判定细节：
 
-- `scripts/ci-checks.mjs` 的九项守卫：两个 locale 字典 key 一致；`cordis.patch.yml` 已声明
+- `scripts/ci-checks.mjs` 的十四项守卫：两个 locale 字典 key 一致；`cordis.patch.yml` 已声明
   且在 `files` 里；SKILL 双语标题数量与顺序一致；发布入口文件存在于 `files` 白名单内
   （配合 `prepack`）；成对镜像文件同改（`docs.mirrors` 的任一组只改了一半就失败）；
-  `package.json` 的版本在 `CHANGELOG.md` 里有对应标题；任何随仓库发布的 `.md` 都不按编号
-  引用开发分期；`engines.dsh` 在 `package.json` 与文档里一致；`CHANGELOG.md` 每条不超过
-  120 字。
-- 代码中无硬编码用户可见文本：`git grep -P '[\x{4e00}-\x{9fff}]' -- 'src/**/*.ts'` 应无输出；
-  英文文案也一律走 `t()`，只在 `locale/*.json` 里出现。
+  `package.json` 的版本与每个 git tag 在 `CHANGELOG.md` 里都有对应标题；任何随仓库发布的
+  `.md` 都不按编号引用开发分期；`engines.dsh` 在 `package.json` 与文档里一致；
+  `CHANGELOG.md` 每条不超过 120 字；`feat:`/`fix:` 标题或 `src/` 的改动必须触碰
+  `CHANGELOG.md`；`CHANGELOG.md` 底部每个版本链接都指向正确的 compare 区间；
+  英文面（`locale/en.json`、`client.js` 的 `EN` 块、`src/` 的非注释代码）没有 CJK 字符；
+  发布页模板的中英两个锚点指向同一版本，收尾的 `Full Changelog:` 从 `CHANGELOG.md` 里的
+  上一个版本比过来。
+- 代码中无硬编码用户可见文本：用户能看到的文字一律走 `t()`，只出现在 `locale/*.json` 里。
+  上面那条「英文面没有 CJK」查的就是这件事的机械部分——`src/` 里允许出现中文注释，因为
+  其中几条正是拿中文标题当配置值示例，那是文档不是文案。
 - `git log` 的**新提交**标题行全部符合 Conventional Commits：`.husky/commit-msg` 管提交那一刻，
   CI 再对**本次 PR 新增的范围**跑一次 `commitlint`（`--from <base> --to <head>`），所以绕过
   本地钩子或从网页合并进来的提交同样过不去。存量违规是 `c247d5d` 与 `fd8004f` 两条历史提交的
@@ -184,7 +181,6 @@ npm view @melosic/dsh-dev-workflow   version --registry=https://registry.npmjs.o
 
 ## DSH 版本要求：`engines.dsh` 与 peerDependencies
 
-这一节是 `.dev-docs/PROGRESS.md` 「待决策 / 遗留问题」第 4 条要求的落地。
 **写错这里，后果分两种：新装会被直接拒绝，已经装着的会在启动时被禁用。**
 
 DSH 从 `0.1.7-rc.1` 起在加载前做兼容性校验（`dsh-app-boot` 的 `preflight()`）。
@@ -228,29 +224,35 @@ if (!Object.hasOwn(fields, 'peerDependencies')) return {}
    原因：预发布版本只在「比较器里带同一 `major.minor.patch` 的预发布」时才被算进范围，
    而 `0.2.1-rc.2` 的元组是 `0.2.1`、范围的元组是 `0.2.0`。**任何第三方只要用严格 semver
    读这个范围，就会认为本插件与当前 DSH 不兼容**——所以「DSH 没拒装」不能当作范围写对了的证据。
-6. **按实测基线写下界，暂不写上界（本项目的当前选择）。** 本项目采用的写法是：
+6. **下界取实测基线，上界卡下一条次版本线（本项目的当前选择）。** 本项目采用的写法是：
 
    ```json
-   "engines": { "dsh": ">=0.2.0-rc.2" },
+   "engines": { "dsh": ">=0.2.0-rc.2 <0.3.0-0" },
    "peerDependencies": {
-     "@deepseek-ai/dsh":       ">=0.2.0-rc.2",
-     "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
-     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
+     "@deepseek-ai/dsh":       ">=0.2.0-rc.2 <0.3.0-0",
+     "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2 <0.3.0-0",
+     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2 <0.3.0-0"
    }
    ```
 
    下界是「本插件实测可用过的最低版本」——三个包都在 `0.2.0-rc.2` 上实测过，所以下界写
    `rc.2` 而不是 `rc.1`（凭记忆写更低的下界，等于宣称一段没人验过的兼容性）。
-   **不写上界的代价要说清楚**：DSH 出到 `0.3` 时，即使 API 变了插件也会被加载，问题会推迟到
-   运行时才暴露，而不是在加载时被 `preflight()` 干净地禁用。这个选择是在「`0.3.0` 尚不存在、
-   上限纯属猜测」与「未来不兼容会静默加载」之间取的偏向前者；等 `0.3` 真正发布并重新实测之后，
-   应当把上界补回来。
+
+   **上界写成 `<0.3.0-0`，不是 `<0.3.0`，也不是干脆不写。** 不写上界时，`>=0.2.0-rc.2`
+   对 `0.3.0` 及其后的每一个版本都为真——插件会在一个没人测过的运行时里被加载，而 `0.x`
+   的次版本位允许带破坏性变更，于是第一个信号是用户会话里的运行时错误，而不是加载时被
+   `preflight()` 干净地禁用并说明原因。写成 `<0.3.0-0` 是因为规范 semver 下 `<0.3.0` 仍然
+   放行 `0.3.0-rc.1` 这类预发布，而 `-0` 把这条线以下的所有预发布一起挡在外面。
+
+   **这个选择的代价同样要说清楚**：`0.3.0` 若真的保持 API 兼容，老版本插件也会被拒装，直到
+   重新实测并发布一个新版本。这是有意的——「没测过」就该读作「不支持」，修法是发新版，不是
+   把范围拉宽。`ci:checks` 第 9 项会拦下没有上界的写法。
 
    **下界与 CI 基线是两件事。** 下界说明「最老支持到哪」，`devDependencies` 里那三个精确版本
-   说明「CI 每次真正跑在哪」。两者会分开漂移：`latest` 渠道仍是 `0.2.0-rc.2`，而新的候选版本
-   先在 `next` 渠道发布，所以本插件当前把开发基线钉在 `0.2.1-rc.2`，同时把下界留在
-   `0.2.0-rc.2`——若为了跑测试就把下界抬到 `rc.2` 系列，所有还在 `latest` 上的用户会**装不上或
-   在启动时被禁用**（见第 8 条），用整个默认人群去服务一个候选渠道消费者是笔亏本买卖。
+   说明「CI 每次真正跑在哪」。两者会分开漂移：候选版本先在 `next` 渠道发布，默认渠道跟不上，
+   所以本插件把开发基线钉在 `0.2.1-rc.2`，而把下界留在 `0.2.0-rc.2`——若为了跑测试就把下界
+   抬到当前基线，所有还在默认渠道上的用户会**装不上或在启动时被禁用**（见第 8 条），用整个
+   默认人群去服务一个候选渠道消费者是笔亏本买卖。
 
    升级开发基线时的最小动作：改 `package.json` 的 `devDependencies` 三个精确版本 → 跑
    `pnpm install`（本机 `~/.npmrc` 的 `minimum-release-age` 会挡住 24 小时内的新版本，此时加
@@ -307,24 +309,37 @@ git log --oneline -3
 `package.json` 的 `version` 改成与标题一致的版本号。**版本号只有这一个来源**，
 README、徽章、文档里的版本引用都从它派生，不手动维护第二份。
 
-### 第四步：提交并打 tag
+### 第四步：提交并推送 tag
 
 ```bash
 git commit -m "chore(release): <版本号>"
 git tag v<版本号>
+git push origin main
+git push origin v<版本号>
 ```
 
 tag 打在**发布准备这个提交**上，因为「发布什么」由它定义。
 
-### 第五步：发布
+### 第五步：让 `.github/workflows/release.yml` 发布
 
-```bash
-npm publish --registry=https://registry.npmjs.org
-```
+推送 tag 就是发布动作。工作流（`on: push: tags: ['v*']`）依次：
 
-本项目是 scoped 包，命令是 `npm publish`（必要时显式加 `--access public`）。
-`package.json` 里已有 `publishConfig.access: "public"`，所以裸 `npm publish` 也是公开的——
-**scoped 包漏掉 public 会导致默认私有、装不到**，这个字段是防呆。
+1. 校验 tag 与 `package.json` 的 `version` 相等，不等直接失败——npm 不接受重发，
+   一个名字错的版本是永久的；
+2. 重跑 `test` / `lint` / `typecheck` / `ci:checks` / `format:check`。tag 可以从
+   一个从没跑过 CI 的本地分支打出来，所以这里不信任历史；
+3. `npm publish --provenance --access public`，OIDC（`id-token: write`）签出
+   provenance，npm 页面上能看到这个 tarball 由哪次构建产生；
+4. `npm view` 核对 registry 上的版本等于 `package.json` 的版本。注册表而不是构建日志
+   才是记录：报告成功但没落地的情况在这里被抓住，而不是由第一个装包的用户发现。
+
+本项目是 scoped 包，`package.json` 里已有 `publishConfig.access: "public"`——
+**scoped 包漏掉 public 会导致默认私有、装不到**，这个字段是防呆，工作流里也显式带着
+`--access public`。
+
+**手动发布只剩两个理由**：工作流本身坏了，或者要先发一个 `--tag next` 的预发布。
+两种情况都还是 `npm publish --registry=https://registry.npmjs.org`（预发布加 `--tag next`），
+并且要自己补上工作流会自动做的四步。手动发布没有 provenance。
 
 **关于 `--tag`：**
 
@@ -346,13 +361,19 @@ npm view @melosic/dsh-dev-workflow dist-tags --registry=https://registry.npmjs.o
 
 ### 第七步：GitHub Release
 
+工作流最后一步已经建好了发布页（`gh release create … --generate-notes`），不要重复创建。
+手动走完之后要补时：
+
 ```bash
-gh release create v<版本号> --title "v<版本号>" --notes-file .dev-docs/_release-notes.md
+gh release create v<版本号> --title "v<版本号>" --generate-notes
 ```
 
-`--notes-file` 指向从 `CHANGELOG.md` 抄出来的 `[<版本号>]` 段。
-（SKILL.md 里写的 `<(awk ...)` 是 bash 进程替换，在 PowerShell 里不可用，
-本机做法是先写文件再传入。）
+`--generate-notes` 让 GitHub 按 tag 区间生成「What's Changed」清单，**没有任何本地文件参与**：
+不用先把 changelog 抄进一个临时文件，也就不会因为某次忘记复制而缺这一节。
+（SKILL.md 里写的 `<(awk ...)` 是 bash 进程替换，在 PowerShell 里不可用。）
+
+它生成的是 PR 标题清单，不是发布页：需要中英双语与升级/已知问题三节时，按下一节的模板
+写完，再用 `gh release edit v<版本号> --notes-file <一个仓库内的文件>` 覆盖。
 
 **条目逐字抄，不重写，也不要在发布页上再加摘要。** 发布页的篇幅因此主要由
 `CHANGELOG.md` 的条目决定：一条一句话、120 字以内，发布页就是短的。要改发布页的条目，
@@ -433,14 +454,17 @@ Full Changelog: [v0.4.2...v0.5.0](https://github.com/Melosic/dsh-dev-workflow/co
   changelog 链接。
 
 模板不单独存成文件：它只有几十行，且必须跟着 `CHANGELOG.md` 的段一起变，存成文件反而会
-和 changelog 漂移。发版时把这一节连同 changelog 段落一起写进 `.dev-docs/_release-notes.md`。
+和 changelog 漂移。发版时把这一节连同 changelog 段落写进**仓库内**的任意临时文件
+（如 `docs/_release-notes.md`，用完删掉），或者干脆用 `--generate-notes` 让 GitHub 按 PR 标题
+生成、再 `gh release edit` 补上 changelog 装不下的三节。**不要写进 `.dev-docs/`**：那个目录被
+`.gitignore` 忽略，克隆出来不存在，照着文档敲的命令在别人机器上就是死路径。
 
 ### 改写已经发出去的发布页
 
 发布页可以事后改，不必重发版本：
 
 ```bash
-gh release edit v<版本号> --notes-file .dev-docs/_release-notes.md
+gh release edit v<版本号> --notes-file <仓库内的文件>
 ```
 
 适用于两件事：一是旧发布页写成了 changelog 的复制品（内部细节堆满、没有升级与已知问题）；
