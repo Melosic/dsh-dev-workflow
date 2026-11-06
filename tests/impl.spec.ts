@@ -6,6 +6,8 @@ import {
   checkDocSync,
   createCheckDocSyncTool,
   listChangedFiles,
+  listExistingFiles,
+  splitsMirrorPair,
 } from '../src/tools/check-doc-sync.js'
 import { evaluate, fingerprint, summarize } from '../src/checks.js'
 import { renderCheck } from '../src/tools/result.js'
@@ -229,6 +231,28 @@ describe('src/tools/check-doc-sync.ts', () => {
     ])
   })
 
+  it('does not demand a half the project has never had', () => {
+    // The first commit of a new repository stages README.md alone. README.zh.md
+    // was never written here, so it was not left behind — it does not exist.
+    const outcome = checkDocSync({ files: ['README.md'], existing: ['README.md'] }, config, t)
+    expect(outcome.ok).toBe(true)
+    expect(outcome.errors).toEqual([])
+  })
+
+  it('still blocks a half the project does keep', () => {
+    const outcome = checkDocSync(
+      { files: ['README.md'], existing: ['README.md', 'README.zh.md'] },
+      config,
+      t,
+    )
+    expect(outcome.ok).toBe(false)
+  })
+
+  it('assumes every path exists when the caller cannot say', () => {
+    // No `existing`: the rule judges the path list alone, as it always did.
+    expect(checkDocSync({ files: ['locale/en.json'] }, config, t).ok).toBe(false)
+  })
+
   it('accepts a pair that changed together', () => {
     const outcome = checkDocSync({ files: ['README.md', 'README.zh.md'] }, config, t)
     expect(outcome.ok).toBe(true)
@@ -283,6 +307,39 @@ describe('src/tools/check-doc-sync.ts', () => {
     const value = await runTool(tool)
     expect(value.ok).toBe(false)
     expect(value.error).toBe(t('error.not_a_git_repository', { detail: 'fatal: nope' }))
+  })
+
+  it('reads the whole tree when the caller cannot list it', async () => {
+    const git = {
+      cwd: process.cwd(),
+      run: async () => ({ ok: true as const, stdout: 'README.md\0README.zh.md\0README.md\0' }),
+      locate: async () => ({ ok: true as const, path: 'git' }),
+    }
+    expect(await listExistingFiles(git)).toEqual(['README.md', 'README.zh.md'])
+  })
+
+  it('does not read an unreadable tree as an empty one', async () => {
+    // An empty answer would say "nothing exists here" and turn the mirrored-pair
+    // rule off for the whole session.
+    expect(await listExistingFiles(makeFailingGit())).toBeUndefined()
+  })
+
+  it('says which path sets split a pair', () => {
+    expect(splitsMirrorPair(['README.md'], config)).toBe(true)
+    expect(splitsMirrorPair(['README.md', 'README.zh.md'], config)).toBe(false)
+    expect(splitsMirrorPair(['src/a.ts'], config)).toBe(false)
+  })
+
+  it('reads the tree for the tool caller too, so a new repository passes', async () => {
+    // The tool's own caller passes no paths, so it learns the changed set from
+    // git — and must ask the same "does this exist?" question the trigger asks.
+    const tool = createCheckDocSyncTool({
+      t: () => t,
+      config: () => config,
+      git: () => makeGit(() => ['README.md']),
+    })
+    const value = await runTool(tool)
+    expect(value.errors).toEqual([])
   })
 
   it('parses NUL-separated status entries, including renames and non-ASCII paths', async () => {

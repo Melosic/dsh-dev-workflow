@@ -7,8 +7,10 @@ import type { WorkflowState } from '../state.js'
 import {
   listBranchFiles,
   listChangedFiles,
+  listExistingFiles,
   listStagedFiles,
   listTrackedChanges,
+  splitsMirrorPair,
 } from '../tools/check-doc-sync.js'
 import {
   amendedMessage,
@@ -124,6 +126,14 @@ export function createPreCommitTrigger(
       feature && config.rules.requireChangelogOnFeat.get()
         ? await listBranchFiles(runner, exec.signal)
         : []
+    // A pair half in this commit is only a mistake when the project keeps the
+    // other half: the first commit of a brand-new repository stages README.md
+    // and nothing else, and there is no README.zh.md to have left behind. The
+    // read costs a git call, so it only runs when a pairing was actually split.
+    const existing =
+      files !== undefined && config.docsCheck.enabled.get() && splitsMirrorPair(files, config)
+        ? await listExistingFiles(runner, exec.signal)
+        : undefined
     // What the inspection could not read travels with the input, not next to the
     // outcome: the prompt is rendered twice, once per language, and a finding
     // assembled afterwards would be missing from one of them.
@@ -132,6 +142,7 @@ export function createPreCommitTrigger(
       ...(files === undefined ? {} : { files }),
       ...(branchFiles.length === 0 ? {} : { branchFiles }),
       ...(worktree === undefined || !worktree.ok ? {} : { worktreeFiles: worktree.files }),
+      ...(existing === undefined ? {} : { existing }),
       ...(listed.ok ? {} : { listing: { failure: listed.failure, detail: listed.stderr } }),
       ...(resolved.unreadable === undefined ? {} : { unreadable: resolved.unreadable }),
     }

@@ -23,6 +23,17 @@ export interface DocSyncInput {
    * wall every unrelated commit has to get past.
    */
   readonly worktreeFiles?: readonly string[]
+  /**
+   * Paths the repository already carries, when the caller knows them.
+   *
+   * A pair can only be left behind by a repository that has the pair: when one
+   * half has never existed, this project does not keep that document, and
+   * demanding it would stop every new repository at its first commit — that
+   * commit is where both halves are `git add`ed for the first time, or neither.
+   * Omit the field when the caller cannot say; every path is then assumed to
+   * exist, which is the rule as it was.
+   */
+  readonly existing?: readonly string[]
 }
 
 /**
@@ -65,6 +76,10 @@ function statusPaths(stdout: string): string[] {
 
 /**
  * Read the paths a repository currently has changed, staged or not.
+ *
+ * The listing says what changed, not what exists: a path git does not mention
+ * is absent from the answer whether it is tracked and untouched or never written
+ * at all. Callers that need the second question read {@link listExistingFiles}.
  * @param git - the runner for the repository.
  * @param signal - caller-owned cancellation.
  * @returns repository-relative paths, or a failure to report.
@@ -77,6 +92,35 @@ export async function listChangedFiles(
   const result = await git.run(['status', '--porcelain=v1', '-z', '--untracked-files=all'], signal)
   if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
   return { ok: true, files: statusPaths(result.stdout) }
+}
+
+/**
+ * Read the paths the repository already carries — tracked, staged or present.
+ *
+ * This answers "has this document ever existed here?", which the mirrored-pair
+ * rule needs and a change set cannot answer: a repository that never had
+ * `README.zh.md` and one that has it and left it out of this commit produce the
+ * same listing. A failure yields `undefined` rather than an empty list: an
+ * unreadable tree must not be read as "nothing exists", because that would
+ * quietly switch the rule off.
+ * @param git - the runner for the repository.
+ * @param signal - caller-owned cancellation.
+ * @returns repository-relative paths, or `undefined` when they cannot be read.
+ */
+export async function listExistingFiles(
+  git: GitRunner,
+  signal?: AbortSignal,
+): Promise<readonly string[] | undefined> {
+  // `--cached --others --exclude-standard`: everything tracked (in the index or
+  // in HEAD, even if deleted from the working tree) plus every ignored-out file
+  // that is already on disk. That is the closest a repository-relative read gets
+  // to "this path is part of the project".
+  const listed = await git.run(
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    signal,
+  )
+  if (!listed.ok) return undefined
+  return [...new Set(listed.stdout.split('\0').filter((path) => path.length > 0))]
 }
 
 /**
@@ -156,6 +200,28 @@ export async function listTrackedChanges(
 }
 
 /**
+ * Say whether the given paths touch exactly one half of any mirrored group.
+ *
+ * Callers use it to decide whether reading the tree is worth a git call: when no
+ * group is half-touched, no finding can depend on what already exists, and the
+ * existence set can stay unread.
+ * @param files - the paths this change touches.
+ * @param config - resolved plugin configuration.
+ * @returns `true` when a known pairing was changed on one side only.
+ */
+export function splitsMirrorPair(files: Iterable<string>, config: Config): boolean {
+  const changed = new Set(files)
+  return config.docs.mirrors
+    .get()
+    .some(
+      (group) =>
+        group.length > 1 &&
+        group.some((path) => changed.has(path)) &&
+        !group.every((path) => changed.has(path)),
+    )
+}
+
+/**
  * Check whether the documents a repository pairs with its code were updated.
  * @param input - the paths this change touches.
  * @param config - resolved plugin configuration.
@@ -176,10 +242,21 @@ export function checkDocSync(input: DocSyncInput, config: Config, t: Translate):
 
   const mirrors = [...config.docs.mirrors.get()].map((group) => [...group])
   const outside = new Set(input.worktreeFiles ?? [])
+  // `undefined` is the caller saying it cannot tell, and the rule then behaves as
+  // it always did: every path is assumed to exist. Only a caller that read the
+  // tree narrows this.
+  const existing = input.existing === undefined ? undefined : new Set(input.existing)
   for (const group of mirrors) {
     const touched = group.filter((path) => changed.has(path))
     if (touched.length === 0 || touched.length === group.length) continue
-    const missing = group.filter((path) => !changed.has(path))
+    // Only a half the project already keeps can have been left behind. A missing
+    // half that has never existed here is a document this project does not keep —
+    // a project written in one language has no README.zh.md — and demanding it
+    // would stop a brand-new repository at its very first commit.
+    const missing = group.filter(
+      (path) => !changed.has(path) && (existing === undefined || existing.has(path)),
+    )
+    if (missing.length === 0) continue
     // Every missing half is already being edited outside this commit: the pair is
     // in progress, so the finding is one line of attention rather than a refusal.
     if (missing.every((path) => outside.has(path))) {
@@ -301,7 +378,13 @@ export function createCheckDocSyncTool(options: {
         }
         files = listed.files
       }
-      return checkDocSync({ files }, options.config(), t)
+      const config = options.config()
+      // Answered only when a split pairing makes it matter, so an ordinary check
+      // still costs the one git read it always did.
+      const existing = splitsMirrorPair(files, config)
+        ? await listExistingFiles(options.git(cwd), exec.signal)
+        : undefined
+      return checkDocSync({ files, ...(existing === undefined ? {} : { existing }) }, config, t)
     },
   })
 }

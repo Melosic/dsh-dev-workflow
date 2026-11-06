@@ -5,7 +5,7 @@ import type { Locale, Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
 import type { WorkflowState } from '../state.js'
 import { renderCheck } from '../tools/result.js'
-import { listChangedFiles } from '../tools/check-doc-sync.js'
+import { listChangedFiles, listExistingFiles, splitsMirrorPair } from '../tools/check-doc-sync.js'
 import { evaluate, summarize } from '../checks.js'
 import { SCOPE_MARKER, marked, projectRoot } from '../scope.js'
 import type { Scope } from '../scope.js'
@@ -237,8 +237,16 @@ async function runCheck(
     }
   }
 
+  const existing =
+    options.config.docsCheck.enabled.get() && splitsMirrorPair(listed.files, options.config)
+      ? await listExistingFiles(options.git(cwd), invocation.signal)
+      : undefined
   const outcome = evaluate(
-    message === undefined ? { files: listed.files } : { files: listed.files, message },
+    {
+      files: listed.files,
+      ...(existing === undefined ? {} : { existing }),
+      ...(message === undefined ? {} : { message }),
+    },
     options.config,
     t,
   )

@@ -338,6 +338,17 @@ export function makeGit(files: () => readonly string[] = () => []): GitRunner {
             .join(''),
         }
       }
+      // Everything this runner lists is already tracked, so `ls-files` answers
+      // with the same paths, unadorned. A spec that needs a new file answers
+      // with a runner of its own.
+      if (args[0] === 'ls-files') {
+        return {
+          ok: true,
+          stdout: files()
+            .map((file) => `${file}\0`)
+            .join(''),
+        }
+      }
       // `-z` here too: `status --porcelain=v1 -z` is NUL-terminated and
       // unquoted, and a runner that answers with newline-separated quoted
       // paths would be answering a command the check no longer runs.
