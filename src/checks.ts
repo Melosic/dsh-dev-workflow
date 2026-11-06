@@ -61,6 +61,20 @@ export interface EvaluationInput {
   readonly branchFiles?: readonly string[]
   /** Paths the working tree has changed outside this commit — see {@link DocSyncInput.worktreeFiles}. */
   readonly worktreeFiles?: readonly string[]
+  /**
+   * The git read that could not list the changed files, when it failed.
+   *
+   * The documentation rules are skipped in that case, and the outcome has to say
+   * so: a check that could not run must not read as one that ran and passed.
+   */
+  readonly listing?: { readonly failure: string; readonly detail?: string }
+  /**
+   * The command-line form this message came from, when it could not be read.
+   *
+   * A message written by the command itself is only knowable after it runs, so
+   * the message rules have nothing to judge. Recorded rather than assumed.
+   */
+  readonly unreadable?: string
 }
 
 /**
@@ -275,6 +289,19 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
   const errors: string[] = []
   const warnings: string[] = []
 
+  // What the inspection could not read belongs to the outcome, not to whoever
+  // assembled the input: only here is it rendered with the translator of the
+  // language the conclusion is being written in.
+  if (input.listing !== undefined) {
+    const reason = t(`error.${input.listing.failure.replace(/-/g, '_')}`, {
+      detail: input.listing.detail?.trim() ?? '',
+    })
+    warnings.push(t('trigger.pre_commit.warn.degraded', { reason }))
+  }
+  if (input.unreadable !== undefined && input.message === undefined) {
+    warnings.push(t('trigger.pre_commit.warn.unreadable', { source: input.unreadable }))
+  }
+
   if (input.files !== undefined && config.docsCheck.enabled.get()) {
     const docs = checkDocSync(
       {
@@ -332,13 +359,19 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
  * The status line has room for one sentence, and the first error is the one the
  * author has to fix first — but a count is appended when there are more, because
  * a summary that silently reports one of three problems reads as "one problem".
+ * Advisory notes are counted too: "nothing found" while notes went unread is the
+ * sentence that made them invisible.
  * @param outcome - what a check found.
  * @param t - translator for the all-clear and the count lines.
  * @returns the first blocking problem, with a count when others were also found.
  */
 export function summarize(outcome: CheckResult, t: Translate): string {
   const first = outcome.errors[0]
-  if (first === undefined) return t('command.toggle.check.clean')
+  if (first === undefined) {
+    const advised = outcome.warnings.length
+    if (advised === 0) return t('command.toggle.check.clean')
+    return t('command.toggle.check.advised', { count: advised })
+  }
   const others = outcome.errors.length - 1
   if (others === 0) return first
   return `${first} ${t('command.toggle.check.more', { count: others })}`

@@ -71,7 +71,10 @@ export interface Harness {
   readonly listeners: RegisteredListener[]
   readonly commands: RegisteredCommand[]
   readonly effects: (() => void)[]
+  /** Everything written to the diagnostic sink. */
   readonly logs: string[]
+  /** Everything written to the advisory sink — the findings a user can see. */
+  readonly warnings: string[]
   /** Every `loader/volatile-update` listener the plugin registered. */
   readonly volatile: (() => void)[]
   /** Every page presentation the plugin declared on the settings service. */
@@ -140,6 +143,7 @@ export function createHarness(
   const commands: RegisteredCommand[] = []
   const effects: (() => void)[] = []
   const logs: string[] = []
+  const warnings: string[] = []
   const volatile: (() => void)[] = []
   const presentations: RecordedPresentation[] = []
 
@@ -207,7 +211,12 @@ export function createHarness(
         callback({ get: () => settings, effect: collectEffect })
       }
     },
-    logger: { debug: (message: string) => logs.push(message) },
+    // Two levels, because the plugin uses them for two different audiences: the
+    // debug sink is diagnostics, the warn sink is a finding the user must see.
+    logger: {
+      debug: (message: string) => logs.push(message),
+      warn: (message: string) => warnings.push(message),
+    },
     events: {
       on: (_name: string, listener: () => void) => {
         volatile.push(listener)
@@ -225,6 +234,7 @@ export function createHarness(
     commands,
     effects,
     logs,
+    warnings,
     volatile,
     presentations,
     approval,

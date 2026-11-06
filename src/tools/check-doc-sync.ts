@@ -38,20 +38,29 @@ export interface DocSyncInput {
  * @param stdout - the command's output.
  * @returns repository-relative paths, in the order git printed them.
  */
-function statusPaths(stdout: string): string[] {
+function statusEntries(stdout: string): { status: string; path: string }[] {
   const fields = stdout.split('\0')
-  const files: string[] = []
+  const entries: { status: string; path: string }[] = []
   for (let index = 0; index < fields.length; index += 1) {
     const entry = fields[index] ?? ''
     // A trailing empty field is the terminator, not a path.
     if (entry.length < 4) continue
     const status = entry.slice(0, 2)
-    files.push(entry.slice(3))
+    entries.push({ status, path: entry.slice(3) })
     // A rename or copy prints the original path as its own field. It is not a
     // path this change touches — the entry above is the name that now exists.
     if (status.includes('R') || status.includes('C')) index += 1
   }
-  return files
+  return entries
+}
+
+/**
+ * Read the paths out of the entries above.
+ * @param stdout - the command's output.
+ * @returns repository-relative paths, in the order git printed them.
+ */
+function statusPaths(stdout: string): string[] {
+  return statusEntries(stdout).map((entry) => entry.path)
 }
 
 /**
@@ -125,9 +134,14 @@ export async function listBranchFiles(git: GitRunner, signal?: AbortSignal): Pro
  *
  * `-a` stages every tracked change at commit time, so the index is empty (or
  * stale) when the check runs and judging it would fail the commit for contents
- * it does not have. `git diff HEAD` is the same set git is about to stage: it
- * covers staged and unstaged changes but not untracked files, which `-a` leaves
- * alone.
+ * it does not have. `git status --untracked-files=no` is the same set git is
+ * about to stage — tracked changes, staged or not — and leaves out untracked
+ * files, which `-a` does not touch.
+ *
+ * The listing reads the status rather than `git diff HEAD`: on a branch with no
+ * commits yet there is no HEAD to diff against, and the command fails with exit
+ * 128. The first commit of a brand-new repository is exactly that case, and it
+ * is a commit like any other — not a failure to report.
  * @param git - the runner for the repository.
  * @param signal - caller-owned cancellation.
  * @returns repository-relative paths, or a failure to report.
@@ -136,9 +150,9 @@ export async function listTrackedChanges(
   git: GitRunner,
   signal?: AbortSignal,
 ): Promise<{ ok: true; files: string[] } | { ok: false; failure: string; stderr: string }> {
-  const result = await git.run(['diff', '--name-only', '-z', 'HEAD'], signal)
+  const result = await git.run(['status', '--porcelain=v1', '-z', '--untracked-files=no'], signal)
   if (!result.ok) return { ok: false, failure: result.failure, stderr: result.stderr }
-  return { ok: true, files: result.stdout.split('\0').filter((path) => path.length > 0) }
+  return { ok: true, files: statusPaths(result.stdout) }
 }
 
 /**
