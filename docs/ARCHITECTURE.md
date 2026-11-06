@@ -48,13 +48,13 @@ src/
 │   ├── check-commit-message.ts
 │   └── check-doc-sync.ts
 ├── triggers/
-│   ├── shared.ts             三个触发器共用的截断、双语提示与文件读取
+│   ├── shared.ts             三个触发器共用的截断、双语提示、结算与文件读取
 │   ├── pre-commit.ts         tools/pre-execute 上的提交前检查
 │   ├── pre-pr.ts             gh pr create 的标题、描述与并行分支冲突检查
 │   └── pre-release.ts        git tag / npm publish 的发版检查
 ├── guard/
 │   ├── shared.ts             五道守卫共用的事件接线与档位决策
-│   ├── approval.ts           审批 seam：只有「记住我的选择」的守卫才自己提问
+│   ├── approval.ts           守卫侧审批提问：把接缝的答案翻成放行或拒绝
 │   ├── git-guard.ts          危险 git 命令
 │   ├── outward-guard.ts      对外可见动作（推送、标签、PR、发布）
 │   ├── command-guard.ts      危险 shell 命令
@@ -197,17 +197,20 @@ PR 标题与描述、发版步骤与 CHANGELOG），五个守工作成果（可�
 
 - `src/shell.ts`：把命令行归约成 `git <subcommand> <args>`、`<program> <args>` 与命令词序列，
   涉及命令行的监听器必须对「什么算 git」「什么算程序名」有同一个答案。
-- `src/triggers/shared.ts`：`detailsOf()` 的截断、`askAbout()` 的双语 `displayReason` 与
-  文件读取，三个约定触发器共用；它们各自只提供识别函数与判定函数。
-- `src/approval-policy.ts`：`unaskable()`——本会话审批策略为 `never` 时把 `ask` 改成
-  自己给出的 `deny`。八个监听器都经过它，因为「问一个不会有人回答的问题」是它们共同的
-  失效方式；它刻意不 import 任何本地模块，否则 `guard/approval.ts → guard/shared.ts`
-  会与它成环。
+- `src/triggers/shared.ts`：`detailsOf()` 的截断、`askAbout()` 的双语 `displayReason`、
+  `settleAbout()` 的结算与文件读取，三个约定触发器共用；它们各自只提供识别函数与判定函数。
+  结算那一步自己通过审批接缝提问，只有拿到 `allowed-once` 才把 target 记进状态——因为
+  dispatcher 在监听器返回**之后**才结算 `ask`，答案不回传，「返回 ask」并不等于获批。
+- `src/approval-policy.ts`：`ApprovalOutcome` / `ApprovalRequest` / `ApprovalSeam` 三个类型，
+  以及 `unaskable()`——本会话审批策略为 `never` 时把 `ask` 改成自己给出的 `deny`。八个
+  监听器都经过它，因为「问一个不会有人回答的问题」是它们共同的失效方式；它刻意不 import
+  任何本地模块，否则 `guard/approval.ts → guard/shared.ts` 会与它成环。
 - `src/guard/shared.ts`：`createGuard()` 提供接线、计数与档位决策，五道守卫都只是给它一个
   `detect(exec)`。策略差异（谁是 `ask`、谁固定 `deny`）留在各自文件里。`outward-guard.ts`
   是其中唯一复用触发器识别函数的守卫（`detectRelease()` / `detectPullRequest()`），
   因为「什么算一次发版」只能有一个答案。
-- `src/state.ts`：命中计数与「同一会话同一问题只提示一次」的记忆（四种 `CheckKind`）。
+- `src/state.ts`：命中计数与「同一会话同一问题只提示一次」的记忆（四种 `CheckKind`）——
+  只在用户批准之后记入，拒绝、取消与没人被问到的情形都不记。
 
 `next()` 返回 `{kind:'allow'}` 之外的值时，本插件一律原样透传，绝不改判上游的决定；
 guard 是唯一的例外，且只在**自己的策略更严**（`deny` 对上上游的 `ask`）时才覆盖，

@@ -623,7 +623,7 @@ export function createPreReleaseTrigger(
         t,
         assess: (translator) => evaluateRelease(input, translator, rules),
         approval: options.approval,
-        session: agent.session,
+        exec,
       },
       () => options.state.remember(sessionId, 'release', target),
     )

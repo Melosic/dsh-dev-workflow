@@ -18,7 +18,7 @@ import { createPrePrTrigger } from './triggers/pre-pr.js'
 import { createPreReleaseTrigger } from './triggers/pre-release.js'
 import { createGitGuard } from './guard/git-guard.js'
 import { createOutwardGuard } from './guard/outward-guard.js'
-import type { ApprovalPolicyReporter } from './approval-policy.js'
+import type { ApprovalPolicyReporter, ApprovalSeam } from './approval-policy.js'
 import type { ApprovalService } from './guard/approval.js'
 import { createCommandGuard } from './guard/command-guard.js'
 import { createFileGuard } from './guard/file-guard.js'
@@ -268,7 +268,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             git: (cwd) => runtime.git(cwd),
             log: (message) => ctx.logger.debug(message),
-            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+            approval: () => ctx.get('approval') as ApprovalSeam | undefined,
           }),
         ),
         gate(
@@ -278,7 +278,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             state,
             git: (cwd) => runtime.git(cwd),
             log: (message) => ctx.logger.debug(message),
-            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+            approval: () => ctx.get('approval') as ApprovalSeam | undefined,
           }),
         ),
         gate(
@@ -287,7 +287,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
             t: () => t,
             state,
             log: (message) => ctx.logger.debug(message),
-            approval: () => ctx.get('approval') as ApprovalPolicyReporter | undefined,
+            approval: () => ctx.get('approval') as ApprovalSeam | undefined,
           }),
         ),
       )

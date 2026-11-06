@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
-import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
-import type { ApprovalPolicyReporter } from '../approval-policy.js'
+import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { ApprovalOutcome, ApprovalSeam } from '../approval-policy.js'
 import { unaskable } from '../approval-policy.js'
 import type { Config } from '../config.js'
 import type { GitRunner } from '../git.js'
@@ -29,12 +29,12 @@ export interface TriggerOptions {
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
   /**
-   * The approval seam, read only for the policy a finding resolves under.
+   * The approval seam: the policy a finding resolves under, and the ask itself.
    *
    * Optional: without it every decision is returned as before, which is what a
    * profile with no approval service composed already gets.
    */
-  readonly approval?: () => ApprovalPolicyReporter | undefined
+  readonly approval?: () => ApprovalSeam | undefined
   /**
    * A git runner for one working directory.
    *
@@ -85,10 +85,16 @@ export interface AskOptions {
    * translator — findings included, not just the wrapper.
    */
   readonly assess: (t: Translate) => CheckResult
-  /** The approval seam, read only for the policy this question resolves under. */
-  readonly approval?: () => ApprovalPolicyReporter | undefined
-  /** The session the question would be asked in. */
-  readonly session?: unknown
+  /** The approval seam: the policy this question resolves under, and the ask. */
+  readonly approval?: () => ApprovalSeam | undefined
+  /**
+   * The call the question is about.
+   *
+   * The seam asks *about* a call — it routes the question to the session that
+   * owns it and carries the signal that cancels it — so a trigger that asks
+   * itself needs the whole execution, not just the session it belongs to.
+   */
+  readonly exec: ToolExecution
   /**
    * What the findings mean for the prompt they are folded into.
    *
@@ -144,7 +150,7 @@ export function askAbout(options: AskOptions): PreToolDecision {
     },
     options.t,
     options.approval,
-    options.session,
+    options.exec.agent?.session,
     // Triggers gate an action by its shape, not by a per-operation tier, so the
     // guard's way out — "set this operation to allow" — names a field that does
     // not exist here. The trigger's own way out is the switch, or the reason.
@@ -197,25 +203,59 @@ function mergeRequest(
 }
 
 /**
+ * Restate an answer that was not a grant as the refusal it is.
+ *
+ * The findings stay in the reason: the model's only account of why the call was
+ * stopped is the text this decision carries, and a bare "the user rejected it"
+ * would leave the next attempt guessing at what to change.
+ * @param decision - the question that was put to the user.
+ * @param outcome - what came back.
+ * @param t - translator for the plugin's own locale.
+ * @returns the refusal to return instead.
+ */
+function refusalOf(
+  decision: PreToolDecision & { readonly kind: 'ask' },
+  outcome: ApprovalOutcome,
+  t: Translate,
+): PreToolDecision {
+  const key =
+    outcome === 'rejected'
+      ? 'security.guard.approval_rejected'
+      : outcome === 'cancelled'
+        ? 'security.guard.approval_cancelled'
+        : 'security.guard.approval_unavailable'
+  return { kind: 'deny', reason: `${decision.reason}\n${t(key)}` }
+}
+
+/**
  * Settle a check that has already been evaluated.
  *
- * Four things shape the answer, and the order matters. A gate that denied the
+ * Five things shape the answer, and the order matters. A gate that denied the
  * call is not second-guessed, but the check still ran and its outcome is still
  * recorded, so the status line can say the command failed its convention check
  * rather than saying nothing happened. A question another gate is asking gains
- * the findings rather than being asked twice. And only a check that was really
- * put to the user is remembered: a refusal answers one attempt, so the next one
- * is judged again.
+ * the findings rather than being asked twice. A check that was *granted* is
+ * remembered, so the same object is not stopped twice. And a check that was
+ * refused — or never reached a person at all — is not remembered: a refusal
+ * answers one attempt, so the next one is judged again.
+ *
+ * The grant is read through the approval seam rather than taken for granted.
+ * The dispatcher settles a trigger's `ask` *after* this listener returns and
+ * keeps the answer to itself, so "returning `ask`" does not mean "the user
+ * said yes" — under a profile with no approval channel it is a refusal, and
+ * under the `never` policy it is a refusal before anybody is consulted. Asking
+ * through the same seam is what makes the distinction observable, and it is the
+ * shape `createGuardApprover` already uses for the `rememberApproved` policy.
  * @param downstream - what the gates behind this one decided.
  * @param options - the keys, the outcome, and how to re-render it.
- * @param remember - records that the question was really put to the user.
+ * @param remember - records that the question was granted.
  * @returns the decision for `tools/pre-execute`.
  */
-export function settleAbout(
+export async function settleAbout(
   downstream: PreToolDecision,
   options: AskOptions,
   remember: () => void,
-): PreToolDecision {
+): Promise<PreToolDecision> {
   if (downstream.kind === 'cancel') return downstream
   if (downstream.kind === 'deny') return downstream
 
@@ -226,12 +266,33 @@ export function settleAbout(
     return mergeRequest(downstream, options)
   }
 
+  // Already a refusal when the session cannot be asked at all: under the
+  // `never` policy nobody is consulted, so there is no grant to remember and
+  // the next attempt speaks again.
   const decision = askAbout(options)
-  // The question was shown — the prompt is the trigger's own, or nothing behind
-  // it had anything to say. Under the `never` policy it never reaches anybody,
-  // so it is not remembered and the next attempt speaks again.
-  if (decision.kind === 'ask') remember()
-  return decision
+  if (decision.kind !== 'ask') return decision
+
+  const service = options.approval?.()
+  const agent = options.exec.agent
+  // Nobody to route the question through. The dispatcher's own prompt stands —
+  // and it settles that prompt into a refusal whenever no approval channel is
+  // composed, which is exactly why nothing is remembered here.
+  if (service?.request === undefined || agent === undefined) return decision
+
+  const outcome = await service.request({
+    agent,
+    toolName: options.exec.name,
+    callId: options.exec.callId,
+    reason: decision.reason,
+    ...(decision.displayReason === undefined ? {} : { displayReason: decision.displayReason }),
+    signal: options.exec.signal,
+  })
+  if (outcome !== 'allowed-once') return refusalOf(decision, outcome, options.t)
+
+  // Granted. Whatever the gates behind this one decided still stands; the
+  // trigger's own question is the only thing that was answered here.
+  remember()
+  return downstream
 }
 
 /**

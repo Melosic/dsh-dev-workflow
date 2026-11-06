@@ -1,5 +1,5 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
-import type { ApprovalPolicyReporter } from '../approval-policy.js'
+import type { ApprovalSeam } from '../approval-policy.js'
 import type { Config } from '../config.js'
 import type { Translate } from '../i18n.js'
 import type { GitRunner } from '../git.js'
@@ -43,8 +43,8 @@ export interface PreCommitTriggerOptions {
   readonly git: (cwd: string) => GitRunner
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
-  /** The approval seam, read only for the policy a finding resolves under. */
-  readonly approval?: () => ApprovalPolicyReporter | undefined
+  /** The approval seam: the policy a finding resolves under, and the ask. */
+  readonly approval?: () => ApprovalSeam | undefined
 }
 
 /**
@@ -174,7 +174,7 @@ export function createPreCommitTrigger(
         t,
         assess: (translator) => evaluate(input, config, translator),
         approval: options.approval,
-        session: agent.session,
+        exec,
       },
       remember,
     )

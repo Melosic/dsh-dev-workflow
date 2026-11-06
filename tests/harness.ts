@@ -1,7 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { ApprovalOutcome, ApprovalRequest } from '../src/approval-policy.js'
 import { Config } from '../src/config.js'
 import type { GitFailure, GitResult, GitRunner } from '../src/git.js'
+import type { ApprovalService } from '../src/guard/approval.js'
 
 // Shared scaffolding for the specs. Nothing here exercises the plugin: it only
 // stands in for the DSH services `apply` reaches for, so a spec can assert what
@@ -74,6 +76,45 @@ export interface Harness {
   readonly volatile: (() => void)[]
   /** Every page presentation the plugin declared on the settings service. */
   readonly presentations: RecordedPresentation[]
+  /** The approval seam offered to the plugin, and the questions put to it. */
+  readonly approval: HarnessApproval
+}
+
+/** A queue-driven approval seam, so a spec states what the user would answer. */
+export interface HarnessApproval {
+  /** The service the plugin reads through its context. */
+  readonly service: ApprovalService
+  /** Every question the plugin asked through it, in order. */
+  readonly asked: ApprovalRequest[]
+  /** Queue the answers the next questions receive. */
+  answer(...outcomes: ApprovalOutcome[]): void
+}
+
+/**
+ * Build an approval seam that answers from a queue.
+ *
+ * A question with no answer queued is answered `unavailable`, the fail-closed
+ * outcome: a spec that forgot to say what the user did must not accidentally
+ * model consent.
+ * @param policy - the policy this session’s asks resolve under, when it reports one.
+ * @returns the seam, the questions it was asked, and a way to queue answers.
+ */
+export function makeApproval(policy?: string): HarnessApproval {
+  const asked: ApprovalRequest[] = []
+  const answers: ApprovalOutcome[] = []
+  return {
+    asked,
+    answer: (...outcomes: ApprovalOutcome[]) => {
+      answers.push(...outcomes)
+    },
+    service: {
+      request: async (request: ApprovalRequest): Promise<ApprovalOutcome> => {
+        asked.push(request)
+        return answers.shift() ?? 'unavailable'
+      },
+      ...(policy === undefined ? {} : { effectivePolicy: () => policy }),
+    },
+  }
 }
 
 /**
@@ -82,7 +123,17 @@ export interface Harness {
  * without that optional service.
  * @returns the recording context and the arrays it fills.
  */
-export function createHarness(options: { commands?: boolean; settings?: boolean } = {}): Harness {
+export function createHarness(
+  options: {
+    commands?: boolean
+    settings?: boolean
+    /** Offers an approval seam; without it `ctx.get('approval')` answers `undefined`. */
+    approval?: boolean
+    /** The policy the offered seam reports, when a spec needs the `never` case. */
+    policy?: string
+  } = {},
+): Harness {
+  const approval = makeApproval(options.policy)
   const tools: RegisteredTool[] = []
   const providers: (() => unknown)[] = []
   const listeners: RegisteredListener[] = []
@@ -133,10 +184,15 @@ export function createHarness(options: { commands?: boolean; settings?: boolean 
         return remove(providers, factory)
       },
     },
-    // `commands` and `subprocess` are optional capabilities: `undefined` here is
-    // a profile that simply offers less, which is the case worth covering.
-    get: (name: string) =>
-      name === 'commands' && options.commands === true ? registry : undefined,
+    // `commands`, `subprocess`, and `approval` are optional capabilities:
+    // `undefined` here is a profile that simply offers less, which is the case
+    // worth covering — and for approval it is the one that matters most, since
+    // the dispatcher then turns the plugin's `ask` into a refusal.
+    get: (name: string) => {
+      if (name === 'commands' && options.commands === true) return registry
+      if (name === 'approval' && options.approval === true) return approval.service
+      return undefined
+    },
     on: (name: string, listener: RegisteredListener['listener'], listenerOptions: unknown) => {
       const entry = { name, listener, options: listenerOptions }
       listeners.push(entry)
@@ -171,6 +227,7 @@ export function createHarness(options: { commands?: boolean; settings?: boolean 
     logs,
     volatile,
     presentations,
+    approval,
   }
 }
 

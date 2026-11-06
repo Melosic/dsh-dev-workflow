@@ -503,7 +503,7 @@ export function createPrePrTrigger(
         t,
         assess: (translator) => evaluatePullRequest(input, options.config(), translator),
         approval: options.approval,
-        session: agent.session,
+        exec,
       },
       () => options.state.remember(sessionId, 'pr', target),
     )

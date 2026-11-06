@@ -11,7 +11,7 @@ import {
   detectPullRequest,
   evaluatePullRequest,
 } from '../src/triggers/pre-pr.js'
-import { askOf, makeConflictGit, makeExec } from './harness.js'
+import { askOf, makeApproval, makeConflictGit, makeExec, type HarnessApproval } from './harness.js'
 
 const t = createTranslator('en-US')
 const config = Config({})
@@ -62,6 +62,7 @@ function trigger(
     state?: ReturnType<typeof createWorkflowState>
     git?: ReturnType<typeof makeConflictGit>
     logs?: string[]
+    approval?: HarnessApproval
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
@@ -74,6 +75,7 @@ function trigger(
     log: (line) => {
       options.logs?.push(line)
     },
+    ...(options.approval === undefined ? {} : { approval: () => options.approval?.service }),
   })
   return { listener, state, config: resolved }
 }
@@ -601,12 +603,23 @@ describe('src/triggers/pre-pr.ts', () => {
     expect(state.lastOutcome()).toBeUndefined()
   })
 
-  it('prompts once per problem per session, so ignoring it is survivable', async () => {
+  it('asks again when there is no channel to put the question through', async () => {
     const { listener } = trigger()
     const command = 'gh pr create --title "Add the flag"'
 
     expect((await fire(listener, command)).kind).toBe('ask')
+    expect((await fire(listener, command)).kind).toBe('ask')
+  })
+
+  it('stops asking once the user grants it', async () => {
+    const approval = makeApproval()
+    approval.answer('allowed-once')
+    const { listener } = trigger({ approval })
+    const command = 'gh pr create --title "Add the flag"'
+
     expect((await fire(listener, command)).kind).toBe('allow')
+    expect((await fire(listener, command)).kind).toBe('allow')
+    expect(approval.asked).toHaveLength(1)
   })
 
   it('prompts again for a different title in the same session', async () => {

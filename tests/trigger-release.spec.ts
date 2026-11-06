@@ -12,7 +12,7 @@ import {
   evaluateRelease,
   releaseRules,
 } from '../src/triggers/pre-release.js'
-import { askOf, makeExec } from './harness.js'
+import { askOf, makeApproval, makeExec, type HarnessApproval } from './harness.js'
 
 const t = createTranslator('en-US')
 
@@ -66,6 +66,7 @@ function trigger(
   options: {
     config?: Record<string, unknown>
     state?: ReturnType<typeof createWorkflowState>
+    approval?: HarnessApproval
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
@@ -75,6 +76,7 @@ function trigger(
     t: () => t,
     state,
     log: () => {},
+    ...(options.approval === undefined ? {} : { approval: () => options.approval?.service }),
   })
   return { listener, state, config: resolved }
 }
@@ -320,13 +322,25 @@ describe('src/triggers/pre-release.ts', () => {
     expect(state.lastOutcome()).toBeUndefined()
   })
 
-  it('prompts once per version per session, so ignoring it is survivable', async () => {
+  it('asks again when there is no channel to put the question through', async () => {
     const { listener } = trigger()
     const directory = project('0.1.0', EMPTY_CHANGELOG)
     const command = 'git tag v0.2.0'
 
     expect((await fire(listener, command, { cwd: directory })).kind).toBe('ask')
+    expect((await fire(listener, command, { cwd: directory })).kind).toBe('ask')
+  })
+
+  it('stops asking once the user grants it', async () => {
+    const approval = makeApproval()
+    approval.answer('allowed-once')
+    const { listener } = trigger({ approval })
+    const directory = project('0.1.0', EMPTY_CHANGELOG)
+    const command = 'git tag v0.2.0'
+
     expect((await fire(listener, command, { cwd: directory })).kind).toBe('allow')
+    expect((await fire(listener, command, { cwd: directory })).kind).toBe('allow')
+    expect(approval.asked).toHaveLength(1)
   })
 
   it('prompts again for a different version in the same session', async () => {

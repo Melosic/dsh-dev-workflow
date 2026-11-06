@@ -19,6 +19,38 @@ import type { Translate } from './i18n.js'
 // `./guard/approval.ts` imports `./guard/shared.ts`, so a shared module that
 // reached back into either would close a cycle.
 
+/** One answer from the approval seam. `allowed-once` is the only grant. */
+export type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
+
+/** One question for the approval seam. */
+export interface ApprovalRequest {
+  readonly agent: unknown
+  readonly toolName: string
+  readonly callId?: string
+  readonly reason?: string
+  readonly displayReason?: Readonly<Record<string, string>>
+  readonly signal?: AbortSignal
+}
+
+/**
+ * The part of the approval service this plugin uses.
+ *
+ * The package ships no types of its own, so the shape is described here — the
+ * same choice `src/index.ts` makes for the settings service. The seam is read
+ * opportunistically through `ctx.get`, never declared in `inject`.
+ */
+export interface ApprovalSeam extends ApprovalPolicyReporter {
+  /**
+   * Ask the composed answerers about one call.
+   *
+   * Optional because a stand-in may only report the policy; a gate that cannot
+   * ask keeps the dispatcher's own prompt, and never reads silence as consent.
+   * @param request - the agent, the tool, and why it is being asked.
+   * @returns the resolved outcome; `allowed-once` is the only grant.
+   */
+  request?(request: ApprovalRequest): Promise<ApprovalOutcome>
+}
+
 /** An approval seam that reports the policy its asks resolve under. */
 export interface ApprovalPolicyReporter {
   /**

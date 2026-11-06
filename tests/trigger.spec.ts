@@ -7,13 +7,21 @@ import type { GitRunner } from '../src/git.js'
 import { createRuntime } from '../src/index.js'
 import { createPreCommitTrigger } from '../src/triggers/pre-commit.js'
 import { checkDocSync } from '../src/tools/check-doc-sync.js'
-import { createHarness, askOf, makeExec, makeGit } from './harness.js'
+import {
+  createHarness,
+  askOf,
+  makeApproval,
+  makeExec,
+  makeGit,
+  type HarnessApproval,
+} from './harness.js'
 
 const t = createTranslator('en-US')
 
 /**
  * Build the listener the way the runtime does, with a working tree the spec owns.
- * @param options - configuration overrides and the changed paths to report.
+ * @param options - configuration overrides, the changed paths to report, and the
+ * approval seam to route questions through (absent models a profile with none).
  * @returns the listener, its state, and the paths it reads on every call.
  */
 function trigger(
@@ -21,7 +29,7 @@ function trigger(
     config?: Record<string, unknown>
     files?: () => readonly string[]
     state?: ReturnType<typeof createWorkflowState>
-    policy?: string
+    approval?: HarnessApproval
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
@@ -33,9 +41,7 @@ function trigger(
     state,
     git: () => git,
     log: () => {},
-    ...(options.policy === undefined
-      ? {}
-      : { approval: () => ({ effectivePolicy: () => options.policy }) }),
+    ...(options.approval === undefined ? {} : { approval: () => options.approval?.service }),
   })
   return { listener, state, config: resolved }
 }
@@ -102,7 +108,7 @@ describe('src/triggers/pre-commit.ts', () => {
   it('refuses a finding in its own words when the session cannot be asked', async () => {
     // Under the `never` policy a returned `ask` is refused without a prompt and
     // reported as the user's refusal, so the finding is refused here instead.
-    const { listener } = trigger({ policy: 'never' })
+    const { listener } = trigger({ approval: makeApproval('never') })
     const decision = await fire(listener, 'git commit -m "Add the thing"')
 
     expect(decision.kind).toBe('deny')
@@ -187,13 +193,49 @@ describe('src/triggers/pre-commit.ts', () => {
     )
   })
 
-  it('prompts once per problem per session, so ignoring it is survivable', async () => {
+  it('asks again when there is no channel to put the question through', async () => {
+    // No approval seam: the dispatcher refuses the ask after this listener
+    // returns, so nothing was granted and nothing may be remembered.
     const { listener } = trigger()
     const command = 'git commit -m "Add the thing"'
 
     expect((await fire(listener, command)).kind).toBe('ask')
-    // The agent ignores the prompt and re-runs the identical command.
+    expect((await fire(listener, command)).kind).toBe('ask')
+  })
+
+  it('stops asking once the user grants it', async () => {
+    const approval = makeApproval()
+    const { listener } = trigger({ approval })
+    const command = 'git commit -m "Add the thing"'
+    approval.answer('allowed-once')
+
     expect((await fire(listener, command)).kind).toBe('allow')
+    expect(approval.asked).toHaveLength(1)
+
+    // The grant is remembered, so the identical command is not put to the user twice.
+    expect((await fire(listener, command)).kind).toBe('allow')
+    expect(approval.asked).toHaveLength(1)
+  })
+
+  it('asks again after a refusal, keeping its finding in the refusal', async () => {
+    for (const answer of ['rejected', 'cancelled', 'unavailable'] as const) {
+      const approval = makeApproval()
+      approval.answer(answer, answer)
+      const { listener } = trigger({ approval })
+      const command = 'git commit -m "Add the thing"'
+
+      const refusal = await fire(listener, command)
+      expect(refusal.kind, answer).toBe('deny')
+      // The dispatcher's own refusal says "the user rejected tool ..." and loses
+      // the finding, so the gate has to state it here.
+      expect(refusal.kind === 'deny' && refusal.reason, answer).toContain(
+        t('tool.check_commit_message.error.missing_type'),
+      )
+
+      // A refusal answers that attempt, not the object: the retry asks again.
+      expect((await fire(listener, command)).kind, answer).toBe('deny')
+      expect(approval.asked, answer).toHaveLength(2)
+    }
   })
 
   it('prompts again for a different problem in the same session', async () => {
@@ -214,15 +256,19 @@ describe('src/triggers/pre-commit.ts', () => {
 
   it('treats the same commit with a different working tree as a new problem', async () => {
     const files = ['src/a.ts']
-    const { listener } = trigger({ files: () => files })
+    const approval = makeApproval()
+    approval.answer('allowed-once', 'allowed-once')
+    const { listener } = trigger({ files: () => files, approval })
     const command = 'git commit -m "feat(cli): add a flag"'
 
-    expect((await fire(listener, command)).kind).toBe('ask')
     expect((await fire(listener, command)).kind).toBe('allow')
+    expect((await fire(listener, command)).kind).toBe('allow')
+    expect(approval.asked).toHaveLength(1)
 
     // A different change set is a different target, so it is checked afresh.
     files.push('src/b.ts')
-    expect((await fire(listener, command)).kind).toBe('ask')
+    expect((await fire(listener, command)).kind).toBe('allow')
+    expect(approval.asked).toHaveLength(2)
   })
 
   it('does not fire while the mode is off or the trigger is disabled', async () => {
