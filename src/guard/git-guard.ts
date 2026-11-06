@@ -70,7 +70,11 @@ function pushHit(args: readonly string[], config: Config): GuardHit | undefined 
     args.includes('--prune') ||
     args.some((word) => word.startsWith(':') && word.length > 1)
   if (deletes) {
-    return { reason: 'security.guard.branch_delete', action: config.gitGuard.branchDelete.get() }
+    return {
+      reason: 'security.guard.branch_delete',
+      action: config.gitGuard.branchDelete.get(),
+      params: { command: args.includes('--prune') ? 'push --prune' : 'push --delete' },
+    }
   }
   return undefined
 }
@@ -162,14 +166,22 @@ export function detectAllGuards(command: string, config: Config): GuardHit[] {
     ) {
       hits.push({ reason: 'security.guard.rebase', action: guard.rebase.get() })
     } else if (subcommand === 'clean' && (args.includes('--force') || hasShortOption(args, 'f'))) {
-      hits.push({ reason: 'security.guard.clean_force', action: guard.cleanForce.get() })
+      hits.push({
+        reason: 'security.guard.clean_force',
+        action: guard.cleanForce.get(),
+        params: { command: 'clean -f' },
+      })
     } else if (subcommand === 'commit' && args.includes('--amend')) {
       hits.push({ reason: 'security.guard.amend', action: guard.amend.get() })
     } else if (
       subcommand === 'branch' &&
       (hasShortOption(args, 'D') || (args.includes('--delete') && args.includes('--force')))
     ) {
-      hits.push({ reason: 'security.guard.branch_delete', action: guard.branchDelete.get() })
+      hits.push({
+        reason: 'security.guard.branch_delete',
+        action: guard.branchDelete.get(),
+        params: { command: 'branch -D' },
+      })
     } else if (subcommand === 'checkout' || subcommand === 'restore') {
       // `checkout -- <path>` and `checkout .` both restore from the index,
       // discarding whatever was edited in those files, and `restore <path>` is
@@ -182,10 +194,15 @@ export function detectAllGuards(command: string, config: Config): GuardHit[] {
         hits.push({
           reason: 'security.guard.checkout_discard',
           action: guard.checkoutDiscard.get(),
+          params: { command: subcommand },
         })
       }
     } else if (subcommand === 'switch' && forcedSwitch(args)) {
-      hits.push({ reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() })
+      hits.push({
+        reason: 'security.guard.checkout_discard',
+        action: guard.checkoutDiscard.get(),
+        params: { command: 'switch --force' },
+      })
     } else if (
       // Deleting a tag destroys a published name: a release tag is what every
       // consumer's lockfile and every changelog link points at. Same policy as
@@ -193,14 +210,22 @@ export function detectAllGuards(command: string, config: Config): GuardHit[] {
       subcommand === 'tag' &&
       (args.includes('--delete') || hasShortOption(args, 'd'))
     ) {
-      hits.push({ reason: 'security.guard.branch_delete', action: guard.branchDelete.get() })
+      hits.push({
+        reason: 'security.guard.branch_delete',
+        action: guard.branchDelete.get(),
+        params: { command: 'tag -d' },
+      })
     } else if (
       // `stash drop` and `stash clear` throw away work the author set aside
       // precisely because they were not ready to lose it.
       subcommand === 'stash' &&
       (args[0] === 'drop' || args[0] === 'clear')
     ) {
-      hits.push({ reason: 'security.guard.checkout_discard', action: guard.checkoutDiscard.get() })
+      hits.push({
+        reason: 'security.guard.checkout_discard',
+        action: guard.checkoutDiscard.get(),
+        params: { command: `stash ${args[0] ?? ''}` },
+      })
     } else if (
       // `gc --prune=now` deletes unreachable objects immediately instead of
       // keeping the two-week grace period that makes a mistaken reset
@@ -209,14 +234,22 @@ export function detectAllGuards(command: string, config: Config): GuardHit[] {
       subcommand === 'gc' &&
       args.some((word) => word === '--prune=now' || word === '--prune=all')
     ) {
-      hits.push({ reason: 'security.guard.clean_force', action: guard.cleanForce.get() })
+      hits.push({
+        reason: 'security.guard.clean_force',
+        action: guard.cleanForce.get(),
+        params: { command: 'gc --prune' },
+      })
     } else if (
       // `update-ref -d` deletes a ref without the checks `branch -D` performs,
       // so it is the same loss reached around the guard above.
       subcommand === 'update-ref' &&
       (args.includes('-d') || args.includes('--delete'))
     ) {
-      hits.push({ reason: 'security.guard.branch_delete', action: guard.branchDelete.get() })
+      hits.push({
+        reason: 'security.guard.branch_delete',
+        action: guard.branchDelete.get(),
+        params: { command: 'update-ref -d' },
+      })
     }
 
     // `--no-verify` is a property of the invocation rather than of one

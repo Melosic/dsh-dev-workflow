@@ -24,6 +24,10 @@
 - git 命令失败的原因不再以 `{detail}` 占位符原样出现，而是带上 git 自己的那句话。
 - 新建仓库的第一次提交不再被拦：`-a` 的文件集改读 `git status --untracked-files=no`，没有 HEAD 时不再以 128 退出被当成读不到改动列表。
 - 镜像对只在另一半仓库里本来就有时才拦：全新项目首次提交只暂存 `README.md`，不再被要求先写 `README.zh.md`。
+- `fix(core):`（冒号后为空）不再报「缺少类型前缀」：类型和冒号都在，缺的是标题，改报 `error.empty_subject`。
+- `empty_scope` 的文案不再拿 `feat()` 举例：改为写清格式 `<type>(<scope>): <subject>`，`fix()`/`chore()` 也对得上。
+- 被多种命令共用的三条守卫文案带上 `{command}`：`stash drop`、`tag -d`、`gc --prune` 不再一律说成 `checkout -- .`。
+- `status` 的守卫计数改渲染短标签（`<reason>.label`），不再把整句解释拼进一行，手机上看得全。
 
 ### Changed
 

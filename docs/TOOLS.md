@@ -52,6 +52,7 @@
 | `error.missing_type` + `hint.format` | 标题不匹配 `^([a-z]+)(\([^)]*\))?(!)?:\s*(\S.*)$` |
 | `error.unknown_type` | 类型不在 `COMMIT_TYPES` 清单里 |
 | `error.breaking_without_footer` | 标题带 `!` 但正文里没有 `BREAKING CHANGE:` 或 `BREAKING-CHANGE:` |
+| `error.empty_subject` | 类型和冒号都在，但冒号后没有标题（`fix(core):`） |
 | `error.empty_scope` | scope 写了括号但里面是空的（`feat(): x`） |
 | `error.trailing_period` | 标题以 `.` 结尾 |
 
@@ -157,10 +158,12 @@ rename 形态（`old -> new`）取右侧，并还原 git 的 C 风格转义（`\
 文件是带三行注释的空标记，可以直接提交。面板上没有等价控件：面板写的是 profile 的配置值，
 而这件事落的是仓库里的文件，两者不是同一层。
 
-`status` 的守卫命中计数把字典 key 渲染成可读文本并带上次数，例如
-`Guard hits: A force push rewrites remote history…×2, git clean -f deletes untracked files permanently.×1`；
-被配置改成 `allow` 的那一项额外标 `（已放行）`，因为「拦了三次」和「放宽后放了三次」计数一样；
-一次都没命中时输出一条明确的「无」。
+`status` 的守卫命中计数渲染的是每个 reason 的**短标签**（`<reason>.label`）而不是整句解释，
+并带上次数，例如 `Guard hits: force push×2, permanent delete×1`。原因很实际：解释是写给「正在决定这一
+次操作」的人看的，一句一行；收进一行计数里，手机上就看不全了。短标签同时避开了另一件事——
+三条被多种命令共用的文案带 `{command}` 参数（`stash drop`、`tag -d` 等），而计数那一行没有
+参数可填。被配置改成 `allow` 的那一项额外标 `（已放行）`，因为「拦了三次」和「放宽后放了三次」
+计数一样；一次都没命中时输出一条明确的「无」。
 
 生效范围那一行是为 bug 报告存在的：`scope: 'marked'` 是唯一会让插件在某个仓库里
 **完全静默**的设置，而「它在仓库 X 里没管我的提交」正是最常见的报障。`all` 直接说「所有仓库」；

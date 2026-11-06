@@ -142,4 +142,50 @@ describe('src/i18n.ts', () => {
   it('resolves auto to a shipped locale', () => {
     expect(['en-US', 'zh-CN']).toContain(resolveLocale('auto'))
   })
+
+  it('names every operation the hit tally can hold', () => {
+    // `/dev-workflow status` collects reasons into one line and has no
+    // parameters to render them with — the reason is stored as a key and
+    // nothing else — so it reads `<reason>.label`. A reason that lacks one
+    // prints its own key name, which is why the list is asserted rather than
+    // left to review.
+    //
+    // This is the set `recordGuardHit` can be called with. `security.guard.
+    // secret_pattern_matched` is absent on purpose: it is rendered as a
+    // suggestion beside a hit, never recorded as one.
+    const reasons = [
+      'command.guard.dangerous_warning',
+      'security.guard.amend',
+      'security.guard.branch_delete',
+      'security.guard.checkout_discard',
+      'security.guard.clean_force',
+      'security.guard.force_push',
+      'security.guard.hard_reset',
+      'security.guard.no_verify',
+      'security.guard.outward_publish',
+      'security.guard.outward_pull_request',
+      'security.guard.outward_push',
+      'security.guard.outward_tag',
+      'security.guard.rebase',
+      'security.secret_detected',
+      'security.sensitive_file_blocked',
+    ]
+    const english = flat(en)
+    const chinese = flat(zh)
+    const missing = reasons.flatMap((reason) => {
+      const key = `${reason}.label`
+      return [english[key], chinese[key]].filter((value) => value === undefined).map(() => `${key}`)
+    })
+    expect(missing).toEqual([])
+    // A label is collected into a comma-separated tally, so it must be short
+    // and must not carry a placeholder the tally cannot fill.
+    for (const reason of reasons) {
+      for (const dictionary of [english, chinese]) {
+        const label = dictionary[`${reason}.label`] ?? ''
+        expect(label).not.toBe('')
+        expect(placeholders(label)).toEqual([])
+        expect([...label].length).toBeLessThanOrEqual(20)
+      }
+    }
+  })
 })

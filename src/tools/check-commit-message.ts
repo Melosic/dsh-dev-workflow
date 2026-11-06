@@ -72,6 +72,14 @@ export function checkCommitMessage(
   // reach the length check as a zero-character description, which then passed.
   const header = /^([a-z]+)(\(([^)]*)\))?(!)?:\s*(\S.*)$/.exec(subject)
   if (header === null) {
+    // `fix(core):` has the type and the colon; what it lacks is a subject.
+    // Reported as a missing type, it sends the author looking for a prefix that
+    // is already there, so the two failures are told apart here. The empty scope
+    // is not also reported: with no subject there is no header to scope.
+    if (/^([a-z]+)(\([^)]*\))?(!)?:\s*$/.test(subject)) {
+      errors.push(t('tool.check_commit_message.error.empty_subject'))
+      return { ok: false, errors, warnings }
+    }
     errors.push(t('tool.check_commit_message.error.missing_type'))
     errors.push(t('tool.check_commit_message.hint.format'))
     return { ok: false, errors, warnings }
