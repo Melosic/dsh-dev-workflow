@@ -127,6 +127,23 @@ describe('src/tools/check-commit-message.ts', () => {
     expect(outcome.errors).toContain(t('tool.check_commit_message.error.empty_scope'))
   })
 
+  it('says the subject is missing, not the type, when the colon is empty', () => {
+    // `fix(core):` has its type and its colon; what it lacks is the subject.
+    // Reported as a missing type, it sends the author looking for a prefix that
+    // is already in front of them.
+    const outcome = checkCommitMessage({ message: 'fix(core):' }, config, t)
+    expect(outcome.ok).toBe(false)
+    expect(outcome.errors).toEqual([t('tool.check_commit_message.error.empty_subject')])
+  })
+
+  it('still reports a missing type when there is no header at all', () => {
+    const outcome = checkCommitMessage({ message: 'Add the thing' }, config, t)
+    expect(outcome.errors).toEqual([
+      t('tool.check_commit_message.error.missing_type'),
+      t('tool.check_commit_message.hint.format'),
+    ])
+  })
+
   it('requires a BREAKING CHANGE footer behind a bang', () => {
     const outcome = checkCommitMessage({ message: 'feat(cli)!: drop the old flag' }, config, t)
     expect(outcome.ok).toBe(false)

@@ -110,7 +110,10 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
    共享的 schema 实例会把第一个字段解析出的值串到其它字段上）。
 2. `src/guard/git-guard.ts` —— 在 `detectGuard` 的判定链里加分支。判定顺序有意义：
    取最严的规则，同级保留先入列者；`--no-verify` 在所有子命令判定**之后**才追加。
-3. `locale/en.json` + `locale/zh.json` —— 加 `security.guard.<name>`。
+3. `locale/en.json` + `locale/zh.json` —— 加 `security.guard.<name>`，以及它的
+   `security.guard.<name>.label`。前者是拦下来时给人看的一整句，后者是 `/dev-workflow status`
+   计数行里用的短标签；缺了 label，状态行会把 key 原样打出来。同一句文案被多种命令共用时，
+   在命中处传 `params`（只传命令种类，不传路径或命中的内容），别为每种写法各写一句。
 4. `tests/guard.spec.ts` —— 至少一条命中、一条最近的「不该命中」的反例。
 5. `docs/CONFIGURATION.md` + `docs/SECURITY.md` —— 新字段与新规则。
 6. `CHANGELOG.md` 的 `[Unreleased]`。

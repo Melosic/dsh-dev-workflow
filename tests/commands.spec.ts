@@ -221,6 +221,10 @@ describe('/dev-workflow', () => {
     // A bare count reads the same whether the guard blocked three pushes or the
     // user relaxed the field and it let three through. Only `allow` outlives the
     // moment it was chosen, so only `allow` gets named here.
+    //
+    // The reason is rendered as its short label, not as the sentence the guard
+    // shows when it stops one operation: several of those sentences are longer
+    // than a phone screen once they are collected into a tally.
     const harness = createHarness({ commands: true })
     const runtime = createRuntime(harness.ctx, Config({ mode: 'on', locale: 'en-US' }))
 
@@ -229,11 +233,8 @@ describe('/dev-workflow', () => {
     runtime.state.recordGuardHit('security.guard.outward_push', 'allow')
 
     const text = await run(harness, 'status')
-    expect(text).toContain(
-      "A force push rewrites remote history and can discard other people's commits.×2",
-    )
-    expect(text).toContain(
-      'A push publishes this branch to the remote, where other people can see it. (allowed)×1',
-    )
+    expect(text).toContain('force push×2')
+    expect(text).toContain('push (allowed)×1')
+    expect(text).not.toContain('A force push rewrites remote history')
   })
 })

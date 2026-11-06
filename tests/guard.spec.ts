@@ -148,6 +148,30 @@ describe('src/guard/git-guard.ts', () => {
     expect((decision as { reason: string }).reason).toBe(t('security.guard.rebase'))
   })
 
+  it('names the operation that ran, not one example of it', async () => {
+    // One sentence covers several commands that share a policy, and it used to
+    // name exactly one of them — `checkout -- .` answered a `stash drop`. The
+    // reason key stays shared, because the tally counts it as one thing; the
+    // operation travels as a parameter instead.
+    const cases: readonly (readonly [string, string, string])[] = [
+      ['git stash drop', 'security.guard.checkout_discard', 'stash drop'],
+      ['git stash clear', 'security.guard.checkout_discard', 'stash clear'],
+      ['git switch --force main', 'security.guard.checkout_discard', 'switch --force'],
+      ['git restore src/a.ts', 'security.guard.checkout_discard', 'restore'],
+      ['git clean -fd', 'security.guard.clean_force', 'clean -f'],
+      ['git gc --prune=now', 'security.guard.clean_force', 'gc --prune'],
+      ['git tag -d v1.0.0', 'security.guard.branch_delete', 'tag -d'],
+      ['git update-ref -d refs/heads/topic', 'security.guard.branch_delete', 'update-ref -d'],
+      ['git branch -D topic', 'security.guard.branch_delete', 'branch -D'],
+      ['git push --delete origin topic', 'security.guard.branch_delete', 'push --delete'],
+    ]
+    for (const [command, reason, named] of cases) {
+      const { decision } = await run(command)
+      expect(decision.kind).toBe('ask')
+      expect((decision as { reason: string }).reason).toBe(t(reason, { command: named }))
+    }
+  })
+
   it('asks about the other destructive operations it knows', () => {
     expect(classify('git clean -fd')).toMatchObject({ reason: 'security.guard.clean_force' })
     expect(classify('git clean --force')).toMatchObject({ reason: 'security.guard.clean_force' })
