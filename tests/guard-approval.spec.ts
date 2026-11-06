@@ -6,7 +6,8 @@ import { createWorkflowState } from '../src/state.js'
 import type { WorkflowState } from '../src/state.js'
 import { createGitGuard } from '../src/guard/git-guard.js'
 import type { GuardHit } from '../src/guard/shared.js'
-import type { ApprovalOutcome, ApprovalRequest, ApprovalService } from '../src/guard/approval.js'
+import type { ApprovalOutcome, ApprovalRequest } from '../src/approval-policy.js'
+import type { ApprovalService } from '../src/guard/approval.js'
 import { allow, makeExec } from './harness.js'
 
 // `gitGuard.rememberApproved`: the one policy whose answer the guard has to read

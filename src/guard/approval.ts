@@ -1,4 +1,5 @@
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { ApprovalOutcome, ApprovalRequest, ApprovalSeam } from '../approval-policy.js'
 import { unaskable } from '../approval-policy.js'
 import { fingerprint } from '../checks.js'
 import type { WorkflowState } from '../state.js'
@@ -16,40 +17,15 @@ import type { GuardApprover } from './shared.js'
 // composes no approval service still mounts this plugin, and the question then
 // falls back to the dispatcher's own prompt.
 
-/** One answer from the approval seam. `allowed-once` is the only grant. */
-export type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
-
-/** One question for the approval seam. */
-export interface ApprovalRequest {
-  readonly agent: unknown
-  readonly toolName: string
-  readonly callId?: string
-  readonly reason?: string
-  readonly displayReason?: Readonly<Record<string, string>>
-  readonly signal?: AbortSignal
-}
-
 /**
  * The part of the approval service this plugin uses.
  *
- * The package ships no types of its own, so the shape is described here — the
- * same choice `src/index.ts` makes for the settings service. The seam is read
- * opportunistically through `ctx.get`, never declared in `inject`.
+ * Widened from {@link ApprovalSeam} to require `request`: a guard that remembers
+ * approvals cannot do its job without an answer, so a seam that only reports the
+ * policy is not one it will ask through.
  */
-export interface ApprovalService {
-  /**
-   * Ask the composed answerers about one call.
-   * @param request - the agent, the tool, and why it is being asked.
-   * @returns the resolved outcome; `allowed-once` is the only grant.
-   */
+export interface ApprovalService extends ApprovalSeam {
   request(request: ApprovalRequest): Promise<ApprovalOutcome>
-  /**
-   * The policy this session's asks resolve under, when the service exposes it.
-   * Optional because a stand-in that only answers questions reports no policy.
-   * @param session - the session whose own log supplies the override.
-   * @returns `ask` or `never`, or `undefined` when the seam does not say.
-   */
-  effectivePolicy?(session: unknown): string | undefined
 }
 
 /** What the runtime contributes to a guard that remembers approvals. */

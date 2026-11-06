@@ -860,9 +860,11 @@ configured:
   summary line.
 - If the user ignores a hint, let the action proceed. Do not repeat it: **the
   same hint about the same problem in the same session is raised once — and only
-  after the question was really put to the user.** A refusal is not remembered, so
-  the same command is judged again on the next attempt. A repeated warning is
-  noise, and noise trains people to click through warnings.
+  after the user approved that action.** Returning `ask` is not approval: the
+  dispatcher settles the question after the gate returns and keeps the answer to
+  itself, so a refusal, a cancellation, and a profile with no approval channel all
+  leave the target unremembered and the same command is judged again next time. A
+  repeated warning is noise, and noise trains people to click through warnings.
 - Every hint must be actionable: name the problem, show the expected form, and
   offer the concrete fix. "Invalid commit message" is not a hint; "the subject is
   63 characters — Conventional Commits suggests 50 or fewer" is.
