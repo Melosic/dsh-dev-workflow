@@ -121,9 +121,14 @@ rename 形态（`old -> new`）取右侧，并还原 git 的 C 风格转义（`\
 
 | 严重性 | 规则 | 触发条件 |
 | --- | --- | --- |
-| 阻塞 | `error.mirror` | `config.docs.mirrors` 某一组里，有文件被改动而组内还有文件没被改动 |
+| 阻塞 | `error.mirror` | `config.docs.mirrors` 某一组里，有文件被改动，组内另一份**仓库里本来就有**的文件没被改动 |
 | 建议 | `warn.no_document` | 命中 `config.codePaths` 的代码被改动，但 `docsDir`、`docs.readme`、`changelog` 全都没动 |
 | 建议 | `warn.changelog` | 有代码改动，但 CHANGELOG 没动 |
+
+镜像对的判定带一个前提：**只有仓库里已经存在的另一半才算「漏改」**。全新项目第一次提交
+只暂存 `README.md`，此时 `README.zh.md` 从未存在过——它没有被落下，它是这个项目不打算有的
+文档。读不到「哪些路径存在」时按「都存在」处理，即退回上面那条老规则；这比反过来安全：
+读失败不会让检查静默失效。
 
 「算代码」的定义：路径以 `config.codePaths` 里任一前缀开头，且**不在** `config.docsDir` 之下。
 后者避免把文档自己的改动当成代码。

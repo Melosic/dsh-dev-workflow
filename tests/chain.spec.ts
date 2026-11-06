@@ -26,12 +26,17 @@ function makeRepo(options: {
   staged?: readonly string[]
   worktree?: readonly string[]
   branch?: readonly string[]
+  existing?: readonly string[]
   unborn?: boolean
   asks?: string[][]
 }): GitRunner {
   const staged = options.staged ?? []
   const worktree = options.worktree ?? staged
   const branch = options.branch ?? []
+  // What the repository already carries. Every path this fake knows about is
+  // tracked, so that is the default; a spec whose repository also keeps files
+  // this commit does not mention names them.
+  const existing = options.existing ?? [...new Set([...staged, ...worktree])]
   return {
     cwd: process.cwd(),
     run: async (args): Promise<GitResult> => {
@@ -60,6 +65,11 @@ function makeRepo(options: {
       if (joined.startsWith('status --porcelain')) {
         return { ok: true, stdout: worktree.map((path) => ` M ${path}\0`).join('') }
       }
+      // Everything tracked, plus every file already on disk: the answer to
+      // "has this document ever existed here?".
+      if (joined.startsWith('ls-files')) {
+        return { ok: true, stdout: existing.map((path) => `${path}\0`).join('') }
+      }
       if (joined.startsWith('log -1')) return { ok: true, stdout: 'feat: previous subject\n' }
       return { ok: true, stdout: '' }
     },
@@ -79,6 +89,7 @@ async function run(
     staged?: readonly string[]
     worktree?: readonly string[]
     branch?: readonly string[]
+    existing?: readonly string[]
     unborn?: boolean
     config?: Record<string, unknown>
   } = {},
@@ -154,10 +165,12 @@ describe('guard and trigger on one chain', () => {
   it('still refuses a commit that leaves the pair behind entirely', async () => {
     // README.md is the mirror of README.zh.md, and the commit touches only one
     // half of the pair — with nothing else in the tree to suggest the other half
-    // is being written next.
+    // is being written next. The repository keeps both halves, which is what
+    // makes the untouched one a document that was left behind.
     const { decision } = await run('git commit -m "docs(readme): describe the flag"', {
       staged: ['README.md', 'docs/API.md'],
       worktree: ['README.md', 'docs/API.md'],
+      existing: ['README.md', 'README.zh.md', 'docs/API.md'],
     })
 
     expect(decision.kind).toBe('ask')
@@ -171,6 +184,19 @@ describe('guard and trigger on one chain', () => {
         missing: 'README.zh.md',
       }),
     )
+  })
+
+  it('does not refuse the first commit of a repository that has no pair yet', async () => {
+    // A brand-new project stages its README.md and nothing else: there is no
+    // README.zh.md to have left behind, and a project written in one language
+    // never writes one. Demanding it would stop the repository at commit one.
+    const { decision } = await run('git commit -m "chore(repo): start"', {
+      staged: ['README.md'],
+      worktree: ['README.md'],
+      existing: ['README.md'],
+    })
+
+    expect(decision.kind).toBe('allow')
   })
 
   it('reads what `git commit -a` will record instead of the empty index', async () => {

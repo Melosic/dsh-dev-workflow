@@ -62,6 +62,14 @@ export interface EvaluationInput {
   /** Paths the working tree has changed outside this commit — see {@link DocSyncInput.worktreeFiles}. */
   readonly worktreeFiles?: readonly string[]
   /**
+   * Paths the repository already carries — see {@link DocSyncInput.existing}.
+   *
+   * Omitted means "cannot tell, assume every path exists". Only a caller that
+   * read the tree narrows the mirrored-pair rule, so a path list alone keeps
+   * judging the pair the way it always did.
+   */
+  readonly existing?: readonly string[]
+  /**
    * The git read that could not list the changed files, when it failed.
    *
    * The documentation rules are skipped in that case, and the outcome has to say
@@ -307,6 +315,7 @@ export function evaluate(input: EvaluationInput, config: Config, t: Translate): 
       {
         files: input.files,
         ...(input.worktreeFiles === undefined ? {} : { worktreeFiles: input.worktreeFiles }),
+        ...(input.existing === undefined ? {} : { existing: input.existing }),
       },
       config,
       t,

@@ -187,8 +187,9 @@ runner 六小时才报错），并按 ref 配了 `concurrency` 取消进行中�
    `.dev-docs/PROGRESS.md` 里，那份文件不发布，所以读者无法解析这种引用。
 5. **发布出去的入口文件存在且被 `files` 覆盖**（`lib/index.js`、`lib/index.d.ts`、`client.js`、
    两份字典、两份 SKILL、补丁文件）。缺 `lib/` 说明没先 `pnpm build`。
-6. **成对镜像文件同改**：改动落在 `docs.mirrors` 某一组的一半上就失败。这同时覆盖了不用 DSH
-   的贡献者——会话内的 `check_doc_sync` 对他们不生效。
+6. **成对镜像文件同改**：改动落在 `docs.mirrors` 某一组的一半上就失败，前提是另一半在仓库里
+   已经存在——全新项目第一次提交只有 `README.md`，没有 `README.zh.md` 不是漏改。这同时覆盖了
+   不用 DSH 的贡献者——会话内的 `check_doc_sync` 对他们不生效。
 7. **版本三处对齐**：`package.json` 的版本与每个 git tag 在 `CHANGELOG.md` 里都必须有
    对应标题。反方向（版本已有 tag）不查：tag 是发版动作，开着的发版 PR 里本来就还没有。
 8. **改动超过 500 行给警告**（不失败）：squash 合并把整个 PR 压成一个提交，一个分支里的

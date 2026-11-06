@@ -125,7 +125,7 @@ git 之后**：它管的也是 git（外加 `gh` 与包管理器），但拦的�
 | --- | --- |
 | `checkCommitMessage` | Conventional Commits：类型、格式、标题长度、句尾句号、`!` 与 `BREAKING CHANGE:` 页脚是否配套 |
 | 变更文件集 | 跨模块提交、缺少 scope 的软警告 |
-| `checkDocSync` | 成对文件（README、locale、SKILL）只改一半 → 报错；改了代码没动文档 / CHANGELOG → 警告 |
+| `checkDocSync` | 成对文件（README、locale、SKILL）只改一半，且另一半仓库里本来就有 → 报错；改了代码没动文档 / CHANGELOG → 警告 |
 | `rules.requireChangelogOnFeat` | `feat` 提交且**本次提交或分支已有** `config.docs.changelog` → 不阻塞 |
 
 最后一条把 `config.rules.requireChangelogOnFeat` 与 `checkDocSync` 的同类警告区分开：
@@ -149,6 +149,16 @@ git 之后**：它管的也是 git（外加 `gh` 与包管理器），但拦的�
 用 status 读，同一趟调用就把这两种情况都覆盖了。也因为 `-a` 只收已跟踪文件，这种提交不再读
 工作区——第二次读只会多带进未跟踪文件，把「配对只改了一半」从阻塞降成提醒。
 
+**镜像对还要知道「另一半是否存在」。** 只改一半是漏改，前提是这个项目有另一半：全新仓库的
+第一次提交只暂存 `README.md`，`README.zh.md` 从未存在过，拦下它就等于要求每个新项目先写一份
+中文 README。这个判断变更集给不出——「从没有过」和「有但这次没改」在 `git diff --cached` 里
+长得一模一样——所以另读一次 `git ls-files --cached --others --exclude-standard -z`：索引与 HEAD
+里的路径（含已从工作区删掉的），加上已经在磁盘上的未跟踪文件。读失败时按「都存在」处理，
+退回老规则：读不到不该让检查静默失效。
+
+这一趟只在**真的有一组被拆开**时才读（`splitsMirrorPair()`），所以一次只碰代码、不碰任何成对
+文件的提交，git 调用次数不变。
+
 **`feat` 与 CHANGELOG 的规则看的是分支，不是单次提交。** 一个特性拆成几次提交、CHANGELOG 在
 前一次里补过，最后一次提交不该因为没有它而被拦。分支集取自
 `git merge-base HEAD @{upstream}` 到 `HEAD` 的 diff；读不到（没有 upstream、shallow clone）
@@ -157,7 +167,8 @@ git 之后**：它管的也是 git（外加 `gh` 与包管理器），但拦的�
 
 `/dev-workflow check` 读的才是工作区——那是它的用途。两者各自的取舍写在上面的对比里。
 **一次普通判定最多跑两次 git**（暂存集 + 工作区）；`-a` 提交只跑一次（工作区那一趟被省掉）；
-`feat` 提交在规则打开时再加两次（merge-base 与分支 diff）；其余情形都不会多跑。
+拆开了成对文件的提交再加一次（`ls-files`）；`feat` 提交在规则打开时再加两次（merge-base 与
+分支 diff）；其余情形都不会多跑。
 
 ## 什么算「一次 PR 创建」
 
