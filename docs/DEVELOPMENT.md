@@ -88,9 +88,12 @@ PATH 上任意版本的编译器，报出与 CI 无关的错误。
 - **阻塞与建议要分开断言。** `evaluate()` 的 `ok` 只看 `errors`，`warnings` 不影响它。
   「改了代码没动文档」是 `warn.no_document`，不会让触发器开口；只有「配对的镜像文件只改了
   一半」和「`feat` 没补 CHANGELOG」这类 `errors` 才会。断言这类行为时写清楚断言在哪一层。
+  不开口不等于不提：建议走 `TriggerOptions.warn`（接 `ctx.logger.warn`），放行路径上逐条
+  写进日志，`createHarness()` 的 `warnings` 数组收的就是它。另一个 sink `log` 是 `debug`
+  级别，默认档位看不见——拿它断言「用户被告知了」等于没断言。
 - **断言报错文本用 `t()` 而不是字面量。** 字典改动时测试会跟着动，而不是留下一条
   读不出意图的字符串比较。
-- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 116 个 key、扁平化后 117 个叶子路径。
+- **`locale/en.json` 的 `meta` 是唯一嵌套对象**，所以顶层 123 个 key、扁平化后 124 个叶子路径。
   这个数字会随每条新文案变化，所以 `tests/i18n.spec.ts` 断言的是两边键集相等，而不是写死常量
   ——写死的常量正是它和本文件对不上的原因。数 key 时想清楚数的是哪一层。
 - **建 runtime 的 spec 用 `harnessConfig()`，不要直接 `Config({})`。** 默认 `audit.path` 是相对

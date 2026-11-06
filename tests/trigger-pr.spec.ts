@@ -75,6 +75,9 @@ function trigger(
     log: (line) => {
       options.logs?.push(line)
     },
+    warn: (line) => {
+      options.logs?.push(line)
+    },
     ...(options.approval === undefined ? {} : { approval: () => options.approval?.service }),
   })
   return { listener, state, config: resolved }
@@ -503,6 +506,7 @@ describe('src/triggers/pre-pr.ts', () => {
       t: () => t,
       state,
       log: () => {},
+      warn: () => {},
     })
     const decision = await fire(
       listener,

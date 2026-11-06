@@ -479,10 +479,10 @@ export function createPrePrTrigger(
     // be a prompt with nothing in it, so the statement is recorded and the call
     // proceeds. Every other warning is a finding and goes to the prompt.
     if (outcome.ok && !worthAsking(outcome, t)) {
-      // Nothing will be asked, so the notes are logged here. A warning that only
-      // ever reached `/dev-workflow status` was read by nobody: the pull request
-      // went through and the description kept naming no issue.
-      for (const line of outcome.warnings) options.log(line)
+      // Nothing will be asked, so the notes are exported here. A warning that
+      // only ever reached `/dev-workflow status` was read by nobody: the pull
+      // request went through and the description kept naming no issue.
+      for (const line of outcome.warnings) options.warn(line)
       return downstream
     }
 

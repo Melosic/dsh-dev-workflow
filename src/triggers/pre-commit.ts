@@ -43,6 +43,8 @@ export interface PreCommitTriggerOptions {
   readonly git: (cwd: string) => GitRunner
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
+  /** Advisory sink: findings a commit may proceed with, at a level the user can see. */
+  readonly warn: (message: string) => void
   /** The approval seam: the policy a finding resolves under, and the ask. */
   readonly approval?: () => ApprovalSeam | undefined
 }
@@ -93,20 +95,21 @@ export function createPreCommitTrigger(
     // same tree.
     const runner = options.git(cwd)
     // `-a` fills the index at commit time, so reading it now would describe a
-    // different commit than the one about to run. `git diff HEAD` is the set
-    // git is about to stage.
+    // different commit than the one about to run: the listing reads what git is
+    // about to stage instead of what the index holds.
     const listed =
       commit.all === true
         ? await listTrackedChanges(runner, exec.signal)
         : await listStagedFiles(runner, exec.signal)
     const files = listed.ok ? listed.files : undefined
-    const worktree = files === undefined ? undefined : await listChangedFiles(runner, exec.signal)
-    // A degraded listing is not a clean one. The doc rules cannot run, and the
-    // outcome says so rather than leaving the reader to assume they passed.
-    const degraded =
-      listed.ok || listed.failure === undefined
+    // `-a` commits every tracked change, so there is no "left behind in the
+    // tree" set to tell apart: the only thing a second read could add is an
+    // untracked file, which `-a` does not stage and therefore must not downgrade
+    // a missing document from a block to a note.
+    const worktree =
+      files === undefined || commit.all === true
         ? undefined
-        : t(`error.${listed.failure.replace(/-/g, '_')}`)
+        : await listChangedFiles(runner, exec.signal)
     const resolved = await resolveCommitMessage(commit, cwd)
     // `--amend` names no message, and repairing the message is exactly what
     // amend is for: the one still in history is the one git would keep.
@@ -121,32 +124,32 @@ export function createPreCommitTrigger(
       feature && config.rules.requireChangelogOnFeat.get()
         ? await listBranchFiles(runner, exec.signal)
         : []
+    // What the inspection could not read travels with the input, not next to the
+    // outcome: the prompt is rendered twice, once per language, and a finding
+    // assembled afterwards would be missing from one of them.
     const input = {
       ...(message === undefined ? {} : { message }),
       ...(files === undefined ? {} : { files }),
       ...(branchFiles.length === 0 ? {} : { branchFiles }),
-
       ...(worktree === undefined || !worktree.ok ? {} : { worktreeFiles: worktree.files }),
+      ...(listed.ok ? {} : { listing: { failure: listed.failure, detail: listed.stderr } }),
+      ...(resolved.unreadable === undefined ? {} : { unreadable: resolved.unreadable }),
     }
 
     const outcome = evaluate(input, config, t)
-    if (degraded !== undefined) {
-      outcome.warnings.push(t('trigger.pre_commit.warn.degraded', { reason: degraded }))
-    }
-    // A message this check could not read is not a message it approved. Saying
-    // so is the difference between "the rules passed" and "the rules did not
-    // run", and only one of those is true here.
-    const unreadable = resolved.unreadable
-    if (unreadable !== undefined && message === undefined) {
-      outcome.warnings.push(t('trigger.pre_commit.warn.unreadable', { source: unreadable }))
-    }
     options.state.record({
       kind: 'commit',
       ok: outcome.ok,
       summary: summarize(outcome, t),
     })
 
-    if (outcome.ok && degraded === undefined) return downstream
+    // A finding the rules raised but did not block on is still a finding: it is
+    // logged where someone can see it and recorded in the status line, and the
+    // commit proceeds. Silence is what made these invisible.
+    if (outcome.ok) {
+      for (const line of outcome.warnings) options.warn(line)
+      return downstream
+    }
 
     const commitTarget = fingerprint(message ?? command)
     const docTarget = fingerprint((files ?? []).join('\n'))

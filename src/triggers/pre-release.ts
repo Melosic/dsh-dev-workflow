@@ -161,6 +161,15 @@ export interface ReleaseInput {
   readonly changelog?: string
   /** The dist-tag the publish would use. */
   readonly publishTag?: string
+  /**
+   * The workspace directory a filtered publish targets, when the line names one.
+   *
+   * With no manifest under it the version rules have nothing to compare against,
+   * and the outcome says so rather than reading as a clean release.
+   */
+  readonly filter?: string
+  /** The release kind an `npm version <kind>` bumps to, when the line does that. */
+  readonly versionBump?: string
 }
 
 /**
@@ -466,6 +475,25 @@ export function evaluateRelease(
   rules: ReleaseRules = DEFAULT_RELEASE_RULES,
 ): CheckResult {
   const errors: string[] = []
+  const warnings: string[] = []
+
+  // What this inspection could not judge belongs to its outcome: the prompt is
+  // rendered once per language, and a note added afterwards would only reach
+  // some of the renderings.
+  if (input.tagLiteral === false) {
+    warnings.push(t('trigger.pre_release.warn.tag_literal'))
+  }
+  if (input.filter !== undefined && input.packageVersion === undefined) {
+    warnings.push(
+      t('trigger.pre_release.warn.filter', {
+        name: input.filter,
+        version: t('trigger.pre_release.warn.filter_unknown'),
+      }),
+    )
+  }
+  if (input.versionBump !== undefined) {
+    warnings.push(t('trigger.pre_release.warn.version_bump', { kind: input.versionBump }))
+  }
 
   const version = input.version?.replace(/^v/, '')
   if (version !== undefined && rules.versioned && !rules.version.test(version)) {
@@ -523,7 +551,7 @@ export function evaluateRelease(
     }
   }
 
-  return { ok: errors.length === 0, errors, warnings: [] }
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 /**
@@ -578,31 +606,23 @@ export function createPreReleaseTrigger(
       ...(packageVersion === undefined ? {} : { packageVersion }),
       ...(changelog === undefined ? {} : { changelog }),
       ...(release.publishTag === undefined ? {} : { publishTag: release.publishTag }),
+      ...(release.filter === undefined ? {} : { filter: release.filter }),
+      ...(release.versionBump === undefined ? {} : { versionBump: release.versionBump }),
     }
     const outcome = evaluateRelease(input, t, rules)
-    if (!(release.tagLiteral ?? true)) {
-      outcome.warnings.push(t('trigger.pre_release.warn.tag_literal'))
-    }
-    if (release.filter !== undefined && packageVersion === undefined) {
-      outcome.warnings.push(
-        t('trigger.pre_release.warn.filter', {
-          name: release.filter,
-          version: t('trigger.pre_release.warn.filter_unknown'),
-        }),
-      )
-    }
-    if (release.versionBump !== undefined) {
-      outcome.warnings.push(
-        t('trigger.pre_release.warn.version_bump', { kind: release.versionBump }),
-      )
-    }
     options.state.record({
       kind: 'release',
       ok: outcome.ok,
       summary: summarize(outcome, t),
     })
 
-    if (outcome.ok) return downstream
+    // A release the rules advise against but do not block is still a release
+    // worth hearing about: the notes are logged where they can be read, and the
+    // command proceeds.
+    if (outcome.ok) {
+      for (const line of outcome.warnings) options.warn(line)
+      return downstream
+    }
 
     // The version identifies the release, which is what the state model asks
     // for: a second attempt at releasing the same version is the same problem.

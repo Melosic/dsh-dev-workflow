@@ -29,6 +29,15 @@ export interface TriggerOptions {
   /** Diagnostic sink; debug level, so the default profile stays quiet. */
   readonly log: (message: string) => void
   /**
+   * Advisory sink: a finding the rules raised but did not block on.
+   *
+   * Separate from `log` on purpose. A permitted call carries no text — the
+   * decision it resolves to has nowhere to put a note — so an advisory finding
+   * has no other way to reach the person who triggered it, and a debug-level
+   * sink is read by nobody. This one is exported where the user can see it.
+   */
+  readonly warn: (message: string) => void
+  /**
    * The approval seam: the policy a finding resolves under, and the ask itself.
    *
    * Optional: without it every decision is returned as before, which is what a

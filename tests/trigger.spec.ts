@@ -12,6 +12,7 @@ import {
   askOf,
   makeApproval,
   makeExec,
+  makeFailingGit,
   makeGit,
   type HarnessApproval,
 } from './harness.js'
@@ -30,20 +31,24 @@ function trigger(
     files?: () => readonly string[]
     state?: ReturnType<typeof createWorkflowState>
     approval?: HarnessApproval
+    warnings?: string[]
+    git?: GitRunner
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
   const resolved = Config(options.config ?? {})
-  const git: GitRunner = makeGit(options.files ?? (() => []))
+  const git: GitRunner = options.git ?? makeGit(options.files ?? (() => []))
+  const warnings = options.warnings ?? []
   const listener = createPreCommitTrigger({
     config: () => resolved,
     t: () => t,
     state,
     git: () => git,
     log: () => {},
+    warn: (line) => warnings.push(line),
     ...(options.approval === undefined ? {} : { approval: () => options.approval?.service }),
   })
-  return { listener, state, config: resolved }
+  return { listener, state, config: resolved, warnings }
 }
 
 /** Run one shell command through the listener. */
@@ -178,10 +183,49 @@ describe('src/triggers/pre-commit.ts', () => {
     // The advisory itself is asserted where it is produced.
     expect(checkDocSync({ files: ['src/a.ts'] }, Config({}), t).warnings).not.toEqual([])
 
-    const { listener, state } = trigger({ files: () => ['src/a.ts'] })
+    const { listener, state, warnings } = trigger({ files: () => ['src/a.ts'] })
     const decision = await fire(listener, 'git commit -m "chore(cli): tidy"')
     expect(decision.kind).toBe('allow')
     expect(state.lastOutcome()).toMatchObject({ kind: 'commit', ok: true })
+    // Allowed, but not silently: a permitted call carries no text of its own, so
+    // an advisory nobody logs was never said.
+    expect(warnings).toContain(
+      t('tool.check_doc_sync.warn.changelog', { changelog: 'CHANGELOG.md' }),
+    )
+  })
+
+  it('states why the file listing failed instead of leaving a placeholder', async () => {
+    // A git that cannot answer is not a clean tree, and the reason is the whole
+    // finding: the template used to reach the reader with `{detail}` unfilled.
+    const { listener, warnings } = trigger({ git: makeFailingGit('command-failed') })
+    const decision = await fire(listener, 'git commit -m "fix(core): tidy"')
+
+    expect(decision.kind).toBe('allow')
+    const reason = t('error.command_failed', { detail: 'fatal: nope' })
+    expect(warnings).toContain(t('trigger.pre_commit.warn.degraded', { reason }))
+    for (const line of warnings) expect(line).not.toContain('{detail}')
+  })
+
+  it('says the same thing in both languages when the call is blocked', async () => {
+    // The prompt is built by running the rules again, once per language, so a
+    // finding added to the outcome from outside the rules comes back empty in
+    // every language. This is the case that made the body blank.
+    const { listener } = trigger({ git: makeFailingGit('command-failed') })
+    const decision = await fire(listener, 'git commit -m "Add the thing"')
+    const display = askOf(decision).displayReason
+    const zh = createTranslator('zh-CN')
+
+    expect(display.en).toContain(
+      t('trigger.pre_commit.warn.degraded', {
+        reason: t('error.command_failed', { detail: 'fatal: nope' }),
+      }),
+    )
+    expect(display.zh).toContain(
+      zh('trigger.pre_commit.warn.degraded', {
+        reason: zh('error.command_failed', { detail: 'fatal: nope' }),
+      }),
+    )
+    expect(display.en).not.toContain('未能读取改动文件列表')
   })
 
   it('prompts when a feature adds no changelog entry', async () => {

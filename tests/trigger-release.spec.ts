@@ -67,18 +67,21 @@ function trigger(
     config?: Record<string, unknown>
     state?: ReturnType<typeof createWorkflowState>
     approval?: HarnessApproval
+    warnings?: string[]
   } = {},
 ) {
   const state = options.state ?? createWorkflowState()
   const resolved = Config(options.config ?? {})
+  const warnings = options.warnings ?? []
   const listener = createPreReleaseTrigger({
     config: () => resolved,
     t: () => t,
     state,
     log: () => {},
+    warn: (line) => warnings.push(line),
     ...(options.approval === undefined ? {} : { approval: () => options.approval?.service }),
   })
-  return { listener, state, config: resolved }
+  return { listener, state, config: resolved, warnings }
 }
 
 /** Run one shell command through the listener. */
@@ -396,6 +399,27 @@ describe('src/triggers/pre-release.ts', () => {
 
     expect(detectRelease('cargo publish')).toBeUndefined()
     expect(detectRelease('cargo publish', publishers)).toEqual({ publishTag: 'latest' })
+  })
+
+  it('says out loud that a version bump skipped the checks', async () => {
+    // `npm version` writes the manifest, the commit and the tag in one step, so
+    // nothing here was judged. The release proceeds — but the user is told, and
+    // told in their own language when the prompt also has something to ask.
+    const { listener, warnings } = trigger()
+    const directory = project('0.2.0', FULL_CHANGELOG)
+    const decision = await fire(listener, 'npm version patch', { cwd: directory })
+
+    expect(decision.kind).toBe('allow')
+    expect(warnings).toContain(t('trigger.pre_release.warn.version_bump', { kind: 'patch' }))
+
+    const raised = trigger()
+    const blocked = await fire(raised.listener, 'npm version patch', {
+      cwd: project('0.1.0', EMPTY_CHANGELOG),
+    })
+    const display = askOf(blocked).displayReason
+    const zh = createTranslator('zh-CN')
+    expect(display.en).toContain(t('trigger.pre_release.warn.version_bump', { kind: 'patch' }))
+    expect(display.zh).toContain(zh('trigger.pre_release.warn.version_bump', { kind: 'patch' }))
   })
 
   it('checks a release even where there is no changelog to read', async () => {

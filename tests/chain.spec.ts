@@ -18,14 +18,15 @@ const t = createTranslator('en-US')
 
 /**
  * A git runner that answers the questions the checks ask.
- * @param options - staged paths, working-tree paths, branch paths, and the
- * current message.
+ * @param options - staged paths, working-tree paths, branch paths, whether the
+ * branch has no commit yet, and the current message.
  * @returns the runner, recording every argument list it was asked for.
  */
 function makeRepo(options: {
   staged?: readonly string[]
   worktree?: readonly string[]
   branch?: readonly string[]
+  unborn?: boolean
   asks?: string[][]
 }): GitRunner {
   const staged = options.staged ?? []
@@ -42,6 +43,11 @@ function makeRepo(options: {
       // `-a` asks what the commit will contain, which the index cannot answer
       // before the command runs: it is every tracked change, staged or not.
       if (joined.startsWith('diff --name-only -z HEAD')) {
+        // On a branch with no commit yet this is what git really answers:
+        // exit 128, `fatal: ambiguous argument 'HEAD'`.
+        if (options.unborn === true) {
+          return { ok: false, failure: 'command-failed', stderr: 'fatal: HEAD' }
+        }
         const tracked = [...new Set([...staged, ...worktree])]
         return { ok: true, stdout: tracked.map((path) => `${path}\0`).join('') }
       }
@@ -73,6 +79,7 @@ async function run(
     staged?: readonly string[]
     worktree?: readonly string[]
     branch?: readonly string[]
+    unborn?: boolean
     config?: Record<string, unknown>
   } = {},
 ): Promise<{
@@ -176,6 +183,25 @@ describe('guard and trigger on one chain', () => {
     })
 
     expect(decision.kind).toBe('allow')
+  })
+
+  it('commits into a repository that has no history yet', async () => {
+    // Before the first commit there is no HEAD, so `git diff HEAD` exits 128.
+    // Reading that as a failed listing blocked the first commit of every new
+    // repository — a commit like any other.
+    const { decision, asks, harness } = await run('git commit -a -m "fix(core): start"', {
+      unborn: true,
+      staged: [],
+      worktree: ['src/core.ts', 'CHANGELOG.md'],
+    })
+
+    expect(decision.kind).toBe('allow')
+    expect(asks.map((args) => args.join(' '))).not.toContain('diff --name-only -z HEAD')
+    expect(harness.warnings.join('\n')).not.toContain(
+      t('trigger.pre_commit.warn.degraded', {
+        reason: t('error.command_failed', { detail: 'fatal: HEAD' }),
+      }),
+    )
   })
 
   it('counts a changelog an earlier commit on the branch already carries', async () => {

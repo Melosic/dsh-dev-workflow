@@ -355,6 +355,10 @@ describe('src/checks.ts', () => {
     expect(summarize({ ok: true, errors: [], warnings: [] }, t)).toBe(
       t('command.toggle.check.clean'),
     )
+    // Clean is not the same as silent: advisories are part of the result too.
+    expect(summarize({ ok: true, errors: [], warnings: ['a', 'b'] }, t)).toBe(
+      t('command.toggle.check.advised', { count: 2 }),
+    )
     expect(summarize({ ok: false, errors: ['boom'], warnings: [] }, t)).toBe('boom')
     // A summary that named one of three problems would read as "one problem".
     expect(summarize({ ok: false, errors: ['boom', 'bang', 'bust'], warnings: [] }, t)).toBe(
