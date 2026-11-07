@@ -133,7 +133,7 @@ Locale: en-US (configuration says "auto").
 Scope: every repository. This working directory is checked.
 No check has run in this session yet.
 Guard hits: none.
-Security audit enabled. Guard decisions are appended to .dev-docs/audit-log.jsonl, which stays out of version control and out of the model's context.
+Security audit enabled. Guard decisions are appended to .dev-docs/audit-log.jsonl, which stays out of the model's context. Whether git tracks it is up to this repository's .gitignore.
 ```
 
 If the first line says "is on", the install worked. If it says "off for this session" or "this one is NOT marked", the plugin is deliberately doing nothing — type `/dev-workflow on`, or create the marker file described in the next section.

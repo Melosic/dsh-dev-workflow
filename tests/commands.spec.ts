@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { Config } from '../src/config.js'
 import { createRuntime } from '../src/index.js'
+import { messageArgument } from '../src/commands/dev-workflow.js'
 import { SCOPE_MARKER } from '../src/scope.js'
 import { createHarness } from './harness.js'
 
@@ -236,5 +237,22 @@ describe('/dev-workflow', () => {
     expect(text).toContain('force push×2')
     expect(text).toContain('push (allowed)×1')
     expect(text).not.toContain('A force push rewrites remote history')
+  })
+
+  // The hint and both documents spell the flag as `--message "type: subject"`,
+  // because that is how a shell argument with a space has to be written. The
+  // quotes belong to the shell, so judging them as part of the message reported
+  // the documented invocation as missing its type prefix.
+  it('reads the message out of the quotes the shell requires', () => {
+    expect(messageArgument('check --message "feat(cli): add a flag"')).toBe('feat(cli): add a flag')
+    expect(messageArgument("check --message 'feat(cli): add a flag'")).toBe('feat(cli): add a flag')
+    // The unquoted and `=` forms were already right and stay right.
+    expect(messageArgument('check --message feat: x')).toBe('feat: x')
+    expect(messageArgument('check -m "fix: x"')).toBe('fix: x')
+    expect(messageArgument('check --message="fix: x"')).toBe('fix: x')
+    // An unmatched quote is not a wrapper: a pair is what gets removed.
+    expect(messageArgument('check --message "fix: x\'')).toBe('"fix: x\'')
+    expect(messageArgument('check --message ""')).toBeUndefined()
+    expect(messageArgument('check')).toBeUndefined()
   })
 })

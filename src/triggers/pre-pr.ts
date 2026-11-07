@@ -84,6 +84,14 @@ export interface PullRequestCommand {
   readonly bodyLiteral?: boolean
   /** Path given to `--body-file`, as written on the command line. */
   readonly bodyFile?: string
+  /**
+   * The number of the pull request this command edits or merges.
+   *
+   * Present only for `edit` and `merge`, which name an existing pull request.
+   * `create` has no number yet — the one it is about to receive is assigned by
+   * the forge, so a description cannot be checked against it here.
+   */
+  readonly number?: string
 }
 
 /** What one pull request inspection covers. Omit a field to skip its rules. */
@@ -113,6 +121,13 @@ export interface PullRequestInput {
    * look at (a test, a status report) wants.
    */
   readonly sections?: readonly ResolvedSection[]
+  /**
+   * The number of the pull request being edited, when the command line names it.
+   *
+   * Used to tell a reference to the issue a change came from apart from a
+   * reference to this pull request itself, which traces nothing.
+   */
+  readonly number?: string
 }
 
 /**
@@ -182,13 +197,17 @@ export function detectPullRequest(command: string): PullRequestCommand | undefin
     // pull request; `merge` under squash sets the commit text through
     // `--subject`. All three end in the same commit message on the base branch.
     if (verb !== 'create' && verb !== 'edit' && verb !== 'merge') continue
+    // For `edit` and `merge` the first word after the verb is the pull request
+    // itself, and the description may reference it. `create` has no number here:
+    // the forge assigns one only after the call goes through.
+    const number = verb === 'create' ? undefined : /^\d+$/.exec(args[index + 2]?.value ?? '')?.[0]
     const stated = pullRequestArguments(args.slice(index + 2))
     // Only the words that reach the base branch's history matter here, and only
     // `create` always writes them. `edit` and `merge` are recognised solely when
     // they state a title: `gh pr merge 13 --squash` writes the commit subject
     // from the pull request itself, which this check cannot read anyway.
     if (verb !== 'create' && stated.title === undefined) continue
-    return stated
+    return number === undefined ? stated : { ...stated, number }
   }
   return undefined
 }
@@ -315,7 +334,11 @@ function uncheckedBoxes(body: string, sections: readonly ResolvedSection[]): num
  * @returns whether the prompt has anything to carry.
  */
 function worthAsking(outcome: CheckResult, t: Translate): boolean {
-  const notes = new Set([t('trigger.pre_pr.warn.filled'), t('trigger.pre_pr.warn.issue')])
+  const notes = new Set([
+    t('trigger.pre_pr.warn.filled'),
+    t('trigger.pre_pr.warn.issue'),
+    t('trigger.pre_pr.warn.self_issue'),
+  ])
   return outcome.errors.length > 0 || outcome.warnings.some((line) => !notes.has(line))
 }
 
@@ -432,8 +455,16 @@ export function evaluatePullRequest(
   // template hint of the form `<!-- Closes #123 -->` is an instruction to the
   // author, not a reference the author wrote.
   const described = `${input.title ?? ''}\n${withoutComments(input.body ?? '')}`
-  if (described.trim().length > 0 && !/(?:^|\s)#\d+/.test(described)) {
-    warnings.push(t('trigger.pre_pr.warn.issue'))
+  if (described.trim().length > 0) {
+    const references = [...described.matchAll(/(?:^|\s)#(\d+)/g)].map((found) => found[1])
+    if (references.length === 0) {
+      warnings.push(t('trigger.pre_pr.warn.issue'))
+    } else if (input.number !== undefined && references.every((one) => one === input.number)) {
+      // A description that references only the pull request it belongs to names
+      // no reason for the change. Its own number is knowable only on `edit` and
+      // `merge`, which is where it came from.
+      warnings.push(t('trigger.pre_pr.warn.self_issue'))
+    }
   }
 
   return { ok: errors.length === 0, errors, warnings }
@@ -498,6 +529,7 @@ export function createPrePrTrigger(
         : { title: pullRequest.title, titleLiteral: pullRequest.titleLiteral ?? true }),
       ...(body === undefined ? {} : { body, bodyLiteral: literal }),
       ...(conflicts.length === 0 ? {} : { conflicts }),
+      ...(pullRequest.number === undefined ? {} : { number: pullRequest.number }),
       sections,
     }
     const outcome = evaluatePullRequest(input, options.config(), t)

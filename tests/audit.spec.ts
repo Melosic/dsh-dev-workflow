@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Config } from '../src/config.js'
 import { auditRecord, createAudit } from '../src/audit.js'
+import type { GitResult, GitRunner } from '../src/git.js'
 import type { GuardHit } from '../src/guard/shared.js'
 import { makeExec } from './harness.js'
 
@@ -151,5 +152,92 @@ describe('src/audit.ts', () => {
     audit(HIT, makeExec('pnpm test', { cwd: root }))
     audit(HIT, makeExec('pnpm build', { cwd: root }))
     expect(messages).toHaveLength(1)
+  })
+
+  /**
+   * A runner whose every call answers the same way, recording its arguments.
+   * @param result - what git answers.
+   * @returns the runner and the argument lists it was handed.
+   */
+  function fakeGit(result: GitResult): { runner: GitRunner; calls: string[][] } {
+    const calls: string[][] = []
+    const runner: GitRunner = {
+      cwd: root,
+      run: async (args) => {
+        calls.push([...args])
+        return result
+      },
+      locate: async () => ({ ok: true, path: '/usr/bin/git' }),
+    }
+    return { runner, calls }
+  }
+
+  /**
+   * Let the fire-and-forget ignore probe settle.
+   * @returns a promise that resolves after the probe's continuation has run.
+   */
+  async function flushed(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  it('says once that a trail git would commit is not ignored', async () => {
+    // `git check-ignore --quiet` exits 1 for "not ignored", which the runner
+    // reports as a failed command: success means ignored, so only this answer
+    // is the problem.
+    const git = fakeGit({ ok: false, failure: 'command-failed', stderr: '' })
+    const trails: string[] = []
+    const audit = createAudit({
+      config: () => Config({ audit: { path: logPath } }),
+      git: () => git.runner,
+      notIgnored: (path) => trails.push(path),
+    })
+    audit(HIT, makeExec('pnpm test', { cwd: root }))
+    audit(HIT, makeExec('pnpm build', { cwd: root }))
+    await flushed()
+    // Once per path: the second hit would say the same thing about the same file.
+    expect(trails).toHaveLength(1)
+    expect(trails[0]).toBe(logPath)
+    expect(git.calls).toHaveLength(1)
+    expect(git.calls[0]).toContain('check-ignore')
+    expect(git.calls[0]).toContain(logPath)
+  })
+
+  it('says nothing when git already ignores the trail', async () => {
+    const git = fakeGit({ ok: true, stdout: '' })
+    const trails: string[] = []
+    const audit = createAudit({
+      config: () => Config({ audit: { path: logPath } }),
+      git: () => git.runner,
+      notIgnored: (path) => trails.push(path),
+    })
+    audit(HIT, makeExec('pnpm test', { cwd: root }))
+    await flushed()
+    expect(trails).toEqual([])
+  })
+
+  it('says nothing when there is no repository to ask', async () => {
+    // Outside a repository the question has no answer, and a plugin that
+    // cannot tell would be warning on every project that is not git-managed.
+    for (const failure of ['not-a-git-repository', 'git-not-available'] as const) {
+      const trails: string[] = []
+      const audit = createAudit({
+        config: () => Config({ audit: { path: logPath } }),
+        git: () => fakeGit({ ok: false, failure, stderr: '' }).runner,
+        notIgnored: (path) => trails.push(path),
+      })
+      audit(HIT, makeExec('pnpm test', { cwd: root }))
+      await flushed()
+      expect(trails).toEqual([])
+    }
+  })
+
+  it('says nothing when it has no way to ask', () => {
+    const trails: string[] = []
+    const audit = createAudit({
+      config: () => Config({ audit: { path: logPath } }),
+      notIgnored: (path) => trails.push(path),
+    })
+    expect(() => audit(HIT, makeExec('pnpm test', { cwd: root }))).not.toThrow()
+    expect(trails).toEqual([])
   })
 })

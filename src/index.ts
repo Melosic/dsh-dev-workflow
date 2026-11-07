@@ -109,6 +109,15 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
 
   const state = createWorkflowState()
   const gitCache = new Map<string, GitRunner>()
+  // One runner per working directory, shared by the audit trail and every
+  // trigger: two runners for the same directory would only ask git twice.
+  const gitRunner = (cwd: string): GitRunner => {
+    const existing = gitCache.get(cwd)
+    if (existing !== undefined) return existing
+    const runner = createGitRunner(ctx, cwd)
+    gitCache.set(cwd, runner)
+    return runner
+  }
 
   // Effects that undo the current registration, newest first. Holding them here
   // is what makes `off` more than a flag: the resident cost of this plugin is
@@ -298,7 +307,14 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
 
     // Every guard shares one audit sink: the record should read the same whether
     // a force push or a leaked token is what tripped it.
-    const audit = createAudit({ config: () => config, log: (message) => ctx.logger.debug(message) })
+    const audit = createAudit({
+      config: () => config,
+      log: (message) => ctx.logger.debug(message),
+      // A trail that git would commit is the reader's problem to fix, so it is
+      // said once at warning level: the path is what has to change.
+      notIgnored: (path) => ctx.logger.warn(t('audit.not_ignored', { path })),
+      git: gitRunner,
+    })
 
     // The guard is a separate listener on the same gate rather than part of the
     // trigger: one protects conventions and the other protects work, and they
@@ -414,13 +430,7 @@ export function createRuntime(ctx: Context, config: Config): Runtime {
       return locale
     },
     t: () => t,
-    git: (cwd) => {
-      const existing = gitCache.get(cwd)
-      if (existing !== undefined) return existing
-      const runner = createGitRunner(ctx, cwd)
-      gitCache.set(cwd, runner)
-      return runner
-    },
+    git: gitRunner,
     state,
     setActive: (on) => {
       // The value `mode` held when the user withdrew the plugin. Storing the
