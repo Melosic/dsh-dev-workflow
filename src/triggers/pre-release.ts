@@ -531,10 +531,14 @@ export function evaluateRelease(
     if (unreleased === undefined) {
       errors.push(t('trigger.pre_release.error.changelog', { section: rules.unreleasedName }))
     } else {
+      // Keep a Changelog calls the groups optional and lets a project add its
+      // own, so a repository vocabulary is a preference, not a defect. Blocking
+      // on it taught users to switch the rule off and lose it for good; naming
+      // the category and releasing is the smaller loss.
       if (rules.changelogCategories) {
         for (const category of categoryHeadings(unreleased)) {
           if (!rules.categories.has(category.toLowerCase())) {
-            errors.push(t('trigger.pre_release.error.changelog_category', { section: category }))
+            warnings.push(t('trigger.pre_release.warn.changelog_category', { section: category }))
           }
         }
       }

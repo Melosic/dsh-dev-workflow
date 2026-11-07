@@ -82,7 +82,7 @@ describe('src/config.ts', () => {
         '.ssh/id_rsa',
         '*.pem',
         '*.key',
-        'credentials',
+        'credentials/',
         '*.p12',
         '.npmrc',
         'secrets/',

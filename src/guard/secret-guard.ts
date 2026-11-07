@@ -1,4 +1,6 @@
 import type { Config } from '../config.js'
+import { commandOf, gitInvocations, programInvocations } from '../shell.js'
+import type { ProgramInvocation } from '../shell.js'
 import { createGuard } from './shared.js'
 import type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 
@@ -13,6 +15,22 @@ import type { GuardAction, GuardHit, GuardOptions } from './shared.js'
 // command guards: those protect work that can be recreated, and a deliberate
 // override is a reasonable thing to want. A credential that has been sent cannot
 // be recalled, so there is no tier below refusal.
+//
+// The one carve-out is a command line that only reads: `grep -rn "AKIA…" .`,
+// `git log -S "AKIA…"`, `sed -n 's/AKIA…/[REDACTED]/p' f`. Refusing those
+// protects nothing — the credential is already in the argument the model just
+// wrote, and the command cannot carry it off the machine. It does cost something:
+// refusing the search is refusing to let anyone find their own leak, and a guard
+// that blocks the fix as well as the mistake gets switched off. Anything that
+// could send — a second program on the line, a program that is not a reader —
+// keeps the refusal.
+//
+// What counts is what the line will *run*, not what it is named. Three spellings
+// hide a second program inside a word, and each keeps the refusal on its own:
+// `sed -i` writes the file back, `sed -f` reads a script that is not on the line
+// (and `sed`'s `e` flag runs the replacement as a command), and `$(…)` or `<(…)`
+// can hold a program inside what still looks like one argument. They are listed
+// here because the first two spellings of this check let all three through.
 
 /** Options the secret guard needs; the shared ones, unchanged. */
 export type SecretGuardOptions = GuardOptions
@@ -24,6 +42,40 @@ const ACTION: GuardAction = 'deny'
 const DETECTED = 'security.secret_detected'
 /** Dictionary key naming the kind of pattern that matched, via `{pattern}`. */
 const PATTERN_NAMED = 'security.secret_pattern_matched'
+/**
+ * Dictionary key for a credential in a command line that only reads it. Carries
+ * no `{pattern}`: this one is recorded as a hit the guard let through, and the
+ * tally line has nothing to render it with.
+ */
+const SEARCHED = 'security.secret_search'
+
+/**
+ * Programs whose job is to look at text, not to move it. A line made only of
+ * these cannot carry a credential anywhere, so refusing it would block the
+ * search for a leak rather than the leak.
+ *
+ * Anything absent from this set keeps the refusal, which is the safe default:
+ * `curl`, `wget`, `ssh`, `nc`, `Set-Content` and the rest stay blocked, and so
+ * does a line that puts a reader beside any of them.
+ */
+const SEARCHERS = new Set([
+  'grep',
+  'egrep',
+  'fgrep',
+  'rg',
+  'ag',
+  'ack',
+  'ack-grep',
+  'findstr',
+  'select-string',
+  'sed',
+])
+// `awk` is deliberately absent: it can call `system()`, so a line naming it can
+// run anything, and the point of the set is that a line made of these cannot
+// move the credential anywhere.
+
+/** `git` subcommands that read history instead of writing it. */
+const READING_GIT = new Set(['log', 'grep', 'diff', 'show', 'rev-list', 'blame'])
 
 /** Whether the optional high-entropy heuristic is wanted. */
 export interface ScanOptions {
@@ -276,6 +328,106 @@ export function redactSecrets(value: unknown, options: ScanOptions, depth = 0): 
 }
 
 /**
+ * Whether one program writes its input back in place.
+ *
+ * Only `sed` has a write mode among the readers — `-i` edits the file rather
+ * than printing the result — and that turns a search into the write it is the
+ * point of this set to avoid. `grep -i` is still a search: `-i` means
+ * case-insensitive there, which is why this is checked per program and not per
+ * option letter.
+ * @param invocation - one program on the line, with its own arguments.
+ * @returns true when this program writes.
+ */
+function overwrites(invocation: ProgramInvocation): boolean {
+  if (invocation.program.toLowerCase() !== 'sed') return false
+  return invocation.args.some(
+    (arg) => arg.startsWith('--in-place') || (/^-[^-]/.test(arg) && arg.includes('i')),
+  )
+}
+
+/**
+ * Whether one program can start another from its own arguments.
+ *
+ * `sed` reads text, except when it does not: the `e` flag after a substitution
+ * runs the replaced text as a command (`s/a/curl …/e`), and `-f` reads a script
+ * this walk cannot see. Either one turns a reader into whatever the text says.
+ * Nothing else in the set can name a program it was not given.
+ * @param invocation - one program on the line, with its own arguments.
+ * @returns true when this program could run something else.
+ */
+function runs(invocation: ProgramInvocation): boolean {
+  if (invocation.program.toLowerCase() !== 'sed') return false
+  // GNU spells the long form as `--file=script`, and the short form can be
+  // bundled (`-nf script`), so both are matched by prefix rather than by
+  // equality. `-i` here is `--in-place` in `overwrites`, and the two are kept
+  // apart because `-i` in `grep` means case-insensitive.
+  if (
+    invocation.args.some(
+      (arg) => arg.startsWith('--file') || (/^-[^-]/.test(arg) && arg.includes('f')),
+    )
+  ) {
+    return true
+  }
+  return invocation.args.some((arg) => !arg.startsWith('-') && executes(arg))
+}
+
+/**
+ * Whether one `sed` script runs a command instead of editing text.
+ *
+ * `e` in command position (`1e curl …`) runs the rest of the line, and the `e`
+ * flag after a substitution (`s/a/b/e`) runs the replacement. The flags are read
+ * from the script's own delimiter, so a slash inside the pattern cannot be
+ * mistaken for the end of the substitution.
+ * @param script - one non-option word of a `sed` invocation.
+ * @returns true when the script executes text.
+ */
+function executes(script: string): boolean {
+  if (/^(?:\d+(?:,\d+)?)?\s*e(?:\s|$)/.test(script)) return true
+  if (!script.startsWith('s')) return false
+  const delimiter = script[1]
+  if (delimiter === undefined || delimiter === '\\' || delimiter === '\n') return false
+  // Walk the delimiters after the opening one: the first closes the pattern,
+  // the second the replacement, and what follows is the flag list. Splitting
+  // would trip over an escaped delimiter and over a URL in the replacement.
+  let seen = 0
+  for (let index = 2; index < script.length; index += 1) {
+    if (script[index] !== delimiter) continue
+    if (script[index - 1] === '\\') continue
+    seen += 1
+    if (seen < 2) continue
+    return script.slice(index + 1).includes('e')
+  }
+  return false
+}
+
+/**
+ * Whether a command line only looks at text.
+ *
+ * Every program on the line has to be a reader, and a `git` line has to name a
+ * subcommand that reads history. One program that could write or send makes the
+ * whole line unsafe, which is why this is an "all" and not a "some".
+ * @param command - the command line, when the call has one.
+ * @returns true when the line cannot move the credential off the machine.
+ */
+function reads(command: string | undefined): boolean {
+  if (command === undefined) return false
+  // A substitution runs a program the segment split cannot see: a quoted
+  // `"$(curl …)"` stays one word here, and `<(...)` arrives inside an argument,
+  // so either would pass for a reader. One on the line and it is not a line
+  // that only reads.
+  if (/\$\(|<[(]|>[(]/.test(command)) return false
+  const found = programInvocations(command)
+  if (found.length === 0) return false
+  const programs = found.map((one) => one.program.toLowerCase())
+  if (programs.every((one) => SEARCHERS.has(one))) {
+    return !found.some((one) => overwrites(one) || runs(one))
+  }
+  if (!programs.every((one) => one === 'git' || one === 'git.exe')) return false
+  const calls = gitInvocations(command)
+  return calls.length > 0 && calls.every((one) => READING_GIT.has(one.subcommand))
+}
+
+/**
  * Classify one call.
  * @param args - the call's arguments, of any shape.
  * @param config - resolved plugin configuration.
@@ -287,6 +439,10 @@ export function detectSecret(args: unknown, config: Config): GuardHit | undefine
     genericHighEntropy: config.secretGuard.genericHighEntropy.get(),
   })
   if (pattern === undefined) return undefined
+  // A line that only reads cannot carry the credential anywhere, so it is let
+  // through and only recorded. The value is still in the arguments the model
+  // wrote; nothing here repeats it.
+  if (reads(commandOf(args))) return { reason: SEARCHED, action: 'allow' }
   // `params` carries the pattern *name* only. The value that matched is not put
   // here, not put in the reason, and not put in the audit record.
   return { reason: DETECTED, action: ACTION, suggestion: PATTERN_NAMED, params: { pattern } }

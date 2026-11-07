@@ -168,6 +168,7 @@ describe('src/i18n.ts', () => {
       'security.guard.outward_tag',
       'security.guard.rebase',
       'security.secret_detected',
+      'security.secret_search',
       'security.sensitive_file_blocked',
     ]
     const english = flat(en)
