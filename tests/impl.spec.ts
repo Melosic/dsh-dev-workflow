@@ -144,10 +144,25 @@ describe('src/tools/check-commit-message.ts', () => {
     ])
   })
 
-  it('requires a BREAKING CHANGE footer behind a bang', () => {
+  it('accepts a bang without a footer, and says what the footer would add', () => {
+    // Conventional Commits section 7 lets either signal stand alone. The header
+    // is what a reader sees first and it already says "breaking", so a missing
+    // footer is a note about the sentence that is missing, not a broken message.
     const outcome = checkCommitMessage({ message: 'feat(cli)!: drop the old flag' }, config, t)
-    expect(outcome.ok).toBe(false)
-    expect(outcome.errors).toContain(t('tool.check_commit_message.error.breaking_without_footer'))
+    expect(outcome.ok).toBe(true)
+    expect(outcome.errors).toEqual([])
+    expect(outcome.warnings).toContain(t('tool.check_commit_message.warn.breaking_without_footer'))
+  })
+
+  it('says nothing about the footer when the bang has one', () => {
+    const outcome = checkCommitMessage(
+      { message: 'feat(cli)!: drop the old flag\n\nBREAKING CHANGE: use --new instead' },
+      config,
+      t,
+    )
+    expect(outcome.warnings).not.toContain(
+      t('tool.check_commit_message.warn.breaking_without_footer'),
+    )
   })
 
   it('accepts a bang that explains itself in a footer', () => {

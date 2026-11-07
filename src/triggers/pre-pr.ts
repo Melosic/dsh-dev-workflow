@@ -8,6 +8,8 @@ import { commandOf, quoteCommandWords, shellWordIsLiteral, wordInvocations } fro
 import type { CommandWord } from '../shell.js'
 import { conflictingBranches } from '../tools/merge-preview.js'
 import type { PendingConflict } from '../tools/merge-preview.js'
+import { resolveSections, sectionsFromNames } from '../pr-sections.js'
+import type { ResolvedSection } from '../pr-sections.js'
 import { readText, settleAbout } from './shared.js'
 import type { TriggerOptions } from './shared.js'
 
@@ -101,6 +103,16 @@ export interface PullRequestInput {
    * only when a git runner was available.
    */
   readonly conflicts?: readonly PendingConflict[]
+  /**
+   * The sections the description is judged against.
+   *
+   * Resolved from the repository's template before this is called, because the
+   * decision function does no I/O — and because `assess` re-runs it in the other
+   * language, which must not read the file twice. Omitted means the configured
+   * names are used as they are, which is what a caller with no repository to
+   * look at (a test, a status report) wants.
+   */
+  readonly sections?: readonly ResolvedSection[]
 }
 
 /**
@@ -216,15 +228,17 @@ function sectionContent(body: string): Map<string, string[]> {
  * A heading with nothing under it is as absent as no heading at all: an
  * untouched template describes the change no better than an empty box.
  * @param body - the pull request description.
- * @param sections - the section names this repository's template asks for.
+ * @param sections - the sections this repository's template asks for.
  * @returns the section names that carry no content, in template order.
  */
-function missingSections(body: string, sections: readonly string[]): string[] {
+function missingSections(body: string, sections: readonly ResolvedSection[]): string[] {
   const content = sectionContent(body)
-  return sections.filter((section) => {
-    const lines = content.get(section.toLowerCase())
-    return lines === undefined || lines.join('\n').trim().length === 0
-  })
+  return sections
+    .filter((section) => {
+      const lines = content.get(section.heading.toLowerCase())
+      return lines === undefined || lines.join('\n').trim().length === 0
+    })
+    .map((section) => section.heading)
 }
 
 /**
@@ -236,11 +250,11 @@ function missingSections(body: string, sections: readonly string[]): string[] {
  * roll back. This one is the only place where "none" is not a sentence about
  * the change but a refusal to answer — it is the one section that can falsify
  * "the author ran it".
- * @param sections - the section names this repository's template asks for.
+ * @param sections - the sections this repository's template asks for.
  * @returns the section's name as the template spells it, when present.
  */
-function verificationSection(sections: readonly string[]): string | undefined {
-  return sections.find((section) => section.trim().toLowerCase() === 'how to verify')
+function verificationSection(sections: readonly ResolvedSection[]): string | undefined {
+  return sections.find((section) => section.role === 'verify')?.heading
 }
 
 /**
@@ -263,16 +277,22 @@ function isDismissal(text: string): boolean {
 }
 
 /**
- * Count the checkboxes in a description that are still unticked.
+ * Count the checkboxes in a description's checklist that are still unticked.
+ *
+ * Only the section whose role is `checklist` is read. Almost every template
+ * lists its options under some other heading — GitHub's own "Type of change"
+ * offers four bullets of which the author ticks one — and counting those turned
+ * every description that followed the template into "2 items still unticked".
  * @param body - the pull request description.
- * @param sections - the section names this repository's template asks for.
- * @returns how many `- [ ]` lines the template sections contain.
+ * @param sections - the sections this repository's template asks for.
+ * @returns how many `- [ ]` lines the checklist section contains.
  */
-function uncheckedBoxes(body: string, sections: readonly string[]): number {
+function uncheckedBoxes(body: string, sections: readonly ResolvedSection[]): number {
   const content = sectionContent(body)
   let total = 0
   for (const section of sections) {
-    for (const line of content.get(section.toLowerCase()) ?? []) {
+    if (section.role !== 'checklist') continue
+    for (const line of content.get(section.heading.toLowerCase()) ?? []) {
       if (/^\s*[-*]\s+\[ \]/.test(line)) total += 1
     }
   }
@@ -355,9 +375,17 @@ export function evaluatePullRequest(
       warnings.push(t('trigger.pre_pr.warn.body_literal'))
     } else {
       const described = withoutComments(input.body)
-      const sections = config.prSections.get()
+      const sections = input.sections ?? sectionsFromNames(config.prSections.get())
       const missing = missingSections(described, sections)
-      if (missing.length > 0) {
+      // No resolved section means this repository's template states no heading
+      // this check has a rule for. Demanding the built-in list there would judge
+      // a free-form description by a template it never used, so all that is asked
+      // for is that the description says something.
+      if (sections.length === 0) {
+        if (described.trim().length === 0) {
+          errors.push(t('trigger.pre_pr.error.empty'))
+        }
+      } else if (missing.length > 0) {
         errors.push(t('trigger.pre_pr.error.description', { sections: missing.join(', ') }))
       }
       // The one section where "none" is not an answer. Everything else in the
@@ -460,12 +488,17 @@ export function createPrePrTrigger(
     // conflicts rather than claiming there are none.
     const runner = options.git?.(cwd)
     const conflicts = runner === undefined ? [] : await conflictingBranches(runner, exec.signal)
+    // Which sections this description is judged against is a property of the
+    // repository, so it is read here rather than inside the decision function:
+    // that one has no filesystem and runs twice, once per language.
+    const sections = await resolveSections(cwd, options.config().prSections.get())
     const input: PullRequestInput = {
       ...(pullRequest.title === undefined
         ? {}
         : { title: pullRequest.title, titleLiteral: pullRequest.titleLiteral ?? true }),
       ...(body === undefined ? {} : { body, bodyLiteral: literal }),
       ...(conflicts.length === 0 ? {} : { conflicts }),
+      sections,
     }
     const outcome = evaluatePullRequest(input, options.config(), t)
     options.state.record({

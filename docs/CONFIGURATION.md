@@ -16,7 +16,7 @@ profile 的 `cordis.patch.yml`，插件无需重启就会读到新值（详见 [
 | `docs` | 对象 | 见下 | 文档相关路径 |
 | `rules` | 对象 | 见下 | 机械约定 |
 | `commitCheck` | 对象 | 见下 | 提交信息检查的开关、档位与类型清单 |
-| `prSections` | `string[]` | `['What', 'Why', 'How to verify', 'Type of change', 'Non-goals', 'Risk and rollback', 'Checklist']` | PR 描述必须填的段落名，按仓库模板改写；只能在配置文件里声明 |
+| `prSections` | `string[]` | `['What', 'Why', 'How to verify', 'Type of change', 'Non-goals', 'Risk and rollback', 'Checklist']` | 兜底的 PR 描述段落名。保持默认值时不生效，判定读仓库自己的模板文件；只能在配置文件里声明 |
 | `docsCheck` | 对象 | 见下 | 文档同步检查的开关 |
 | `releaseCheck` | 对象 | 见下 | 发版前检查的规则开关、版本号模式，以及分类名 / 待发布段名 / 发版程序 |
 | `mode` | `'on' \| 'off'` | `'on'` | 总开关。`off` 不注册任何东西，常驻成本为零 |
@@ -132,10 +132,16 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
 
 | 字段 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `prSections` | `string[]` | `['What', 'Why', 'How to verify', 'Type of change', 'Non-goals', 'Risk and rollback', 'Checklist']` | PR 描述必须填的段落名，缺一段或段内为空都阻塞 |
+| `prSections` | `string[]` | `['What', 'Why', 'How to verify', 'Type of change', 'Non-goals', 'Risk and rollback', 'Checklist']` | PR 描述必须填的段落名，缺一段或段内为空都阻塞。**保持默认值时不生效**，判定改看仓库自己的模板文件 |
 
-段落名属于**仓库模板**，不属于工作流本身：一个中文模板、或一个把段落叫 `背景` / `改动` / `验证`
-的仓库，用默认值就会被每个 PR 告知「缺少模板要求的段落」，而它自己的模板从没要求过那七段。
+段落名属于**仓库模板**，不属于工作流本身。插件会先找 `.github/pull_request_template.md`
+（以及 GitHub 认的其余几个写法，如 `PULL_REQUEST_TEMPLATE.md`、`docs/` 下的同名文件），
+把它的 `##` 标题映射到七种角色，按模板判。所以一个中文模板、或把段落叫 `背景` / `改动` /
+`验证` 的仓库，不改配置也能被正确判定。
+
+这个字段是**兜底与覆盖**：模板里一个可识别的标题都没有（写作规范自由的仓库）时判定会关掉、
+只要求描述非空；模板不便改、或要在模板之外多要求几段时，才在配置里列出全部段落——**只要
+这一项不是默认值，就以它为准，模板不再读**。
 
 只在配置文件里声明，面板不显示——面板只有开关、分段、数字、勾选四种控件，没有文本输入框，
 强行做成控件只能给出一组写死的选项，那比不改更糟。判定时大小写不敏感，标题层级必须是 `##`。
@@ -216,9 +222,9 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
 | 问题 | 轻重 |
 | --- | --- |
 | 头部不匹配 / 类型不在 `types` 里 | 硬性错误 |
-| `!` 标了破坏性变更却没有 `BREAKING CHANGE:` footer | 硬性错误 |
 | 标题超过 `subjectMaxLength` | 建议性警告 |
 | 标题以句点结尾 | 建议性警告 |
+| `!` 标了破坏性变更却没有 `BREAKING CHANGE:` footer | 建议性警告（`!` 本身已合规） |
 | 缺 scope | 建议性警告；`requireScope: true` 时升为硬性错误 |
 
 `onFailure: 'warn'` 只降级提交信息自身的硬性错误，**不影响文档同步检查**：那是另一类问题，
@@ -539,7 +545,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 `docs.exclude`、`releaseCheck.versionPattern`、`docs.mirrors`、`audit.path`。
 
 另外 6 项连展示都没有，因为它们只能由文件表达：`docs.readme`（哪些文件算 README 类文档）、
-`fileGuard.noRead`（不许读取的敏感路径清单）、`prSections`（PR 模板的段落名），以及
+`fileGuard.noRead`（不许读取的敏感路径清单）、`prSections`（模板不存在时的兜底段落名），以及
 `releaseCheck` 下的 `categories` / `unreleased` / `publishers`（分类名、待发布段名、哪些程序
 算发版）。一份清单或一个名字不是开关或枚举，面板给不了比编辑文件更好的体验。
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -401,6 +401,131 @@ describe('src/triggers/pre-pr.ts', () => {
     // is not a task this check counts — the same rule that lets a richer
     // template coexist with the gate.
     expect(evaluatePullRequest({ body }, renamed, t).ok).toBe(true)
+  })
+
+  // Which headings are required is a property of the repository, not of this
+  // plugin. Reading the built-in list instead told every pull request in a
+  // repository whose template asks different questions that it had missed six
+  // headings it was never shown.
+  it('judges the description against the repository template', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-pr-template-'))
+    mkdirSync(join(directory, '.github'), { recursive: true })
+    writeFileSync(
+      join(directory, '.github', 'pull_request_template.md'),
+      ['## What changed', '<!-- one sentence -->', '## How to test', '<!-- what to run -->'].join(
+        '\n',
+      ),
+      'utf8',
+    )
+    const { listener } = trigger()
+
+    const own = ['## What changed', '', 'Add a flag.', '', '## How to test', '', 'Run it.'].join(
+      '\n',
+    )
+    const compliant = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(own)}`,
+      { cwd: directory },
+    )
+    expect(compliant.kind).toBe('allow')
+
+    // The built-in names now belong to no template in this repository, so the
+    // description that satisfied the old check satisfies nothing here.
+    const builtIn = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(GOOD_BODY)}`,
+      { cwd: directory },
+    )
+    expect(builtIn.kind).toBe('ask')
+    expect((builtIn as { reason: string }).reason).toContain(
+      t('trigger.pre_pr.error.description', { sections: 'What changed, How to test' }),
+    )
+  })
+
+  it('leaves a free-form template alone beyond asking for words', async () => {
+    // A template with no question this check has a rule for says the repository
+    // takes prose. Judging it section by section would reject every pull request.
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-pr-template-'))
+    mkdirSync(join(directory, '.github'), { recursive: true })
+    writeFileSync(
+      join(directory, '.github', 'pull_request_template.md'),
+      '## Screenshots\n<!-- paste them here -->\n',
+      'utf8',
+    )
+    const { listener } = trigger()
+
+    const prose = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted('Rewrote the parser.')}`,
+      { cwd: directory },
+    )
+    expect(prose.kind).toBe('allow')
+
+    // GitHub hands the author the template itself, so a description that is
+    // nothing but the template's comments is an empty one.
+    const empty = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted('<!-- paste them here -->')}`,
+      { cwd: directory },
+    )
+    expect(empty.kind).toBe('ask')
+    expect((empty as { reason: string }).reason).toContain(t('trigger.pre_pr.error.empty'))
+  })
+
+  // A template that offers options as checkboxes — GitHub's own does — means
+  // "tick the one that applies", not "every line here is a task you left undone".
+  // Counting them produced "2 checklist items are still unticked" on a complete
+  // description, which is a report the author cannot act on.
+  it('does not read an option list as an unticked checklist', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-pr-template-'))
+    mkdirSync(join(directory, '.github'), { recursive: true })
+    writeFileSync(
+      join(directory, '.github', 'pull_request_template.md'),
+      [
+        '## What',
+        '## Type of change',
+        '- [ ] Bug fix',
+        '- [ ] Feature',
+        '## Checklist',
+        '- [ ] Tests added',
+      ].join('\n'),
+      'utf8',
+    )
+    const { listener } = trigger()
+
+    const options = [
+      '## What',
+      '',
+      'Add a flag.',
+      '',
+      '## Type of change',
+      '',
+      '- [x] Feature',
+      '- [ ] Bug fix',
+      '',
+      '## Checklist',
+      '',
+      '- [x] Tests added',
+    ].join('\n')
+    const decision = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(options)}`,
+      { cwd: directory },
+    )
+    expect(decision.kind).toBe('allow')
+
+    // The one section the template does call a checklist still counts.
+    const unticked = await fire(
+      listener,
+      `gh pr create --title "feat(cli): add a flag" --body ${quoted(
+        options.replace('- [x] Tests added', '- [ ] Tests added'),
+      )}`,
+      { cwd: directory },
+    )
+    expect(unticked.kind).toBe('ask')
+    expect((unticked as { reason: string }).reason).toContain(
+      t('trigger.pre_pr.error.checklist', { count: 1 }),
+    )
   })
 
   // The note is advisory, so it must not become a question. Under a `never`

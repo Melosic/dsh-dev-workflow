@@ -148,12 +148,14 @@ description: >
   | `chore`    | 不属于以上任何一类的杂务           |
   | `revert`   | 回退更早的提交                     |
 
-- 破坏性变更：在 type 或 scope 后加 `!`（`feat(api)!: ...`），**并且**在
-  `BREAKING CHANGE:` footer 里解释清楚。
-- footer 的两种写法都接受：`BREAKING CHANGE: <说明>` 与 `BREAKING-CHANGE: <说明>`。
-  两者都全大写、冒号后一个空格，且都必须与 `!` 标记配对——只写 footer 读者不知道
-  是哪个提交把什么弄坏了。接受两种写法是刻意的：commitlint 的规范本身把带连字符的
-  形式列为等价，过得了其中一道门禁的信息不该因为少个空格或多了个横线在另一道失败。
+- 破坏性变更：两种信号各自独立成立。在 type 或 scope 后加 `!`（`feat(api)!: ...`），
+  **或者**写 `BREAKING CHANGE:` footer，也可以两者都写。规范允许任意一种单独宣告
+  破坏性变更，所以 `fix(core)!: drop the old api` 是一条完整的信息，不会被拦。
+- footer 仍然值得写：`!` 只说了「有东西坏了」，footer 说清坏的是什么、读者该改用什么。
+  只写 `!` 不写 footer 会给一条建议性提示，永远不阻塞。footer 的两种写法都接受：
+  `BREAKING CHANGE: <说明>` 与 `BREAKING-CHANGE: <说明>`，都全大写、冒号后一个空格。
+  接受两种写法是刻意的：commitlint 的规范本身把带连字符的形式列为等价，过得了其中
+  一道门禁的信息不该因为多个横线在另一道失败。
 - 50/100 规则不是美观问题。很多工具会截断 subject，而按宽度折行的 body 在终端与 diff 里
   都还能读。
 
@@ -232,8 +234,9 @@ fix(guard): 强推规则不再匹配 git push --force-with-lease
 
 PR 描述模板。下面每个小节都必须有内容——缺段或段内为空都会在 `gh pr create` 之前被
 拦下。「无」「不适用」或一句话就是完整答案；不被接受的是删掉某个标题、或让它空着，因为
-那样评审者分不清「没什么可说」和「没想过」。下面是默认的小节名，门禁按字面匹配，所以
-仓库若在自己的模板里改了名，要在 `prSections` 里列出新的名字。其下正文可以用任何语言：
+那样评审者分不清「没什么可说」和「没想过」。下面是默认的小节名，仅在仓库没有自己的模板时
+使用。仓库有模板（`.github/pull_request_template.md` 以及 GitHub 认的其余几个路径）时，
+门禁按模板的标题判，改名只需在模板里改。其下正文可以用任何语言：
 
 ```markdown
 ## What
@@ -671,9 +674,8 @@ CHANGELOG 只回答一个问题，给「正在决定要不要升级」的人：*
 - **提交之前**——按 Conventional Commits 检查提交信息，检查 `CHANGELOG.md` 是否需要
   `[Unreleased]` 条目，以及变更的文件有没有把对应文档一起带上。
 - **开 PR 之前**——用提交信息规则检查标题（在 squash merge 下它就是落在 main 分支上的
-  提交），并按模板的段落检查描述——默认是 `What` / `Why` / `How to verify` /
-  `Type of change` / `Non-goals` / `Risk and rollback` / `Checklist`，除非
-  `prSections` 另有说明。
+  提交），并按**仓库自己的**模板标题检查描述——仓库没有模板时才用 `What` / `Why` /
+  `How to verify` / `Type of change` / `Non-goals` / `Risk and rollback` / `Checklist`。
 - **发版之前**——检查版本号、tag 与 `package.json` 是否一致，以及 CHANGELOG 是否包含该
   版本。
 - **没有触发器监听建分支动作。** 分支命名是本文要求的约定，不是插件强制执行的东西，

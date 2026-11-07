@@ -90,7 +90,7 @@ docs(readme): say what the plugin is for
 - `type` 用 feat / fix / docs / style / refactor / perf / test / build / ci / chore / revert
 - `scope` 可选，写模块名（guard、trigger、config、scope、skill…）
 - `subject` 祈使句、小写开头、不加句号，长度上限见插件配置的 `commitCheck.subjectMaxLength`
-- 破坏性变更在 type 后加 `!`，并在脚注写 `BREAKING CHANGE:`
+- 破坏性变更在 type 后加 `!`，**或**写 `BREAKING CHANGE:` 脚注（规范两者择一即可）。建议两者都写：`!` 说明有东西坏了，脚注说清坏的是什么
 
 husky 的 `commit-msg` 钩子会跑 commitlint，格式不对提交直接失败。
 

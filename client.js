@@ -165,7 +165,7 @@ window.__ModuleLoader__.load({
       'hint.localeResolved':
         'Auto follows the machine\u2019s own language \u2014 currently {locale} ({tag}).',
       'hint.onFailure':
-        'A header that does not parse, a type outside the allowed set, and a `!` without a BREAKING CHANGE footer are hard problems. Length, a trailing period and a missing scope are always warnings.',
+        'A header that does not parse and a type outside the allowed set are hard problems. Length, a trailing period, a missing scope, and a `!` with no BREAKING CHANGE footer are always warnings.',
       'hint.requireScope':
         'Off leaves a missing scope as a hint, shown only when the change touches one module.',
       'hint.ownTrigger':
@@ -286,7 +286,7 @@ window.__ModuleLoader__.load({
         '本插件自身文案的语言 —— 检查结果、技能正文、审批提示。它不决定模型用什么语言写提交信息或 PR。',
       'hint.localeResolved': '「自动」跟随本机语言，当前为：{locale}（{tag}）。',
       'hint.onFailure':
-        'header 无法解析、type 不在允许集合、`!` 缺少 BREAKING CHANGE footer 属于硬性问题。长度、句末句点和缺少 scope 始终只是警告。',
+        'header 无法解析、type 不在允许集合属于硬性问题。长度、句末句点、缺少 scope、以及 `!` 没配 BREAKING CHANGE footer 始终只是警告。',
       'hint.requireScope': '关闭时，只有改动落在单个模块里才提示补 scope。',
       'hint.releaseSemver':
         '打标签或发布时写出的版本号必须像一个版本号。按日期或构建号发版的仓库可以关闭；具体正则写在配置文件里。',

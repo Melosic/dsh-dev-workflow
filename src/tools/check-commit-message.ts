@@ -124,11 +124,14 @@ export function checkCommitMessage(
   if (subject.endsWith('.')) {
     errors.push(t('tool.check_commit_message.error.trailing_period'))
   }
-  // Conventional Commits accepts the footer spelled either way, and `BREAKING
-  // CHANGE:` with no space after the hyphen is the form the specification
-  // itself writes first.
+  // Conventional Commits §7 accepts either signal on its own: the `!` marker or
+  // a `BREAKING CHANGE:` footer. Requiring both made `fix(core)!: drop the old
+  // api` — a header the specification shows as correct — fail this gate. What
+  // the footer adds is the "what breaks and what to do instead" sentence, so its
+  // absence is worth saying and not worth blocking: the change is already marked
+  // as breaking, which is the part a reader cannot infer.
   if (bang === '!' && !/^BREAKING[ -]CHANGE:/m.test(body)) {
-    errors.push(t('tool.check_commit_message.error.breaking_without_footer'))
+    warnings.push(t('tool.check_commit_message.warn.breaking_without_footer'))
   }
 
   for (const line of body.split('\n')) {
