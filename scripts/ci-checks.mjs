@@ -633,10 +633,12 @@ ok(`CHANGELOG link definitions match their compare ranges (${released.length} re
 //     shipped dictionary and the web client's `EN` block. In `src/` the
 //     character is fine in a comment (several quote a Chinese heading as an
 //     example of a configurable value) and never fine in code, where
-//     user-visible text has to come from `t()`. `pre-pr.ts` is exempt: it
-//     matches what a user typed and never prints it.
+//     user-visible text has to come from `t()`. Two files are exempt because
+//     they match what a user typed and never print it: `pre-pr.ts` compares a
+//     section heading, `pr-sections.ts` recognises the Chinese spelling of a
+//     template heading so a Chinese template is read like an English one.
 const CJK = /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/
-const CJK_CODE_EXEMPT = new Set(['src/triggers/pre-pr.ts'])
+const CJK_CODE_EXEMPT = new Set(['src/triggers/pre-pr.ts', 'src/pr-sections.ts'])
 before = mark()
 const englishSurfaces = [readFileSync(new URL('locale/en.json', root), 'utf8')]
 const client = readFileSync(new URL('client.js', root), 'utf8')

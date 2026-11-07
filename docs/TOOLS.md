@@ -51,7 +51,6 @@
 | `error.empty` | 标题为空 |
 | `error.missing_type` + `hint.format` | 标题不匹配 `^([a-z]+)(\([^)]*\))?(!)?:\s*(\S.*)$` |
 | `error.unknown_type` | 类型不在 `COMMIT_TYPES` 清单里 |
-| `error.breaking_without_footer` | 标题带 `!` 但正文里没有 `BREAKING CHANGE:` 或 `BREAKING-CHANGE:` |
 | `error.empty_subject` | 类型和冒号都在，但冒号后没有标题（`fix(core):`） |
 | `error.empty_scope` | scope 写了括号但里面是空的（`feat(): x`） |
 | `error.trailing_period` | 标题以 `.` 结尾 |
@@ -64,6 +63,7 @@
 | `warn.body_width` | 正文某行超过 100 字符（`BODY_MAX_LENGTH`，与 commitlint 的 `body-max-line-length` 同值）。只报第一条；URL 行与表格行豁免 |
 | `warn.multiple_modules` | `files` 跨了多个顶层目录 |
 | `warn.missing_scope` | 没写 scope，且 `files` 只涉及一个模块 |
+| `warn.breaking_without_footer` | 标题带 `!`，但正文里没有 `BREAKING CHANGE:` 或 `BREAKING-CHANGE:`。**规范允许 `!` 单独成立**，这条只是建议：`!` 说了有东西坏了，footer 才说清坏的是什么 |
 
 标题长度按**描述部分**算：`feat(auth): add login` 里参与长度检查的是 `add login`。
 

@@ -1,7 +1,8 @@
 <!--
-Seven of the headings below are read by the pre-pull-request check: a missing or
-empty one is reported before `gh pr create` runs. Keep their names and `##` level
-exactly as they are — the text underneath may be in any language.
+The headings below are what the pre-pull-request check reads: a missing or empty
+one is reported before `gh pr create` runs. They are read from this file, so
+renaming one here renames it for the check too — but keep the `##` level, and keep
+the name recognisable. The text underneath may be in any language.
 
 "None", "not applicable", or a single sentence is a complete answer for any of
 them. What is not accepted is deleting the heading or leaving it blank: those
@@ -12,9 +13,10 @@ considered".
 heading you may delete outright when the diff is small enough to read in one
 sitting.
 
-Every `- [ ]` line under a heading the check reads is counted, so a ticked box is
-the only way to answer it. If a checklist line genuinely does not apply, delete
-that line and say why under Non-goals.
+Every `- [ ]` line under `## Checklist` is counted, so a ticked box is the only way
+to answer it there. Boxes under any other heading are yours to use — the check
+reads this section and no other. If a checklist line genuinely does not apply,
+delete that line and say why under Non-goals.
 -->
 
 ## What

@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- PR 检查改为读仓库自己的 `pull_request_template.md`，不再拿七段硬编码名字去套（中文模板会被要求填它没有的段落）。模板没有可识别标题时只要求描述非空。
+- 检查清单只数**检查清单那一段**里的 `- [ ]`：GitHub 默认模板 `## Type of change` 下的一排选项被当成「还有 2 项没勾」。
+- 标题带 `!` 但没写 `BREAKING CHANGE:` footer 不再阻塞提交：规范允许二者择一，这条降为建议性警告。
 - 发布工作流在 `ci:checks` 之前先 `pnpm build`：没有 `lib/` 时第 5 项守卫必挂，v0.7.0 的 tag 就是这样停住的。
 - 缺 `NPM_TOKEN` 时工作流明说「secret 没配」并指向手动发布的步骤，不再把 npm 的 401 原样抛出来。
 - `tsconfig.json` 显式写 `types: ["node"]`：省掉这个字段等于「加载所有 @types」，TypeScript 7 取消了这条默认，升级后整个 node 类型环境消失。

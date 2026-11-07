@@ -188,14 +188,17 @@ force.
   | `chore`    | maintenance that fits nowhere else                   |
   | `revert`   | reverting an earlier commit                          |
 
-- Breaking change: append `!` after the type or scope (`feat(api)!: ...`) **and**
-  explain it in a `BREAKING CHANGE:` footer.
-- Either spelling of the footer token is accepted: `BREAKING CHANGE: <explanation>`
-  and `BREAKING-CHANGE: <explanation>`. Both are all uppercase, with a single space
-  after the colon, and both must be paired with the `!` marker — a footer alone
-  does not tell a reader which commit broke what. Accepting both is deliberate:
-  commitlint's own spec lists the hyphenated form as equivalent, so a message that
-  passes one gate must not fail the other over a dash.
+- Breaking change: either signal stands on its own. Append `!` after the type or
+  scope (`feat(api)!: ...`), **or** write a `BREAKING CHANGE:` footer, or do both.
+  The specification lets either one announce the break, so `fix(core)!: drop the
+  old api` is a complete message and nothing blocks it.
+- The footer is still worth writing: `!` says that something broke, the footer says
+  what and what to do instead. Leaving a lone `!` raises an advisory note, never a
+  block. Either spelling of the token is accepted — `BREAKING CHANGE: <explanation>`
+  and `BREAKING-CHANGE: <explanation>` — all uppercase, with a single space after
+  the colon. Accepting both is deliberate: commitlint's own spec lists the
+  hyphenated form as equivalent, so a message that passes one gate must not fail
+  the other over a dash.
 - The 50/100 rule is not cosmetic. Many tools truncate a subject, and a wrapped
   body stays readable in a terminal and in a diff.
 
@@ -293,10 +296,11 @@ Pull request description template. Every heading below must carry something —
 the gate reports a missing or empty one before `gh pr create` runs. "None" or one
 sentence is a complete answer where nothing applies; what is not accepted is
 deleting a heading or leaving it blank, because then the reviewer cannot tell
-"nothing to say" from "not considered". These are the default names and the gate
-matches them literally, so a repository that renames them in its own template
-lists the new names in `prSections`. The text under each heading may be in any
-language:
+"nothing to say" from "not considered". These are the default names, used when the
+repository has no template of its own. Where one exists —
+`.github/pull_request_template.md` and the other paths GitHub reads — its headings
+are what the gate checks, so a repository that renames them only has to rename them
+there. The text under each heading may be in any language:
 
 ```markdown
 ## What
@@ -847,9 +851,9 @@ configured:
   files took their documentation with them.
 - **Before a pull request** — check the title with the commit-message rules (under
   squash merge it becomes the commit on the main branch) and the description
-  against the template's sections — `What` / `Why` / `How to verify` /
-  `Type of change` / `Non-goals` / `Risk and rollback` / `Checklist` unless
-  `prSections` says otherwise.
+  against the repository's own template headings, falling back to `What` / `Why` /
+  `How to verify` / `Type of change` / `Non-goals` / `Risk and rollback` /
+  `Checklist` when the repository has no template.
 - **Before a release** — check the version, the tag against `package.json`, and
   whether the changelog carries the release.
 - **No trigger watches branch creation.** Branch naming is a convention this
