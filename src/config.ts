@@ -218,8 +218,9 @@ export const Config = z.object({
       /** Require the changelog to carry the release, or a non-empty `[Unreleased]`. */
       changelog: z.boolean().default(true).volatile(),
       /**
-       * Restrict `###` headings to the categories listed in
-       * `releaseCheck.categories`. Off lets any heading through.
+       * Note `###` headings that are not in `releaseCheck.categories`. Advisory,
+       * never blocking: Keep a Changelog calls the groups optional and lets a
+       * project add its own. Off silences the note.
        */
       changelogCategories: z.boolean().default(true).volatile(),
       /**
@@ -373,7 +374,9 @@ export const Config = z.object({
           '.ssh/id_rsa',
           '*.pem',
           '*.key',
-          'credentials',
+          // Trailing slash, so the rule covers the store as well as the bare
+          // file: `credentials/id` and `./credentials/x` are the same secret.
+          'credentials/',
           '*.p12',
           '.npmrc',
           'secrets/',

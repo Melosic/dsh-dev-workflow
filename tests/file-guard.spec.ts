@@ -65,6 +65,10 @@ describe('src/guard/file-guard.ts', () => {
 
   it('refuses a credentials file and anything under secrets/', () => {
     expect(classify('credentials')?.reason).toBe('security.sensitive_file_blocked')
+    // The default carries a trailing slash: a credential store is a directory
+    // of files, and matching only the bare name let every file in it through.
+    expect(classify('credentials/id')?.reason).toBe('security.sensitive_file_blocked')
+    expect(classify('./credentials/x')?.reason).toBe('security.sensitive_file_blocked')
     expect(classify('secrets/token.txt')?.reason).toBe('security.sensitive_file_blocked')
     expect(classify('config/secrets/db.json')?.reason).toBe('security.sensitive_file_blocked')
   })

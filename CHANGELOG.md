@@ -31,6 +31,9 @@
 - `empty_scope` 的文案不再拿 `feat()` 举例：改为写清格式 `<type>(<scope>): <subject>`，`fix()`/`chore()` 也对得上。
 - 被多种命令共用的三条守卫文案带上 `{command}`：`stash drop`、`tag -d`、`gc --prune` 不再一律说成 `checkout -- .`。
 - `status` 的守卫计数改渲染短标签（`<reason>.label`），不再把整句解释拼进一行，手机上看得全。
+- `###` 分类不在 `releaseCheck.categories` 里时只提示、不阻塞发版：Keep a Changelog 明说分组可以自定，被拦一次的人只会把这条规则关掉，从此再也提示不了。
+- `fileGuard.noRead` 的默认值由 `credentials` 改为 `credentials/`：以前只拦同名裸文件，`credentials/id` 与 `./credentials/x` 反而放行。
+- 只在命令里**搜索**凭据不再被拒：`grep -rn "AKIA…" .`、`rg`、`git log -S` 这类整行只读的命令放行并记一条 `security.secret_search`；行内有一个程序能写出或发送，拒绝照旧。
 
 ### Changed
 

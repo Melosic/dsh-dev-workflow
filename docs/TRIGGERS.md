@@ -262,7 +262,7 @@ PR 到达检查时是「若干标题 + 若干段 `<!-- 这里写什么 -->`」�
 | tag 与 manifest 一致 | 去掉 `v` 前缀后，tag 名与 `package.json` 的 `version` 必须相同：两者不一致意味着「发布出来的版本」和「tag 名」不是同一个 | 同上，随版本规则一起开关 |
 | 预发布不推 latest | 版本带预发布后缀而 dist-tag 是 `latest` → 阻塞，提示改用 `--tag next` | `releaseCheck.prereleaseTag` |
 | CHANGELOG 有待发布段 | 没有这一段 → 阻塞（Keep a Changelog 要求它常驻顶部；段名默认 `[Unreleased]`） | `releaseCheck.changelog`，段名见 `releaseCheck.unreleased` |
-| CHANGELOG 分类合法 | 待发布段里的 `###` 标题须在允许的分类里，默认是 Added / Changed / Deprecated / Removed / Fixed / Security | `releaseCheck.changelogCategories`，名单见 `releaseCheck.categories` |
+| CHANGELOG 分类规范 | 待发布段里的 `###` 标题不在允许的分类里 → **只提示，不阻塞**（Keep a Changelog 允许自定分组）；默认名单是 Added / Changed / Deprecated / Removed / Fixed / Security | `releaseCheck.changelogCategories`，名单见 `releaseCheck.categories` |
 | 待发布段不为空 | **待发布段与 `[<version>]` 两段都为空**才算空：发布流程的第二步就是把条目从前者移入后者，所以 tag 创建的那一刻，合法状态可能落在任何一段里 | 同 `changelog` |
 
 **版本条目按两种写法查。** `## [1.0.0]`、`## 1.0.0` 与 `## v1.0.0 - 2026-01-01` 都是常见写法，
@@ -357,13 +357,17 @@ PR 到达检查时是「若干标题 + 若干段 `<!-- 这里写什么 -->`」�
 | --- | --- | --- | --- |
 | `command-guard` | `command` 里不可逆的 shell 命令 | 按 `commandGuard.dangerousShell` 走 `deny` / `ask` / `allow` | `ask` |
 | `file-guard` | 参数里的路径是否命中 `fileGuard.noRead` | `deny` | `deny` |
-| `secret-guard` | 参数里是否有凭据形状 | `deny` | `deny` |
+| `secret-guard` | 参数里是否有凭据形状 | 有就 `deny`；只读的命令行 `allow` 并记一笔 | `deny` |
 
 三处与 git-guard 不同的地方，都是刻意的：
 
 - **`file-guard` 与 `secret-guard` 没有档位字段。** git 与命令守卫拦的是可以重做的工作，
   所以给一个「我知道我在做什么」的覆盖档是合理的；**读出去的路径与发出去的凭据收不回来**，
   因此这两道只有拒绝。`fileGuard.noRead: []` 或 `secretGuard.enabled: false` 才是它们的开关。
+  `secret-guard` 有一个例外，不是档位而是判断：**一行里每个程序都只读时放行**（`grep`、
+  `rg`、`sed -n 's/…/…/p'`、`git log -S` 这类）。值已经在参数里，拒绝搜索拦不住外流，
+  只挡住找泄漏的人；有一个程序能写出或发送，整行照旧拒绝。判断按**这行会执行什么**，
+  不按程序名：`sed -i`、`sed -f`、`sed` 的 `e` 标志，以及任何 `$(…)` / `<(…)` / `>(…)` 都不算只读。
 - **`file-guard` 与 `secret-guard` 不只看 shell 命令。** 它们扫描**每一次**工具调用的参数：
   凭据写进源码文件与敲进命令行一样是泄漏，`read` 一个 `.env` 与 `cat` 它一样是读取。
   `command-guard` 则只认 `command` 字段，因为只有它看的是一行命令。

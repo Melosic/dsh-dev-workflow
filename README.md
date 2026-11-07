@@ -73,10 +73,12 @@ The full spec is not on this path either: it stays resident as one summary line 
 | Command | `rm -rf /`, `mkfs`, `dd of=/dev/sda` — irreversible | ask |
 | git | `reset --hard`, `clean -f`, `push --force`, branch deletion, `--no-verify`, `git restore .` | ask |
 | Outward | `push`, `tag`, `gh pr create`, `npm publish` — others will see it | ask |
-| Sensitive files | `.env`, `*.pem`, private keys, `credentials` | deny |
-| Credentials | A real secret in the command arguments | deny |
+| Sensitive files | `.env`, `*.pem`, private keys, the `credentials` file and directory | deny |
+| Credentials | A real secret in the command arguments | deny, unless the line only reads |
 
 The first three ask rather than refuse: most of these actions are legitimate, they are just worth one confirmation. The last two refuse — reading a private key has no "fine once you confirm it" case, and printing the path in an approval dialog is itself a second leak, so there is no per-call approval. The false positives are already excluded: sample files such as `.env.example` do not count, and neither does `grep -rn "credentials" .` — the check that tells you whether a secret is in the tree, because a search expression is not a path. To make one file readable, drop it from `fileGuard.noRead` or turn that guard off.
+
+The credential guard has one exception, and it is a judgement rather than a setting: a command line whose every program only reads — `grep`, `rg`, `sed -n 's/…/…/p'`, `git log -S` — is let through and recorded as a hit. The value is already in the argument the model just wrote, so refusing the search removes nothing and stops nothing; it only hides the leak from whoever is looking for it. One program on the line that could write or send puts the refusal back. The judgement is about what the line will actually run, not what it is named: `sed -i` writes the file back, `sed -f` reads a script that is not on the line, the `e` flag (`s/a/b/e`) runs the replacement, and `$(…)` / `<(…)` can hold a second program inside what looks like one word. None of those counts as reading.
 
 In a session with approvals turned off, "ask" becomes a refusal, and the prompt says how to get past it.
 

@@ -161,7 +161,7 @@ DSH 的启用单位是 profile，而 profile 是按机器存在的：插件装�
 | --- | --- | --- | --- |
 | `semver` | `boolean` | `true` | 版本号必须是 `MAJOR.MINOR.PATCH`（可带预发布后缀） |
 | `changelog` | `boolean` | `true` | CHANGELOG 必须承载这次发版，或有非空的待发布段 |
-| `changelogCategories` | `boolean` | `true` | `###` 标题必须落在 `categories` 列出的分类里 |
+| `changelogCategories` | `boolean` | `true` | `###` 标题不在 `categories` 里时提示一句（只提示，不阻塞） |
 | `categories` | `string[]` | `['added','changed','deprecated','removed','fixed','security']` | 允许的 `###` 分类名，大小写不敏感；只能在文件里声明 |
 | `unreleased` | `string` | `'Unreleased'` | 发版所切的那一段的标题，大小写不敏感、带不带方括号都认；只能在文件里声明 |
 | `publishers` | `string[]` | `['npm','pnpm','yarn','bun']`（含 `.exe`） | 哪些程序的 `publish` 子命令算发版；只能在文件里声明 |
@@ -394,7 +394,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 | `noRead` | `string[]` | 见下 | 不许读取的路径模式 |
 
 ```json
-{ "fileGuard": { "noRead": [".env", ".ssh/id_rsa", "*.pem", "*.key", "credentials", "*.p12", ".npmrc", "secrets/"] } }
+{ "fileGuard": { "noRead": [".env", ".ssh/id_rsa", "*.pem", "*.key", "credentials/", "*.p12", ".npmrc", "secrets/"] } }
 ```
 
 模式语法有四条规则：尾随 `/` 匹配该目录及其中一切；含 `/` 的模式在任意深度匹配
@@ -409,7 +409,7 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 
 ## `secretGuard`
 
-扫描**每一次**工具调用的全部参数，命中即 `deny`。
+扫描**每一次**工具调用的全部参数，命中即 `deny`；唯一的例外是只读的命令行（见下）。
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
@@ -422,6 +422,17 @@ DSH 的审批层是**一次性**的：`ApprovalOutcome` 里只有 `allowed-once`
 `noRead` 与凭据前缀都**没有逐条例外的档位**：加一条精确路径是唯一的定制方式。已知会误伤的
 情况（测试夹具里的假 `AKIA`、文档中的 PEM 头示例）只能通过改清单或整关守卫来解决——这是
 刻意留出的边界，不是漏掉的配置项。
+
+例外只有一条，且不是配置项：**只读的命令行放行**。`grep`、`rg`、`ack`、`findstr`、
+`sed`，以及只取 `git log` / `git grep` / `git diff` / `git show` /
+`git rev-list` / `git blame` 的 `git`，都是看文本而不搬运文本的程序；一行里全是它们时，
+命中的凭据只记一条 `security.secret_search`，不拦。有任何一个程序可能写出或发送，整行照旧
+`deny`。
+
+「只读」按这行**真正会执行什么**判断，不按程序名判断：`sed -i` 写回文件，`sed -f` 读一份不在
+这行上的脚本，`sed` 的 `e` 标志（`s/a/b/e`）会执行替换文本，任何 `$(…)`、`<(…)`、`>(…)` 都可能
+藏一个看不见的程序——这几类一律不算只读。取舍见
+[docs/SECURITY.md](SECURITY.md#secret-guard-保护什么)。
 
 ## `audit`
 

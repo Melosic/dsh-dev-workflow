@@ -220,11 +220,15 @@ describe('src/triggers/pre-release.ts', () => {
     expect(outcome.errors).toContain(t('trigger.pre_release.error.version', { version: '0.2' }))
   })
 
-  it('asks about a changelog category Keep a Changelog does not define', () => {
+  it('notes a changelog category Keep a Changelog does not define, without blocking', () => {
+    // Keep a Changelog calls the groups optional and lets a project add its own,
+    // so a repository vocabulary is a preference. Blocking taught users to turn
+    // the rule off and lose it for good.
     const changelog = FULL_CHANGELOG.replace('### Added', '### Improvements')
     const outcome = evaluateRelease({ version: '0.2.0', changelog }, t)
-    expect(outcome.errors).toContain(
-      t('trigger.pre_release.error.changelog_category', { section: 'Improvements' }),
+    expect(outcome.ok).toBe(true)
+    expect(outcome.warnings).toContain(
+      t('trigger.pre_release.warn.changelog_category', { section: 'Improvements' }),
     )
   })
 
@@ -387,8 +391,12 @@ describe('src/triggers/pre-release.ts', () => {
     const configured = Config({ releaseCheck: { categories: ['修复', '新增'] } })
     const rules = releaseRules(configured)
 
-    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t).ok).toBe(false)
-    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t, rules).errors).toEqual([])
+    const outcome = evaluateRelease({ version: '0.2.0', changelog: chinese }, t)
+    expect(outcome.ok).toBe(true)
+    expect(outcome.warnings).toContain(
+      t('trigger.pre_release.warn.changelog_category', { section: '修复' }),
+    )
+    expect(evaluateRelease({ version: '0.2.0', changelog: chinese }, t, rules).warnings).toEqual([])
   })
 
   it('recognises the publishers the repository configured', () => {
