@@ -79,6 +79,24 @@ export interface DevWorkflowCommandOptions {
 const SUBCOMMANDS = ['on', 'off', 'status', 'check', 'mark', 'unmark'] as const
 
 /**
+ * Strip one pair of matching quotes from around an argument.
+ *
+ * The documented invocation quotes the message — `--message "feat: x"` — because
+ * that is how a shell argument containing a space has to be written. The quotes
+ * are the shell's, not the message's, so they are removed before the text is
+ * judged; without this the documented form was judged as `"feat: x"`, quotes
+ * included, and the type prefix reported missing.
+ * @param value - the argument text, trimmed.
+ * @returns the text without its outermost pair of quotes, when it has one.
+ */
+function unquote(value: string): string {
+  const quote = value[0]
+  if (quote !== '"' && quote !== "'") return value
+  if (value.length < 2 || !value.endsWith(quote)) return value
+  return value.slice(1, -1)
+}
+
+/**
  * The commit message a `check` invocation states, when it states one.
  *
  * `/dev-workflow check --message "feat: x"` judges the message rules too, which
@@ -88,9 +106,9 @@ const SUBCOMMANDS = ['on', 'off', 'status', 'check', 'mark', 'unmark'] as const
  * @param rawInput - everything after the command name.
  * @returns the message, or `undefined` when the invocation states none.
  */
-function messageArgument(rawInput: string): string | undefined {
+export function messageArgument(rawInput: string): string | undefined {
   const match = /(?:^|\s)(?:--message|-m)(?:=|\s+)(.*)$/s.exec(rawInput)
-  const value = match?.[1]?.trim() ?? ''
+  const value = unquote((match?.[1] ?? '').trim()).trim()
   return value.length === 0 ? undefined : value
 }
 

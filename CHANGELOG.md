@@ -34,6 +34,9 @@
 - `###` 分类不在 `releaseCheck.categories` 里时只提示、不阻塞发版：Keep a Changelog 明说分组可以自定，被拦一次的人只会把这条规则关掉，从此再也提示不了。
 - `fileGuard.noRead` 的默认值由 `credentials` 改为 `credentials/`：以前只拦同名裸文件，`credentials/id` 与 `./credentials/x` 反而放行。
 - 只在命令里**搜索**凭据不再被拒：`grep -rn "AKIA…" .`、`rg`、`git log -S` 这类整行只读的命令放行并记一条 `security.secret_search`；行内有一个程序能写出或发送，拒绝照旧。
+- `/dev-workflow check --message "feat: x"` 不再把引号当成消息内容判：外层一对配对引号先剥掉，文档里那种写法现在报的是它真正的问题。
+- PR 描述里唯一的引用就是它自己的编号时不再算「已关联 Issue」：`gh pr edit 13` 的正文只提 `#13` 另给一条提示，仍只警告。
+- 审计日志路径没被 `.gitignore` 忽略时，写完第一行后按 warning 说一次（走 `git check-ignore`），免得拒绝清单随下一次提交出门。
 
 ### Changed
 

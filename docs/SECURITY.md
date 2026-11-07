@@ -210,10 +210,12 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 ## 审计日志记什么
 
 `audit.enabled` 默认开，写入 `audit.path`（默认 `.dev-docs/audit-log.jsonl`，每行一个 JSON
-对象；该目录已被 `.gitignore` 忽略）。字段是时间、会话、工具名、命中的规则 key、应用了哪一档、
+对象）。插件不改你的 `.gitignore`：写完第一行后会问一次 `git check-ignore`，路径没被忽略时
+以 warning 说一次——一份记录着拒绝清单的日志随下一次提交出门，比没有日志更糟。
+字段是时间、会话、工具名、命中的规则 key、应用了哪一档、
 工作目录 `cwd`，以及**该次调用的完整参数副本**——命令行与提交信息的全文都在里面，`cwd` 也落盘。
 这是刻意的：命中之后要能复现「当时到底跑了什么」。代价是这份日志的敏感度与它记录的调用同级，
-所以 `.gitignore` 与 `docs/PUBLISHING.md` 都把它当敏感文件看待。
+所以本仓库的 `.gitignore` 与 `docs/PUBLISHING.md` 都把它当敏感文件看待。
 
 **脱敏先于落盘，两道独立的处理**：命中的凭据（与开启高熵检测时的长随机串）替换为
 `[REDACTED]`；命中 `noRead` 的路径只保留**文件名**（目录本身也是信息，不必记）。
@@ -221,7 +223,8 @@ DSH 没有「读文件前」事件，因此 file-guard 与本仓库其余守卫�
 逐条断言，包括「`file_path` 变成 `.env` 而 `/repo/inner` 不出现在整行里」。
 
 审计记录**不回进模型上下文**，写入是同步 `appendFileSync`（进程崩掉时还在内存里的行不算记录）；
-**写入失败只走 `ctx.logger.debug`，绝不因为写不出日志而失败一次工具调用**。
+**写入失败只走 `ctx.logger.debug`，绝不因为写不出日志而失败一次工具调用**。唯一的例外是
+「这个路径没被 git 忽略」那一条：它讲的是提交里会出现什么，按 warning 说，每个路径一次。
 
 **日志与审计的敏感度不同，别混淆。** 守卫命中时 `ctx.logger.debug` 记的是规则标识，
 形如 `[dsh-dev-workflow] git guard: security.guard.force_push`——不带命令行、不带提交信息全文

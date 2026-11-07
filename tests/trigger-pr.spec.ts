@@ -144,7 +144,17 @@ describe('src/triggers/pre-pr.ts', () => {
     })
     expect(detectPullRequest('gh pr edit 13 --title "feat(a): b"')).toMatchObject({
       title: 'feat(a): b',
+      // `edit` and `merge` name an existing pull request, and that number is
+      // the only way the check can tell a reference to the issue from a
+      // reference to the pull request itself.
+      number: '13',
     })
+    expect(detectPullRequest('gh pr merge 13 --squash --subject "feat(a): b"')).toMatchObject({
+      number: '13',
+    })
+    // `create` has no number until the forge issues one, so the field is
+    // absent rather than guessed.
+    expect(detectPullRequest('gh pr create --title "feat(a): b"')).not.toHaveProperty('number')
     // A title the shell builds is not readable text, so it is reported as such
     // instead of being judged as the literal `$(…)`.
     expect(detectPullRequest('gh pr create --title=$(cat t.md)')).toMatchObject({
@@ -356,6 +366,43 @@ describe('src/triggers/pre-pr.ts', () => {
     expect(outcome.warnings).toContain(t('trigger.pre_pr.warn.issue'))
   })
 
+  // A number is not a reference. `gh pr edit 13` writes `#13` into the
+  // description as a matter of habit, and that traces the change back to
+  // itself rather than to the reason it exists.
+  it('does not count a pull request citing only itself as naming an issue', () => {
+    const outcome = evaluatePullRequest(
+      {
+        title: 'feat(cli): add a flag',
+        body: GOOD_BODY.replace(' Closes #7.', ' Closes #13.'),
+        number: '13',
+      },
+      config,
+      t,
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.warnings).toContain(t('trigger.pre_pr.warn.self_issue'))
+    expect(outcome.warnings).not.toContain(t('trigger.pre_pr.warn.issue'))
+  })
+
+  it('takes a real issue beside the pull request number as a reference', () => {
+    const body = GOOD_BODY.replace(' Closes #7.', ' Closes #13, see #7.')
+    const outcome = evaluatePullRequest(
+      { title: 'feat(cli): add a flag', body, number: '13' },
+      config,
+      t,
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.warnings).toEqual([])
+  })
+
+  // `gh pr create` has no number yet, so a self-reference there is unknowable
+  // and the reference is accepted.
+  it('accepts a reference it cannot compare against when no number is known', () => {
+    const body = GOOD_BODY.replace(' Closes #7.', ' Closes #13.')
+    const outcome = evaluatePullRequest({ title: 'feat(cli): add a flag', body }, config, t)
+    expect(outcome.warnings).toEqual([])
+  })
+
   // The section names are a property of the repository's template, not of the
   // workflow. A repository that writes its template in another language would
   // otherwise be told on every pull request that it is missing sections its
@@ -554,6 +601,21 @@ describe('src/triggers/pre-pr.ts', () => {
 
     expect(decision.kind).toBe('allow')
     expect(logs).toContain(t('trigger.pre_pr.warn.issue'))
+  })
+
+  // The self-reference note is the same kind of note: it says something the
+  // author should read, and it has no question in it.
+  it('says a pull request that cites only itself out loud, without asking', async () => {
+    const logs: string[] = []
+    const { listener } = trigger({ logs })
+    const body = GOOD_BODY.replace(' Closes #7.', ' Closes #13.')
+    const decision = await fire(
+      listener,
+      `gh pr edit 13 --title "feat(cli): add a flag" --body ${quoted(body)}`,
+    )
+
+    expect(decision.kind).toBe('allow')
+    expect(logs).toContain(t('trigger.pre_pr.warn.self_issue'))
   })
 
   it('passes a compliant pull request without a word', async () => {

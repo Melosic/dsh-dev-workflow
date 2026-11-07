@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config } from './config.js'
+import type { GitRunner } from './git.js'
 import { matchesPattern } from './guard/file-guard.js'
 import { redactSecrets } from './guard/secret-guard.js'
 import type { GuardHit } from './guard/shared.js'
@@ -9,9 +10,15 @@ import type { GuardHit } from './guard/shared.js'
 // The audit trail is the part of a guard that outlives the session: everything
 // else a guard does is a decision the agent sees, and this is the record a
 // reviewer reads afterwards. It is written to one JSON object per line under
-// `.dev-docs/`, which `.gitignore` already ignores, and it deliberately never
-// re-enters the model's context — nothing here returns a value the agent can
-// read, and the file is not a tool the model can call.
+// `.dev-docs/` by default, and it deliberately never re-enters the model's
+// context — nothing here returns a value the agent can read, and the file is
+// not a tool the model can call.
+//
+// Whether git takes that file is the repository's business: a default path is
+// not permission to edit somebody's `.gitignore`, so the plugin does not write
+// one. It asks git instead, once per path, and says so when the answer is that
+// the trail would be committed — a file listing every credential that was
+// refused is worse in a commit than no file at all.
 //
 // What is recorded is the *shape* of what happened: which guard recognised what,
 // under which policy, and the arguments with every credential and every
@@ -53,6 +60,21 @@ export interface AuditOptions {
   readonly config: () => Config
   /** Diagnostic sink for a write that did not land. Debug level. */
   readonly log?: (message: string) => void
+  /**
+   * Called with a log path git would commit, once per path per session.
+   *
+   * Warning level, because the reader has to act on it: either the path belongs
+   * somewhere ignored, or `.gitignore` needs a line. The audit trail never edits
+   * that file itself.
+   */
+  readonly notIgnored?: (path: string) => void
+  /**
+   * Git runner for a working directory, when the profile has one.
+   *
+   * Absent means the plugin cannot ask whether the log path is ignored, and it
+   * then says nothing rather than guessing.
+   */
+  readonly git?: (cwd: string) => GitRunner | undefined
 }
 
 /**
@@ -173,11 +195,40 @@ export function auditRecord(
  * exists for whoever is reading the debug log. Only the first failure is
  * reported — a sink that keeps failing would otherwise log on every hit for the
  * rest of the session, which is noise, not a record.
+ *
+ * A trail that git would commit is a different matter and is reported at
+ * warning level, once per path: it is not a fault in this plugin, it is a line
+ * missing from the repository's `.gitignore`, and only the reader can add it.
+ * Asking git costs one subprocess, so the answer is remembered per path and the
+ * question is asked after the first write, not before it.
  * @param options - the audit trail's configuration.
  * @returns the sink for {@link GuardOptions.audit}.
  */
 export function createAudit(options: AuditOptions): AuditSink {
   let reported = false
+  // Paths this session has already asked git about. A path is asked once: the
+  // answer changes only when somebody edits `.gitignore`, and a warning repeated
+  // on every hit would be the noise the failure sink already avoids.
+  const asked = new Set<string>()
+  const checkIgnored = (path: string): void => {
+    if (asked.has(path)) return
+    asked.add(path)
+    const runner = options.git?.(dirname(path))
+    if (runner === undefined) return
+    // `check-ignore` exits 0 when the path is ignored and 1 when it is not; the
+    // runner reports a non-zero exit as `command-failed`, so that is the answer
+    // that matters. Git missing, or a directory that is no repository at all, is
+    // not this plugin's business and says nothing.
+    void runner
+      .run(['check-ignore', '--quiet', path])
+      .then((result) => {
+        if (result.ok || result.failure !== 'command-failed') return
+        options.notIgnored?.(path)
+      })
+      // Nothing downstream awaits this probe, so a runner that throws would
+      // become an unhandled rejection in somebody's host process.
+      .catch(() => undefined)
+  }
   const write = (hit: GuardHit, exec: ToolExecution, decision?: string): void => {
     try {
       const config = options.config()
@@ -189,6 +240,7 @@ export function createAudit(options: AuditOptions): AuditSink {
           : resolveWithin(record.cwd, config.audit.path.get())
       mkdirSync(dirname(path), { recursive: true })
       appendFileSync(path, `${JSON.stringify(record)}\n`, 'utf8')
+      checkIgnored(path)
     } catch (error) {
       if (reported) return
       reported = true
